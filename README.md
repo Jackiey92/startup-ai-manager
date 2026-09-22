@@ -4,6 +4,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
+🔗 **在线体验（无需下载）**：https://jackiey92.github.io/startup-harness/
+
 ## 这是什么
 
 第一次创业的创始人，往往「不知道自己不知道」：兄弟合伙口头分股、注册资本随意填写、公私账不分、技术未做权属约定、第一轮融资时资料混乱。这些风险大多死在 **板块之间的缝隙**，而单点工具（财务软件、股权工具、传统 ERP）各自为政，没有任何一方能跨域预警。
