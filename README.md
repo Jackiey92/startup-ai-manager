@@ -45,6 +45,15 @@ Startup Harness 不是在传统 ERP 上加一个聊天框，也不是又一个�
 
 八条工程纪律：**原文不可变 · 事实只追加 · 写入走闸门 · 读取带滤镜 · 外部先检疫 · 引用必回源 · 动作人签字 · 正确性靠评测。**
 
+## 技术底座（暂定）
+
+- **Agent 运行时**：[OpenClaw](https://github.com/openclaw/openclaw) —— 成熟、多渠道、模型可换。
+- **记忆底座**：[OpenViking](https://github.com/volcengine/OpenViking) —— 开源、可自托管的 Agent 上下文数据库，作为**独立服务**通过 API 调用。
+- **公司事实信用层**：自研，置于记忆底座之上，仅依赖 `MemoryProvider` 抽象接缝，可在 OV 与本地实现间切换。
+- 备选 / 参考：DeepSeek Harness（未来迁移目标）、Hermes Agent（记忆子系统设计参考）。
+
+> 选型理由、实时数据对比与许可证边界见 [技术选型文档](./docs/architecture/04-runtime-and-memory-choice.md)。
+
 ## 目录结构
 
 ```
@@ -74,10 +83,11 @@ Startup Harness 不是在传统 ERP 上加一个聊天框，也不是又一个�
 - [架构总览](./docs/architecture/01-system-architecture.md)
 - [可信记忆系统](./docs/architecture/02-memory-system.md)
 - [信任边界与外部数据清关](./docs/architecture/03-trust-boundary.md)
+- [技术选型：运行时与记忆底座](./docs/architecture/04-runtime-and-memory-choice.md)
 - [竞品与市场调研](./docs/research/01-competitive-landscape.md)
 
 ## 开源与边界
 
 - 采用 [MIT License](./LICENSE)。
-- 总账 / 税务 / 成熟 ERP 模块倾向 **外挂**（记账与执行器官），本项目聚焦自研「公司模型」与跨域编排（大脑）。
+- 总账 / 税务 / 成熟 ERP 模块倾向 **外挂**（记账与执行器官），本项目聚焦自研「公司模型」与跨域编排（大脑）。- 本项目自身代码为 MIT；记忆底座 **OpenViking 为 AGPL-3.0**，仅作独立服务经 API 调用，**不拷贝 / 不修改其源码**，FactVoucher 事实层独立自研，避免许可证传染（详见技术选型文档第六节）。
 - AI 定位为辅助分析、风险提示与资料齐备度检查，不替代律师 / 会计师 / 税务师的专业意见；高风险动作默认「Agent 起草 + 人来拍板」。
