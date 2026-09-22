@@ -1,0 +1,1663 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Startup Harness · AI 企业管理平台 v5</title>
+<style>
+:root{
+  --primary:#4d6bfe;--primary-d:#3b55e6;
+  --bg:#f6f7f9;--card:#fff;--border:#e7e8eb;--border-2:#f0f1f3;
+  --t1:#1d2129;--t2:#4e5969;--t3:#86909c;
+  --green:#00b42a;--orange:#ff7d00;--red:#f53f3f;--purple:#7c5cff;--gold:#ffb400;--cyan:#0fc6c2;
+  --grad:linear-gradient(135deg,#4d6bfe,#7c5cff);
+  --fs:-apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI","Microsoft YaHei",sans-serif;
+  --sh:0 1px 2px rgba(23,26,33,.04);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;}
+body{font-family:var(--fs);background:var(--bg);color:var(--t1);font-size:14px;-webkit-font-smoothing:antialiased;overflow:hidden;}
+.app{display:grid;grid-template-columns:252px 1fr;height:100%;}
+
+/* ============ Sidebar ============ */
+.side{background:#fff;border-right:1px solid var(--border);display:flex;flex-direction:column;flex:none;}
+.logo{display:flex;align-items:center;gap:10px;padding:16px 18px;height:58px;flex:none;}
+.logo .mk{width:30px;height:30px;border-radius:8px;background:var(--grad);display:grid;place-items:center;color:#fff;flex:none;box-shadow:0 3px 8px rgba(77,107,254,.35);}
+.logo b{font-size:15px;font-weight:700;letter-spacing:-.2px;}
+.logo small{display:block;font-size:10.5px;color:var(--t3);font-weight:500;}
+
+.nav{flex:1;overflow-y:auto;padding:6px 10px 10px;}
+.nav::-webkit-scrollbar{width:6px;} .nav::-webkit-scrollbar-thumb{background:#d7d9de;border-radius:6px;}
+
+/* overview (top-level) */
+.ov-item{display:flex;align-items:center;gap:10px;width:100%;padding:9px 11px;border-radius:9px;border:none;background:none;font-family:inherit;font-size:13.5px;font-weight:600;color:var(--t1);cursor:pointer;text-align:left;margin-bottom:2px;}
+.ov-item:hover{background:#f2f3f5;}
+.ov-item.active{background:#eef1ff;color:var(--primary);}
+.ov-item .ah-ic{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;flex:none;}
+.ov-item .g-dot{width:6px;height:6px;border-radius:50%;background:var(--green);margin-left:auto;box-shadow:0 0 0 3px #e8f7eb;}
+
+.nav-label{display:flex;align-items:center;gap:8px;font-size:10.5px;font-weight:700;color:var(--t3);letter-spacing:.6px;padding:12px 11px 6px;}
+.nav-label::after{content:"";flex:1;height:1px;background:var(--border-2);}
+
+.acc{margin-bottom:2px;}
+.acc-head{display:flex;align-items:center;gap:9px;width:100%;padding:8px 10px;border-radius:8px;border:none;background:none;font-family:inherit;font-size:13.5px;font-weight:600;color:var(--t2);cursor:pointer;text-align:left;}
+.acc-head:hover{background:#f2f3f5;}
+.acc-head .ah-ic{width:24px;height:24px;border-radius:6px;display:grid;place-items:center;flex:none;}
+.acc-head .chev{margin-left:auto;transition:transform .2s;color:var(--t3);}
+.acc.open .acc-head .chev{transform:rotate(90deg);}
+.acc-body{display:none;padding:2px 0 4px 12px;}
+.acc.open .acc-body{display:block;}
+.sub-item{display:flex;align-items:center;gap:8px;width:100%;padding:6px 10px;border-radius:7px;border:none;background:none;font-family:inherit;font-size:12.5px;color:var(--t2);cursor:pointer;text-align:left;}
+.sub-item:hover{background:#f2f3f5;color:var(--t1);}
+.sub-item.active{background:#eef1ff;color:var(--primary);font-weight:600;}
+.sub-item .dot{width:4px;height:4px;border-radius:50%;background:currentColor;opacity:.5;flex:none;}
+
+/* AI chat entry inside nav (last, emphasized) */
+.nav-label.ai-lab{padding-top:14px;}
+.ai-entry{margin:2px 1px 0;}
+.ai-entry button{width:100%;display:flex;align-items:center;gap:11px;padding:13px 14px;border-radius:12px;border:none;cursor:pointer;color:#fff;font-family:inherit;
+  background:linear-gradient(125deg,#4d6bfe,#7c5cff 55%,#9b6bff);box-shadow:0 10px 24px rgba(77,107,254,.42);font-size:14px;font-weight:700;position:relative;overflow:hidden;text-align:left;}
+.ai-entry button::after{content:"";position:absolute;top:-40%;right:-30%;width:120px;height:120px;background:radial-gradient(circle,rgba(255,255,255,.28),transparent 70%);}
+.ai-entry button .s{width:32px;height:32px;border-radius:9px;background:rgba(255,255,255,.22);display:grid;place-items:center;flex:none;}
+.ai-entry button .at{position:relative;z-index:1;line-height:1.25;}
+.ai-entry button .at small{display:block;font-size:10px;font-weight:500;opacity:.85;margin-top:2px;}
+.ai-entry button .n{margin-left:auto;z-index:1;font-size:10px;background:rgba(255,255,255,.25);border-radius:9px;padding:3px 8px;font-weight:700;}
+
+.side-user{display:flex;align-items:center;gap:9px;padding:11px 16px;border-top:1px solid var(--border-2);flex:none;}
+.av{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#ffb400,#ff7d00);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:700;flex:none;}
+.side-user .u b{font-size:12.5px;display:block;}
+.side-user .u span{font-size:11px;color:var(--t3);}
+
+/* ============ Main ============ */
+.main{display:flex;flex-direction:column;overflow:hidden;}
+.topbar{height:58px;background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:14px;padding:0 24px;flex:none;}
+.crumb{font-size:14px;font-weight:600;white-space:nowrap;} .crumb span{color:var(--t3);font-weight:400;margin:0 8px;}
+.gsearch{flex:1;max-width:380px;margin-left:8px;display:flex;align-items:center;gap:8px;height:34px;border:1px solid var(--border);border-radius:8px;background:#fafbfc;padding:0 11px;color:var(--t3);font-size:12.5px;}
+.topbar .sp{flex:1;}
+.tbtn{height:34px;padding:0 14px;border-radius:8px;border:1px solid var(--border);background:#fff;color:var(--t2);font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;display:flex;align-items:center;gap:6px;}
+.tbtn.pri{background:var(--primary);border-color:var(--primary);color:#fff;}
+.iconbtn{width:34px;height:34px;border-radius:8px;border:1px solid var(--border);background:#fff;display:grid;place-items:center;cursor:pointer;color:var(--t2);}
+
+.content{flex:1;overflow:hidden;position:relative;}
+.screen{display:none;height:100%;}
+.screen.active{display:block;animation:in .22s ease;}
+@keyframes in{from{opacity:0;}to{opacity:1;}}
+
+/* boards */
+.board-scroll{height:100%;overflow-y:auto;padding:20px 24px 30px;}
+.board-scroll::-webkit-scrollbar{width:8px;} .board-scroll::-webkit-scrollbar-thumb{background:#d7d9de;border-radius:8px;}
+.sec-head{display:flex;align-items:baseline;gap:10px;margin:4px 0 14px;}
+.sec-head h2{font-size:17px;font-weight:700;letter-spacing:-.2px;}
+.sec-head .sub{font-size:12px;color:var(--t3);}
+.grid{display:grid;gap:16px;}
+.g4{grid-template-columns:repeat(4,1fr);} .g3{grid-template-columns:repeat(3,1fr);} .g2{grid-template-columns:repeat(2,1fr);}
+.g-2fr1{grid-template-columns:2fr 1fr;} .g-1fr2{grid-template-columns:1fr 2fr;}
+.card{background:var(--card);border:1px solid var(--border);border-radius:11px;padding:18px;box-shadow:var(--sh);}
+.card-h{display:flex;align-items:center;margin-bottom:15px;}
+.card-h h3{font-size:14px;font-weight:600;}
+.card-h .sub{font-size:12px;color:var(--t3);margin-left:8px;font-weight:400;}
+.card-h .more{margin-left:auto;font-size:12px;color:var(--primary);cursor:pointer;white-space:nowrap;}
+.mt16{margin-top:16px;}
+
+.insight{display:flex;align-items:center;gap:10px;border:1px solid #ffe0b0;background:#fffaf2;border-radius:10px;padding:11px 15px;margin-bottom:16px;font-size:13px;}
+.insight.risk{background:#fff5f4;border-color:#ffd4cf;} .insight.info{background:#f5f8ff;border-color:#d4e0ff;}
+.ai-badge{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;color:#fff;background:var(--grad);padding:3px 8px;border-radius:6px;flex:none;}
+.insight .itxt{color:var(--t2);line-height:1.5;} .insight .itxt b{color:var(--t1);font-weight:600;}
+.insight .ibasis{margin-left:auto;font-size:12px;color:var(--primary);cursor:pointer;white-space:nowrap;}
+
+.kpi .top{display:flex;align-items:center;justify-content:space-between;}
+.kpi .label{font-size:12.5px;color:var(--t3);}
+.kpi .kic{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;}
+.kpi .val{font-size:25px;font-weight:700;letter-spacing:-.5px;margin-top:10px;line-height:1;}
+.kpi .val small{font-size:12.5px;font-weight:500;color:var(--t3);margin-left:3px;}
+.kpi .chg{font-size:11.5px;margin-top:9px;color:var(--t3);}
+.up{color:var(--green);}.down{color:var(--red);}.flat{color:var(--t3);}
+.pbar{height:6px;border-radius:4px;background:#f0f1f3;overflow:hidden;margin-top:8px;} .pbar i{display:block;height:100%;border-radius:4px;background:var(--primary);}
+
+table{width:100%;border-collapse:collapse;font-size:13px;}
+th{text-align:left;font-size:11.5px;color:var(--t3);font-weight:500;padding:9px 10px;background:#fafbfc;border-bottom:1px solid var(--border);white-space:nowrap;}
+td{padding:10px;border-bottom:1px solid var(--border-2);color:var(--t2);white-space:nowrap;}
+tbody tr:last-child td{border-bottom:none;} tbody tr:hover{background:#fafbff;}
+td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
+.tag{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:2px 9px;border-radius:5px;font-weight:500;}
+.tag::before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor;}
+.t-green{background:#e8f7eb;color:var(--green);}.t-blue{background:#e8efff;color:var(--primary);}
+.t-orange{background:#fff3e6;color:var(--orange);}.t-red{background:#ffece8;color:var(--red);}
+.t-gray{background:#f2f3f5;color:var(--t3);}.t-purple{background:#f0ecff;color:var(--purple);}
+.desc-item{display:flex;padding:10px 0;border-bottom:1px solid var(--border-2);font-size:13px;}
+.desc-item .dk{color:var(--t3);width:104px;flex:none;} .desc-item .dv{color:var(--t1);font-weight:500;}
+
+/* donut */
+.donut{position:relative;width:140px;height:140px;flex:none;}
+.donut .ctr{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+.donut .ctr b{font-size:23px;} .donut .ctr span{font-size:10.5px;color:var(--t3);}
+.donut-flex{display:flex;align-items:center;gap:18px;}
+.dlegend{flex:1;display:flex;flex-direction:column;gap:10px;}
+.dl{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--t2);}
+.dl i{width:8px;height:8px;border-radius:2px;flex:none;} .dl b{margin-left:auto;color:var(--t1);}
+
+/* ============ OVERVIEW (企业综合屏) ============ */
+.ov-scroll{height:100%;overflow-y:auto;padding:22px 26px 34px;}
+.ov-scroll::-webkit-scrollbar{width:8px;} .ov-scroll::-webkit-scrollbar-thumb{background:#d7d9de;border-radius:8px;}
+
+.hero{display:grid;grid-template-columns:1.5fr 1fr;gap:18px;margin-bottom:18px;}
+.hero-left{border:1px solid var(--border);border-radius:14px;padding:22px 24px;color:#fff;position:relative;overflow:hidden;
+  background:linear-gradient(125deg,#3f5bf0,#6a55f0 55%,#8b5cf6);box-shadow:0 14px 34px rgba(77,107,254,.32);}
+.hero-left::after{content:"";position:absolute;right:-60px;top:-60px;width:240px;height:240px;background:radial-gradient(circle,rgba(255,255,255,.22),transparent 70%);}
+.hero-left .h-name{font-size:21px;font-weight:700;letter-spacing:-.3px;}
+.hero-left .h-tags{display:flex;gap:8px;margin-top:11px;flex-wrap:wrap;}
+.hero-left .h-tag{font-size:11.5px;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.22);border-radius:99px;padding:4px 11px;font-weight:500;}
+.hero-ask{position:relative;z-index:1;margin-top:18px;display:flex;align-items:center;gap:10px;background:#fff;border-radius:12px;padding:12px 14px;cursor:pointer;box-shadow:0 8px 20px rgba(20,30,80,.18);}
+.hero-ask .ha-i{width:30px;height:30px;border-radius:9px;background:var(--grad);display:grid;place-items:center;color:#fff;flex:none;}
+.hero-ask .ha-t{font-size:13.5px;color:var(--t2);}
+.hero-ask .ha-go{margin-left:auto;color:var(--primary);}
+.hero-actions{position:relative;z-index:1;display:flex;gap:10px;margin-top:13px;}
+.hero-actions button{flex:1;border:1px solid rgba(255,255,255,.28);background:rgba(255,255,255,.12);color:#fff;border-radius:9px;padding:8px 0;font-size:12.5px;font-family:inherit;cursor:pointer;font-weight:600;}
+
+.hero-right{border:1px solid var(--border);border-radius:14px;background:#fff;padding:20px;display:flex;flex-direction:column;align-items:center;box-shadow:var(--sh);}
+.hero-right .hr-lbl{font-size:12.5px;color:var(--t3);align-self:flex-start;font-weight:600;}
+.hring{position:relative;width:150px;height:150px;margin:6px 0 4px;}
+.hring .ctr{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+.hring .ctr b{font-size:34px;font-weight:700;letter-spacing:-1px;line-height:1;}
+.hring .ctr span{font-size:11px;color:var(--t3);margin-top:4px;}
+.hr-foot{font-size:11.5px;color:var(--t3);text-align:center;line-height:1.6;margin-top:2px;}
+.hr-foot b{color:var(--orange);}
+
+/* AI brief */
+.ov-sec-title{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700;margin:22px 2px 12px;}
+.ov-sec-title .s-ic{width:24px;height:24px;border-radius:7px;background:var(--grad);display:grid;place-items:center;color:#fff;}
+.ov-sec-title .s-more{margin-left:auto;font-size:12px;color:var(--primary);font-weight:500;cursor:pointer;}
+.brief-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+.brief{border:1px solid var(--border);border-radius:11px;background:#fff;padding:15px 16px;display:flex;gap:11px;box-shadow:var(--sh);}
+.brief .bd{width:8px;height:8px;border-radius:50%;margin-top:6px;flex:none;}
+.brief .bt{font-size:13px;font-weight:600;line-height:1.4;}
+.brief .bs{font-size:12px;color:var(--t3);margin-top:5px;line-height:1.55;}
+
+/* core kpis */
+.kpi8{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
+.mkpi{border:1px solid var(--border);border-radius:11px;background:#fff;padding:15px 16px;box-shadow:var(--sh);}
+.mkpi .ml{font-size:12px;color:var(--t3);}
+.mkpi .mv{font-size:22px;font-weight:700;letter-spacing:-.4px;margin-top:9px;line-height:1;}
+.mkpi .mv small{font-size:11.5px;color:var(--t3);font-weight:500;margin-left:2px;}
+.mkpi .mc{font-size:11px;margin-top:8px;color:var(--t3);}
+
+/* skill tags */
+.skill-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:13px;}
+.skill{border:1px solid var(--border);border-radius:11px;background:#fff;padding:15px 14px;cursor:pointer;transition:.15s;box-shadow:var(--sh);text-align:left;}
+.skill:hover{border-color:var(--primary);transform:translateY(-2px);box-shadow:0 10px 24px rgba(77,107,254,.16);}
+.skill .sk-ic{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;margin-bottom:10px;}
+.skill b{font-size:13px;display:block;font-weight:600;}
+.skill span{font-size:11.5px;color:var(--t3);line-height:1.5;display:block;margin-top:4px;}
+
+/* module entries */
+.mod-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:13px;}
+.mod{border:1px solid var(--border);border-radius:11px;background:#fff;padding:14px 15px;cursor:pointer;display:flex;align-items:center;gap:11px;box-shadow:var(--sh);transition:.15s;}
+.mod:hover{border-color:#c4cdff;background:#fafbff;}
+.mod .md-ic{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;flex:none;}
+.mod .mt b{font-size:13px;display:block;} .mod .mt span{font-size:11.5px;color:var(--t3);}
+.mod .chev{margin-left:auto;color:var(--t3);}
+
+/* ============ CHAT ============ */
+.chat{display:flex;flex-direction:column;height:100%;background:linear-gradient(180deg,#fbfbff,#f6f7f9);}
+.chat-bar{display:flex;align-items:center;gap:12px;padding:12px 28px;flex:none;}
+.chat-bar .cname{font-size:14px;font-weight:600;}
+.chat-bar .cname small{display:block;font-size:11px;color:var(--t3);font-weight:400;}
+.model-sel{position:relative;}
+.model-btn{display:flex;align-items:center;gap:7px;height:34px;padding:0 12px;border-radius:9px;border:1px solid var(--border);background:#fff;font-family:inherit;font-size:12.5px;font-weight:600;color:var(--t1);cursor:pointer;}
+.model-btn .m-ic{width:20px;height:20px;border-radius:6px;display:grid;place-items:center;flex:none;color:#fff;}
+.model-btn .mchev{color:var(--t3);}
+.model-pop{position:absolute;top:42px;left:0;width:300px;background:#fff;border:1px solid var(--border);border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.16);padding:8px;display:none;z-index:50;}
+.model-pop.open{display:block;}
+.mp-label{font-size:10.5px;color:var(--t3);padding:7px 10px 4px;font-weight:600;}
+.mp-opt{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;cursor:pointer;}
+.mp-opt:hover{background:#f5f7ff;}
+.mp-opt .m-ic{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:#fff;flex:none;font-size:11px;font-weight:700;}
+.mp-opt .mt b{font-size:13px;display:block;} .mp-opt .mt span{font-size:11px;color:var(--t3);}
+.mp-opt .chk{margin-left:auto;color:var(--primary);display:none;}
+.mp-opt.sel .chk{display:block;}
+.mp-opt.auto .m-ic{background:var(--grad);}
+.mp-divider{height:1px;background:var(--border-2);margin:6px 4px;}
+.chat-bar .sp{flex:1;}
+.cicon{width:34px;height:34px;border-radius:8px;border:1px solid var(--border);background:#fff;display:grid;place-items:center;cursor:pointer;color:var(--t2);}
+
+.chat-scroll{flex:1;overflow-y:auto;padding:8px 28px;}
+.chat-scroll::-webkit-scrollbar{width:8px;} .chat-scroll::-webkit-scrollbar-thumb{background:#d7d9de;border-radius:8px;}
+.chat-inner{max-width:760px;margin:0 auto;}
+.welcome{padding:42px 0 18px;text-align:center;}
+.welcome .wlogo{width:60px;height:60px;border-radius:16px;margin:0 auto 18px;background:var(--grad);display:grid;place-items:center;color:#fff;box-shadow:0 10px 28px rgba(77,107,254,.4);}
+.welcome h2{font-size:26px;font-weight:700;letter-spacing:-.5px;}
+.welcome p{font-size:14px;color:var(--t3);margin-top:8px;}
+.welcome .wmode{display:inline-flex;align-items:center;gap:6px;margin-top:14px;font-size:12px;color:var(--primary);background:#eef1ff;border:1px solid #dbe2ff;border-radius:99px;padding:5px 13px;font-weight:600;}
+.sugg-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:24px;}
+.sugg-card{text-align:left;border:1px solid var(--border);background:#fff;border-radius:12px;padding:15px 16px;cursor:pointer;transition:.15s;}
+.sugg-card:hover{border-color:var(--primary);box-shadow:0 6px 20px rgba(77,107,254,.14);}
+.sugg-card .sc-ic{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;margin-bottom:9px;}
+.sugg-card b{font-size:13.5px;display:block;} .sugg-card span{font-size:12px;color:var(--t3);line-height:1.5;display:block;margin-top:3px;}
+
+.msg{display:flex;gap:12px;margin:22px 0;}
+.msg .ma{width:32px;height:32px;border-radius:9px;flex:none;display:grid;place-items:center;color:#fff;}
+.msg.bot .ma{background:var(--grad);}
+.msg.user{flex-direction:row-reverse;}
+.msg.user .ma{background:linear-gradient(135deg,#ffb400,#ff7d00);}
+.msg .mbody{max-width:82%;}
+.msg.user .mbody{display:flex;flex-direction:column;align-items:flex-end;}
+.bubble{font-size:14px;line-height:1.7;color:var(--t1);background:#fff;border:1px solid var(--border-2);border-radius:4px 13px 13px 13px;padding:13px 16px;box-shadow:0 2px 8px rgba(0,0,0,.03);}
+.msg.user .bubble{background:var(--primary);color:#fff;border-color:var(--primary);border-radius:13px 13px 4px 13px;}
+.cite{margin-top:10px;border:1px solid var(--border-2);border-left:3px solid var(--primary);border-radius:8px;padding:9px 11px;background:#f8faff;display:flex;gap:9px;align-items:center;cursor:pointer;}
+.cite .ci-ic{color:var(--primary);flex:none;} .cite .ci-tx{font-size:12px;}
+.cite .ci-tx b{display:block;color:var(--t1);} .cite .ci-tx span{color:var(--t3);font-size:11px;}
+.cite .ci-go{margin-left:auto;color:var(--t3);}
+.msg-meta{font-size:11px;color:var(--t3);margin-top:7px;display:flex;gap:10px;align-items:center;}
+.msg-meta .fm{display:flex;align-items:center;gap:4px;}
+
+.composer{padding:10px 28px 22px;flex:none;}
+.composer-inner{max-width:760px;margin:0 auto;border:1px solid var(--border);border-radius:18px;background:#fff;box-shadow:0 6px 24px rgba(0,0,0,.07);padding:10px 12px;}
+.composer-tools{display:flex;align-items:center;gap:7px;margin-bottom:8px;}
+.mini-model{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:var(--primary);background:#eef1ff;border:1px solid #dbe2ff;border-radius:99px;padding:4px 11px;cursor:pointer;}
+.ctool{width:28px;height:28px;border-radius:7px;border:none;background:#f2f3f5;display:grid;place-items:center;cursor:pointer;color:var(--t2);}
+.composer-input{display:flex;align-items:flex-end;gap:10px;}
+.composer-input textarea{flex:1;border:none;outline:none;resize:none;font-family:inherit;font-size:14px;line-height:1.5;max-height:140px;padding:6px 2px;color:var(--t1);background:transparent;}
+.composer-input textarea::placeholder{color:var(--t3);}
+.send-btn{width:36px;height:36px;border-radius:10px;border:none;background:var(--grad);color:#fff;display:grid;place-items:center;cursor:pointer;flex:none;}
+.send-btn:disabled{background:#d7d9de;}
+.composer-hint{text-align:center;font-size:11px;color:var(--t3);margin-top:9px;}
+
+@media(max-width:1240px){
+  .hero{grid-template-columns:1fr;}
+  .kpi8,.skill-grid{grid-template-columns:repeat(3,1fr);}
+  .brief-grid,.mod-grid{grid-template-columns:1fr 1fr;}
+  .g4{grid-template-columns:1fr 1fr;}.g3{grid-template-columns:1fr 1fr;}.g-2fr1,.g-1fr2{grid-template-columns:1fr;}
+  .ext-grid{grid-template-columns:1fr 1fr;}.drive-stats{grid-template-columns:1fr 1fr;}.cal-wrap{grid-template-columns:1fr;}
+}
+@media(max-width:760px){
+  body{overflow:auto;}
+  .g4,.g3,.g2,.sugg-grid,.brief-grid,.mod-grid,.kpi8,.skill-grid{grid-template-columns:1fr;}
+  .app{grid-template-columns:64px 1fr;}
+  .side .logo b,.side .logo small,.acc-head span:not(.chev),.side-user .u,.nav-label,.ov-item span:not(.ah-ic),.ai-entry .at,.ai-entry .n{display:none;}
+  .gsearch{display:none;}
+}
+/* ===== 消息关注 ===== */
+.news-card{margin-top:16px;overflow:hidden;}
+.news-head{display:flex;align-items:center;gap:10px;padding:14px 18px 10px;}
+.news-head .nh-live{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--t1);}
+.news-head .nh-live i{width:7px;height:7px;border-radius:50%;background:var(--red);box-shadow:0 0 0 0 rgba(245,63,63,.5);animation:npulse 1.8s infinite;}
+@keyframes npulse{0%{box-shadow:0 0 0 0 rgba(245,63,63,.45);}70%{box-shadow:0 0 0 7px rgba(245,63,63,0);}100%{box-shadow:0 0 0 0 rgba(245,63,63,0);}}
+.news-head .nh-sub{font-size:12px;color:var(--t3);}
+.news-head .sp{flex:1;}
+.news-head .nh-set{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--t2);background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:5px 10px;cursor:pointer;transition:.15s;}
+.news-head .nh-set:hover{border-color:var(--primary);color:var(--primary);}
+.news-viewport{height:168px;overflow:hidden;position:relative;margin:0 10px 6px;mask-image:linear-gradient(180deg,transparent,#000 16px,#000 calc(100% - 16px),transparent);-webkit-mask-image:linear-gradient(180deg,transparent,#000 16px,#000 calc(100% - 16px),transparent);}
+.news-track{position:absolute;left:0;right:0;top:0;}
+.news-item{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:9px;cursor:pointer;}
+.news-item:hover{background:var(--bg);}
+.news-item .ni-time{font-size:11.5px;color:var(--t3);flex:none;width:62px;font-variant-numeric:tabular-nums;}
+.news-item .ni-title{font-size:13px;color:var(--t1);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.news-item:hover .ni-title{color:var(--primary);}
+.src-tag{flex:none;font-size:10.5px;line-height:1;padding:3px 7px;border-radius:5px;font-weight:600;white-space:nowrap;}
+.src-news{background:#ffece8;color:var(--red);}
+.src-report{background:#e8efff;color:var(--primary);}
+.src-paper{background:#f0ecff;color:var(--purple);}
+.src-frontier{background:#e6fbfa;color:#0aa5a1;}
+.src-gov{background:#fff3e6;color:var(--orange);}
+
+/* ===== 关注设置弹窗 ===== */
+.nset-mask{position:fixed;inset:0;background:rgba(20,22,30,.46);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;z-index:80;}
+.nset-mask.show{display:flex;}
+.nset{width:520px;max-width:calc(100vw - 40px);max-height:84vh;overflow-y:auto;background:#fff;border-radius:16px;box-shadow:0 24px 70px rgba(20,22,40,.28);}
+.nset-h{display:flex;align-items:center;padding:18px 22px;border-bottom:1px solid var(--border-2);}
+.nset-h b{font-size:15.5px;}
+.nset-h .sp{flex:1;}
+.nset-h .x{cursor:pointer;color:var(--t3);line-height:0;}
+.nset-b{padding:18px 22px;}
+.nset-g{font-size:12px;font-weight:700;color:var(--t2);margin:2px 0 11px;}
+.src-opts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;}
+.src-opt{display:flex;align-items:center;gap:10px;border:1px solid var(--border);border-radius:10px;padding:11px 12px;cursor:pointer;transition:.15s;}
+.src-opt:hover{border-color:#c7d0ff;}
+.src-opt.on{border-color:var(--primary);background:#f5f8ff;}
+.src-opt .so-box{width:17px;height:17px;border-radius:5px;border:1.5px solid #c4cad6;flex:none;display:flex;align-items:center;justify-content:center;color:#fff;transition:.15s;}
+.src-opt.on .so-box{background:var(--primary);border-color:var(--primary);}
+.src-opt .so-t{font-size:13px;color:var(--t1);}
+.src-opt .so-t small{display:block;color:var(--t3);font-size:10.5px;margin-top:2px;}
+.kw-input{width:100%;border:1px solid var(--border);border-radius:9px;padding:10px 12px;font-size:13px;resize:none;height:68px;font-family:inherit;color:var(--t1);}
+.kw-input:focus{outline:none;border-color:var(--primary);}
+.kw-hint{font-size:11px;color:var(--t3);margin-top:6px;}
+.nset-f{display:flex;gap:10px;justify-content:flex-end;padding:15px 22px;border-top:1px solid var(--border-2);}
+.nset-f button{border-radius:9px;padding:8px 18px;font-size:13px;cursor:pointer;border:1px solid var(--border);background:#fff;color:var(--t2);}
+.nset-f .save{background:var(--primary);border-color:var(--primary);color:#fff;}
+.nset-f .save:hover{background:var(--primary-d);}
+
+/* ===== 市场栏目来源标注 ===== */
+.src-line{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--t3);margin-top:10px;padding-top:10px;border-top:1px dashed var(--border-2);}
+.src-line b{color:var(--t2);font-weight:600;}
+.mkt-tabs{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;}
+.mkt-tab{font-size:12.5px;padding:6px 14px;border-radius:8px;border:1px solid var(--border);background:#fff;color:var(--t2);cursor:pointer;}
+.mkt-tab.on{background:var(--primary);border-color:var(--primary);color:#fff;}
+.mkt-pane{display:none;}
+.mkt-pane.on{display:block;}
+
+/* ===== 系统导航项 ===== */
+.sys-item{display:flex;align-items:center;gap:10px;width:100%;padding:8px 11px;border-radius:9px;border:none;background:none;font-family:inherit;font-size:13px;font-weight:500;color:var(--t2);cursor:pointer;text-align:left;margin-bottom:2px;}
+.sys-item:hover{background:#f2f3f5;color:var(--t1);}
+.sys-item.active{background:#f0ecff;color:var(--purple);font-weight:600;}
+.sys-item .ah-ic{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;flex:none;}
+.sys-item .g-dot{width:6px;height:6px;border-radius:50%;margin-left:auto;}
+
+/* ===== 扩展中心 ===== */
+.ext-tabs{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;}
+.ext-tab{font-size:12.5px;padding:7px 16px;border-radius:9px;border:1px solid var(--border);background:#fff;color:var(--t2);cursor:pointer;display:flex;align-items:center;gap:7px;}
+.ext-tab .badge-n{background:var(--bg);color:var(--t3);font-size:10.5px;padding:1px 7px;border-radius:10px;}
+.ext-tab.on{background:var(--primary);border-color:var(--primary);color:#fff;}
+.ext-tab.on .badge-n{background:rgba(255,255,255,.22);color:#fff;}
+.ext-pane{display:none;}
+.ext-pane.on{display:block;}
+.ext-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+.ext-card{border:1px solid var(--border);border-radius:13px;padding:16px;background:#fff;display:flex;flex-direction:column;gap:10px;transition:.18s;}
+.ext-card:hover{border-color:#c7d0ff;box-shadow:0 8px 24px rgba(60,80,160,.08);transform:translateY(-2px);}
+.ext-card .ec-top{display:flex;align-items:center;gap:11px;}
+.ext-card .ec-ic{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;flex:none;font-weight:700;font-size:13px;}
+.ext-card .ec-n{font-size:14px;font-weight:700;color:var(--t1);}
+.ext-card .ec-t{font-size:11px;color:var(--t3);margin-top:2px;}
+.ext-card .ec-d{font-size:12px;color:var(--t2);line-height:1.55;flex:1;}
+.ext-card .ec-foot{display:flex;align-items:center;gap:8px;justify-content:space-between;}
+.ext-card .ec-cat{font-size:10.5px;color:var(--t3);display:flex;align-items:center;gap:5px;}
+.ec-switch{position:relative;width:36px;height:20px;border-radius:20px;background:#d4d7de;cursor:pointer;flex:none;transition:.18s;border:none;}
+.ec-switch::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:.18s;box-shadow:0 1px 3px rgba(0,0,0,.2);}
+.ec-switch.on{background:var(--primary);}
+.ec-switch.on::after{left:18px;}
+.ext-card.needs-auth .ec-btn{background:#fff8ec;border:1px solid #ffd98a;color:#a9740a;font-size:11.5px;border-radius:7px;padding:5px 11px;cursor:pointer;}
+.ext-card.connected .ec-btn{background:#f0faf2;border:1px solid #bfe8c8;color:#1a8f3c;font-size:11.5px;border-radius:7px;padding:5px 11px;}
+.ext-hint-bar{display:flex;align-items:center;gap:10px;background:#f5f8ff;border:1px solid #e4ebff;border-radius:11px;padding:12px 16px;margin-bottom:18px;font-size:12.5px;color:var(--t2);}
+.ext-add{border:1.5px dashed var(--border);border-radius:13px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:172px;color:var(--t3);cursor:pointer;transition:.18s;background:#fafbfc;}
+.ext-add:hover{border-color:var(--primary);color:var(--primary);background:#f8faff;}
+
+/* ===== 日程 ===== */
+.cal-wrap{display:grid;grid-template-columns:1fr 300px;gap:16px;}
+.cal-main{border:1px solid var(--border);border-radius:13px;background:#fff;overflow:hidden;}
+.cal-toolbar{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--border-2);}
+.cal-toolbar b{font-size:15px;}
+.cal-toolbar .nav-arw{width:28px;height:28px;border-radius:7px;border:1px solid var(--border);background:#fff;cursor:pointer;color:var(--t2);display:grid;place-items:center;}
+.cal-toolbar .sp{flex:1;}
+.cal-toolbar .today-btn{border:1px solid var(--border);background:#fff;border-radius:7px;padding:6px 14px;font-size:12px;cursor:pointer;color:var(--t2);}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);}
+.cal-dow{padding:10px 0;text-align:center;font-size:11px;font-weight:700;color:var(--t3);background:#fafbfc;border-bottom:1px solid var(--border-2);}
+.cal-cell{min-height:96px;border-right:1px solid var(--border-2);border-bottom:1px solid var(--border-2);padding:5px 6px;cursor:pointer;position:relative;}
+.cal-cell:nth-child(7n){border-right:none;}
+.cal-cell.other{background:#fafbfc;color:#c4c9d2;}
+.cal-cell.today .cal-date{background:var(--primary);color:#fff;}
+.cal-date{display:inline-grid;place-items:center;width:23px;height:23px;border-radius:50%;font-size:12px;font-weight:600;}
+.cal-ev{font-size:10px;padding:2px 5px;border-radius:4px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#fff;}
+.cal-side{display:flex;flex-direction:column;gap:14px;}
+.cal-side-card{border:1px solid var(--border);border-radius:13px;background:#fff;padding:15px 16px;}
+.cal-side-card h3{font-size:13.5px;margin-bottom:12px;display:flex;align-items:center;gap:7px;}
+.agenda-item{display:flex;gap:10px;padding:9px 0;border-bottom:1px dashed var(--border-2);}
+.agenda-item:last-child{border-bottom:none;}
+.agenda-time{font-size:11px;color:var(--t3);flex:none;width:44px;font-variant-numeric:tabular-nums;}
+.agenda-main{font-size:12.5px;color:var(--t1);}
+.agenda-main small{display:block;color:var(--t3);font-size:10.5px;margin-top:2px;}
+.agenda-dot{width:7px;height:7px;border-radius:50%;margin-top:5px;flex:none;}
+
+/* ===== 云盘 ===== */
+.drive-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;}
+.crumb-chain{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--t2);}
+.crumb-chain .seg{cursor:pointer;}
+.crumb-chain .seg.cur{color:var(--t1);font-weight:600;}
+.drive-toolbar .sp{flex:1;}
+.drive-btn{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;border:1px solid var(--border);background:#fff;border-radius:8px;padding:7px 13px;cursor:pointer;color:var(--t2);}
+.drive-btn.primary{background:var(--primary);border-color:var(--primary);color:#fff;}
+.drive-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin-bottom:16px;}
+.dstat{border:1px solid var(--border);border-radius:12px;background:#fff;padding:14px 16px;}
+.dstat .l{font-size:11.5px;color:var(--t3);}
+.dstat .v{font-size:19px;font-weight:700;color:var(--t1);margin-top:6px;}
+.dstat .v small{font-size:11px;font-weight:400;color:var(--t3);}
+.drive-files{border:1px solid var(--border);border-radius:13px;background:#fff;overflow:hidden;}
+.drive-files table{margin:0;}
+.drive-files th{font-size:11.5px;color:var(--t3);font-weight:600;background:#fafbfc;}
+.file-cell{display:flex;align-items:center;gap:10px;}
+.file-ic{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;flex:none;}
+.file-cell .fn{font-size:13px;color:var(--t1);}
+.file-cell .fn small{display:block;color:var(--t3);font-size:10.5px;}
+.drive-conn{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;}
+.drive-conn-chip{display:inline-flex;align-items:center;gap:7px;font-size:11.5px;border:1px solid var(--border);border-radius:20px;padding:6px 13px;background:#fff;color:var(--t2);}
+.drive-conn-chip .ok{width:6px;height:6px;border-radius:50%;background:var(--green);}
+
+/* ===== 消息分级 ===== */
+.news-item{border-left:3px solid transparent;padding-left:9px;}
+.news-item.lv-key{border-left-color:var(--red);}
+.news-item.lv-watch{border-left-color:var(--orange);}
+.news-item.lv-normal{border-left-color:#d7d9de;}
+.lv-tag{flex:none;font-size:10.5px;line-height:1;padding:3px 7px;border-radius:5px;font-weight:700;white-space:nowrap;}
+.lv-key .lv-tag,.lv-tag.t-key{background:#ffece8;color:var(--red);}
+.lv-tag.t-watch{background:#fff3e6;color:var(--orange);}
+.lv-tag.t-normal{background:#f2f3f5;color:var(--t3);}
+.news-item.lv-key .ni-title{font-weight:600;}
+.news-item .ni-detail{flex:none;font-size:11px;color:var(--primary);white-space:nowrap;}
+.news-filters{display:flex;gap:7px;padding:0 18px 10px;flex-wrap:wrap;}
+.nf{font-size:11.5px;padding:4px 11px;border-radius:20px;border:1px solid var(--border);background:#fff;color:var(--t2);cursor:pointer;}
+.nf.on{background:var(--t1);border-color:var(--t1);color:#fff;}
+.nf small{opacity:.7;margin-left:2px;}
+
+/* ===== 消息详情弹窗 ===== */
+.nd-mask{position:fixed;inset:0;background:rgba(20,22,30,.46);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;z-index:90;}
+.nd-mask.show{display:flex;}
+.nd{width:560px;max-width:calc(100vw - 40px);max-height:86vh;overflow-y:auto;background:#fff;border-radius:16px;box-shadow:0 24px 70px rgba(20,22,40,.28);}
+.nd-h{padding:18px 22px 14px;border-bottom:1px solid var(--border-2);}
+.nd-h .nd-meta{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
+.nd-h b{font-size:16px;line-height:1.5;color:var(--t1);display:block;}
+.nd-b{padding:16px 22px 20px;}
+.nd-g{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;color:var(--t1);margin:16px 0 9px;}
+.nd-g:first-child{margin-top:2px;}
+.nd-g .g-ic{width:19px;height:19px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;}
+.nd-points{list-style:none;margin:0;padding:0;}
+.nd-points li{position:relative;padding:7px 0 7px 20px;font-size:13px;color:var(--t2);line-height:1.55;border-bottom:1px dashed var(--border-2);}
+.nd-points li:last-child{border-bottom:none;}
+.nd-points li::before{content:"";position:absolute;left:2px;top:14px;width:6px;height:6px;border-radius:50%;background:var(--primary);}
+.nd-impact{background:#f5f8ff;border:1px solid #e4ebff;border-radius:10px;padding:12px 14px;}
+.nd-impact .im{display:flex;gap:9px;font-size:13px;color:var(--t2);line-height:1.55;padding:5px 0;}
+.nd-impact .im i{flex:none;width:6px;height:6px;border-radius:50%;background:var(--red);margin-top:8px;}
+.nd-action{display:flex;gap:9px;align-items:flex-start;background:#fff8ec;border:1px solid #ffe4b8;border-radius:10px;padding:11px 14px;font-size:12.5px;color:#8a5a10;line-height:1.55;}
+.nd-f{display:flex;gap:10px;justify-content:flex-end;padding:14px 22px;border-top:1px solid var(--border-2);}
+.nd-f button{border-radius:9px;padding:8px 18px;font-size:13px;cursor:pointer;border:1px solid var(--border);background:#fff;color:var(--t2);}
+.nd-f .ask{background:var(--primary);border-color:var(--primary);color:#fff;}
+  /* 扩展开关 */
+  .ext-sw{flex:none;position:relative;width:38px;height:22px;display:inline-block;}
+  .ext-sw input{opacity:0;width:0;height:0;}
+  .ext-sw span{position:absolute;inset:0;background:#d7d9de;border-radius:20px;transition:.2s;cursor:pointer;}
+  .ext-sw span:before{content:"";position:absolute;width:16px;height:16px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2);}
+  .ext-sw input:checked+span{background:var(--primary);}
+  .ext-sw input:checked+span:before{transform:translateX(16px);}
+  .ext-conn.on{color:var(--green);}
+  .badge-n{display:inline-block;min-width:16px;padding:0 4px;margin-left:6px;font-size:10px;background:#eef0f3;color:var(--t2);border-radius:8px;line-height:15px;text-align:center;}
+  .ext-tab.on .badge-n{background:rgba(255,255,255,.25);color:#fff;}
+  /* 文件来源标签 */
+  .file-src{font-size:11.5px;color:var(--t2);background:#f2f3f5;padding:2px 9px;border-radius:5px;}
+  .file-act{color:var(--primary);font-size:12.5px;cursor:pointer;margin-right:14px;}
+  .nav-arw,.today-btn{border:1px solid var(--border);background:#fff;border-radius:7px;width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--t2);}
+  .today-btn{width:auto;padding:0 13px;font-size:12.5px;color:var(--t2);}
+  .agenda-dot{flex:none;width:8px;height:8px;border-radius:50%;margin-top:5px;}
+  .agenda-main{flex:1;font-size:13px;color:var(--t1);font-weight:600;display:flex;flex-direction:column;}
+  .agenda-main small{font-weight:400;color:var(--t3);font-size:11.5px;margin-top:3px;}
+  .cal-ev{font-size:11px;color:var(--t2);display:flex;align-items:center;gap:4px;margin-top:3px;white-space:nowrap;overflow:hidden;}
+  .cal-ev span{width:5px;height:5px;border-radius:50%;flex:none;}
+  .cal-num{display:inline-block;font-size:12.5px;color:var(--t1);}
+  .cal-cell.today .cal-num{background:var(--primary);color:#fff;border-radius:50%;width:20px;height:20px;line-height:20px;text-align:center;}
+  .cal-cell.blank{background:transparent;border:none;}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="side">
+    <div class="logo">
+      <span class="mk"><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l9-9 9 9"/><path d="M5 11v9h14v-9"/></svg></span>
+      <div><b>Startup Harness</b><small>AI 驱动企业管理</small></div>
+    </div>
+
+    <nav class="nav" id="navAccordion">
+      <!-- 企业综合（第一） -->
+      <button class="ov-item active" data-go="overview">
+        <span class="ah-ic" style="background:var(--grad);color:#fff"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l2.2 5.8L20 10.8l-5.8 2.2L12 19l-2.2-6L4 10.8l5.8-2z"/></svg></span>
+        企业综合<span class="g-dot"></span>
+      </button>
+
+      <div class="nav-label">业务模块</div>
+
+      <!-- 1 企业基本信息 -->
+      <div class="acc">
+        <button class="acc-head">
+          <span class="ah-ic" style="background:#e8efff;color:var(--primary)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l7-4 7 4v14"/></svg></span>
+          企业基本信息
+          <span class="chev"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
+        </button>
+        <div class="acc-body">
+          <button class="sub-item" data-go="info"><span class="dot"></span>工商登记</button>
+          <button class="sub-item" data-go="info"><span class="dot"></span>注册资本与实缴</button>
+          <button class="sub-item" data-go="info"><span class="dot"></span>章程与治理结构</button>
+          <button class="sub-item" data-go="info"><span class="dot"></span>资质与证照</button>
+          <button class="sub-item" data-go="info"><span class="dot"></span>变更记录</button>
+        </div>
+      </div>
+      <!-- 2 业务概览 -->
+      <div class="acc">
+        <button class="acc-head">
+          <span class="ah-ic" style="background:#fff3e6;color:var(--orange)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg></span>
+          业务概览
+          <span class="chev"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
+        </button>
+        <div class="acc-body">
+          <button class="sub-item" data-go="bizov"><span class="dot"></span>业务画像</button>
+          <button class="sub-item" data-go="bizov"><span class="dot"></span>产品矩阵</button>
+          <button class="sub-item" data-go="bizov"><span class="dot"></span>商业模式</button>
+          <button class="sub-item" data-go="bizov"><span class="dot"></span>技术与知识产权</button>
+        </div>
+      </div>
+      <!-- 3 人员管理 -->
+      <div class="acc">
+        <button class="acc-head">
+          <span class="ah-ic" style="background:#e8f7eb;color:var(--green)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg></span>
+          人员管理
+          <span class="chev"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
+        </button>
+        <div class="acc-body">
+          <button class="sub-item" data-go="hr"><span class="dot"></span>组织架构</button>
+          <button class="sub-item" data-go="hr"><span class="dot"></span>核心团队</button>
+          <button class="sub-item" data-go="hr"><span class="dot"></span>员工花名册</button>
+          <button class="sub-item" data-go="hr"><span class="dot"></span>期权激励 ESOP</button>
+        </div>
+      </div>
+      <!-- 4 生产 -->
+      <div class="acc">
+        <button class="acc-head">
+          <span class="ah-ic" style="background:#e6fbfa;color:var(--cyan)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none"stroke="currentColor" stroke-width="2"><path d="M2 20h20M4 20V8l5 3V8l5 3V8l6 4v8"/></svg></span>
+          生产
+          <span class="chev"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
+        </button>
+        <div class="acc-body">
+          <button class="sub-item" data-go="prod"><span class="dot"></span>生产计划</button>
+          <button class="sub-item" data-go="prod"><span class="dot"></span>产能与良率</button>
+          <button class="sub-item" data-go="prod"><span class="dot"></span>在制品与库存</button>
+          <button class="sub-item" data-go="prod"><span class="dot"></span>质量管控</button>
+        </div>
+      </div>
+      <!-- 5 采购 -->
+      <div class="acc">
+        <button class="acc-head">
+          <span class="ah-ic" style="background:#fff3e6;color:var(--orange)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><path d="M3 6h18M16 10a4 4 0 01-8 0"/></svg></span>
+          采购
+          <span class="chev"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
+        </button>
+        <div class="acc-body">
+          <button class="sub-item" data-go="purch"><span class="dot"></span>供应商管理</button>
+          <button class="sub-item" data-go="purch"><span class="dot"></span>采购订单</button>
+          <button class="sub-item" data-go="purch"><span class="dot"></span>采购价格与合同</button>
+        </div>
+      </div>
+      <!-- 6 销售 -->
+      <div class="acc">
+        <button class="acc-head">
+          <span class="ah-ic" style="background:#e8efff;color:var(--primary)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg></span>
+          销售
+          <span class="chev"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
+        </button>
+        <div class="acc-body">
+          <button class="sub-item" data-go="sales"><span class="dot"></span>客户管理</button>
+          <button class="sub-item" data-go="sales"><span class="dot"></span>销售订单</button>
+          <button class="sub-item" data-go="sales"><span class="dot"></span>发货与验收</button>
+          <button class="sub-item" data-go="sales"><span class="dot"></span>回款管理</button>
+        </div>
+      </div>
+      <!-- 7 市场 -->
+      <div class="acc">
+        <button class="acc-head">
+          <span class="ah-ic" style="background:#f0ecff;color:var(--purple)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 010 20M12 2a15 15 0 000 20"/></svg></span>
+          市场
+          <span class="chev"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
+        </button>
+        <div class="acc-body">
+          <button class="sub-item" data-go="mkt"><span class="dot"></span>市场规模与趋势</button>
+          <button class="sub-item" data-go="mkt"><span class="dot"></span>竞争对手分析</button>
+          <button class="sub-item" data-go="mkt"><span class="dot"></span>营销渠道</button>
+        </div>
+      </div>
+      <!-- 8 财务 -->
+      <div class="acc">
+        <button class="acc-head">
+          <span class="ah-ic" style="background:#e8f7eb;color:var(--green)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></span>
+          财务
+          <span class="chev"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
+        </button>
+        <div class="acc-body">
+          <button class="sub-item" data-go="fin"><span class="dot"></span>总账与凭证</button>
+          <button class="sub-item" data-go="fin"><span class="dot"></span>利润表</button>
+          <button class="sub-item" data-go="fin"><span class="dot"></span>资产负债表</button>
+          <button class="sub-item" data-go="fin"><span class="dot"></span>现金流量表</button>
+          <button class="sub-item" data-go="fin"><span class="dot"></span>成本费用归集</button>
+        </div>
+      </div>
+      <!-- 9 融资 -->
+      <div class="acc">
+        <button class="acc-head">
+          <span class="ah-ic" style="background:#f0ecff;color:var(--purple)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l9 5v10l-9 5-9-5V7z"/></svg></span>
+          融资
+          <span class="chev"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
+        </button>
+        <div class="acc-body">
+          <button class="sub-item" data-go="fund"><span class="dot"></span>融资计划</button>
+          <button class="sub-item" data-go="fund"><span class="dot"></span>融资历程</button>
+          <button class="sub-item" data-go="fund"><span class="dot"></span>股权 Cap Table</button>
+          <button class="sub-item" data-go="fund"><span class="dot"></span>投资人管理</button>
+          <button class="sub-item" data-go="fund"><span class="dot"></span>融资资料室</button>
+        </div>
+      </div>
+
+      <!-- AI 对话（最后，强化） -->
+      <div class="nav-label ai-lab">AI</div>
+      <div class="ai-entry">
+        <button data-go="chat">
+          <span class="s"><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg></span>
+          <span class="at">AI 经营助手<small>跨板块联合分析 · 可溯源</small></span>
+          <span class="n">新会话</span>
+        </button>
+      </div>
+
+      <!-- 系统板块 -->
+      <div class="nav-label">系统</div>
+      <button class="sys-item" data-go="ext">
+        <span class="ah-ic" style="background:#f0ecff;color:var(--purple)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span>
+        扩展<span class="g-dot" style="background:var(--purple)"></span>
+      </button>
+      <button class="sys-item" data-go="cal">
+        <span class="ah-ic" style="background:#fff3e6;color:var(--orange)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
+        日程
+      </button>
+      <button class="sys-item" data-go="drive">
+        <span class="ah-ic" style="background:#e8f7eb;color:var(--green)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg></span>
+        云盘
+      </button>
+    </nav>
+
+    <div class="side-user">
+      <span class="av">范</span>
+      <div class="u"><b>张明</b><span>法定代表人</span></div>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <section class="main">
+    <h1 style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;">Startup Harness AI 企业管理平台</h1>
+
+    <!-- 顶栏（非对话屏显示） -->
+    <header class="topbar" id="topbar">
+      <div class="crumb" id="crumb">企业综合</div>
+      <div class="gsearch"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>搜索企业资料、指标、文件…</div>
+      <span class="sp"></span>
+      <button class="iconbtn" title="通知"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg></button>
+      <button class="tbtn pri"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>导入资料</button>
+    </header>
+
+    <div class="content">
+
+    <!-- ================= 企业综合屏 ================= -->
+    <div class="screen active" id="overview">
+      <div class="ov-scroll">
+        <!-- hero -->
+        <div class="hero">
+          <div class="hero-left">
+            <div class="h-name">示例宽温科技有限公司</div>
+            <div class="h-tags">
+              <span class="h-tag">存续（在营）</span>
+              <span class="h-tag">有限责任公司</span>
+              <span class="h-tag">天使轮</span>
+              <span class="h-tag">新材料 · 宽温导电</span>
+            </div>
+            <div class="hero-ask" data-go="chat">
+              <span class="ha-i"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg></span>
+              <span class="ha-t">问 AI：经营、财务、股权、协议…</span>
+              <span class="ha-go"><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
+            </div>
+          </div>
+
+          <div class="hero-right">
+            <div class="hr-lbl">企业健康度</div>
+            <div class="hring">
+              <svg aria-hidden="true" width="150" height="150" viewBox="0 0 160 160">
+                <defs><linearGradient id="hg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4d6bfe"/><stop offset="1" stop-color="#9b6bff"/></linearGradient></defs>
+                <circle cx="80" cy="80" r="66" fill="none" stroke="#f0f1f3" stroke-width="13"/>
+                <circle cx="80" cy="80" r="66" fill="none" stroke="url(#hg)" stroke-width="13" stroke-linecap="round" stroke-dasharray="240 414.7" transform="rotate(-90 80 80)"/>
+              </svg>
+              <div class="ctr"><b>58</b><span>/ 100</span></div>
+            </div>
+            <div class="hr-foot">综合工商 · 财务 · 股权 · 经营加权<br><b>3 项</b>需优先处理，建议先做经营体检</div>
+          </div>
+        </div>
+
+        <!-- 核心指标 -->
+        <div class="kpi8" style="grid-template-columns:repeat(4,1fr);">
+          <div class="mkpi"><div class="ml">营业收入（1–9月）</div><div class="mv">214.00<small>万</small></div><div class="mc up">▲ 27.4%</div></div>
+          <div class="mkpi"><div class="ml">净利润</div><div class="mv">-38.60<small>万</small></div><div class="mc up">同比收窄 26.1%</div></div>
+          <div class="mkpi"><div class="ml">现金跑道</div><div class="mv">7.2<small>月</small></div><div class="mc down">月均净消耗 26.40 万</div></div>
+          <div class="mkpi"><div class="ml">在手订单</div><div class="mv">386.00<small>万</small></div><div class="mc up">▲ 12.2%</div></div>
+        </div>
+
+        <!-- 消息关注 -->
+        <div class="card news-card">
+          <div class="news-head">
+            <span class="nh-live"><i></i>消息关注</span>
+            <span class="nh-sub">按关注来源实时汇总 · 点击查看原文</span>
+            <span class="sp"></span>
+            <button class="nh-set" id="newsSetBtn"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>关注设置</button>
+          </div>
+          <div class="news-filters" id="newsFilters"></div>
+          <div class="news-viewport" id="newsViewport">
+            <div class="news-track" id="newsTrack"></div>
+          </div>
+        </div>
+
+        <!-- 图表 -->
+        <div class="grid g2 mt16">
+          <div class="card">
+            <div class="card-h"><h3>月度营业收入</h3><span class="sub">单位：万元</span></div>
+            <svg aria-hidden="true" viewBox="0 0 640 250" style="width:100%;height:auto;display:block;margin-top:6px;">
+              <defs><linearGradient id="ar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4d6bfe" stop-opacity="0.28"/><stop offset="1" stop-color="#4d6bfe" stop-opacity="0.02"/></linearGradient></defs>
+              <g stroke="#f0f1f3" stroke-width="1">
+                <line x1="46" y1="30" x2="614" y2="30"/>
+                <line x1="46" y1="80" x2="614" y2="80"/>
+                <line x1="46" y1="130" x2="614" y2="130"/>
+                <line x1="46" y1="180" x2="614" y2="180"/>
+              </g>
+              <g font-size="11" fill="#9a9da5" text-anchor="end">
+                <text x="38" y="34">40</text><text x="38" y="84">30</text><text x="38" y="134">20</text><text x="38" y="184">10</text>
+              </g>
+              <path d="M46 155 L117 160 L188 140 L259 145 L330 115 L401 120 L472 95 L543 75 L614 60 L614 180 L46 180 Z" fill="url(#ar)"/>
+              <path d="M46 155 L117 160 L188 140 L259 145 L330 115 L401 120 L472 95 L543 75 L614 60" fill="none" stroke="#4d6bfe" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <g fill="#4d6bfe">
+                <circle cx="46" cy="155" r="3.2"/><circle cx="117" cy="160" r="3.2"/><circle cx="188" cy="140" r="3.2"/><circle cx="259" cy="145" r="3.2"/><circle cx="330" cy="115" r="3.2"/><circle cx="401" cy="120" r="3.2"/><circle cx="472" cy="95" r="3.2"/><circle cx="543" cy="75" r="3.2"/><circle cx="614" cy="60" r="4"/>
+              </g>
+              <g font-size="11" fill="#9a9da5" text-anchor="middle">
+                <text x="46" y="205">1月</text><text x="117" y="205">2月</text><text x="188" y="205">3月</text><text x="259" y="205">4月</text><text x="330" y="205">5月</text><text x="401" y="205">6月</text><text x="472" y="205">7月</text><text x="543" y="205">8月</text><text x="614" y="205">9月</text>
+              </g>
+              <text x="614" y="50" font-size="12" fill="#4d6bfe" text-anchor="end" font-weight="700">34.00</text>
+            </svg>
+          </div>
+          <div class="card">
+            <div class="card-h"><h3>股权结构</h3><span class="sub">截至当前</span></div>
+            <div style="display:flex;align-items:center;gap:20px;padding:10px 6px;">
+              <svg aria-hidden="true" width="168" height="168" viewBox="0 0 160 160" style="flex:none;">
+                <circle cx="80" cy="80" r="60" fill="none" stroke="#4d6bfe" stroke-width="22" stroke-dasharray="233.7 377.0" transform="rotate(-90 80 80)"/>
+                <circle cx="80" cy="80" r="60" fill="none" stroke="#7c5cff" stroke-width="22" stroke-dasharray="67.9 377.0" stroke-dashoffset="-233.7" transform="rotate(-90 80 80)"/>
+                <circle cx="80" cy="80" r="60" fill="none" stroke="#0fc6c2" stroke-width="22" stroke-dasharray="56.5 377.0" stroke-dashoffset="-301.6" transform="rotate(-90 80 80)"/>
+                <circle cx="80" cy="80" r="60" fill="none" stroke="#d7d9de" stroke-width="22" stroke-dasharray="18.9 377.0" stroke-dashoffset="-358.1" transform="rotate(-90 80 80)"/>
+                <text x="80" y="76" text-anchor="middle" font-size="22" font-weight="700" fill="#1c2333">62%</text>
+                <text x="80" y="94" text-anchor="middle" font-size="10.5" fill="#9a9da5">创始团队</text>
+              </svg>
+              <div style="flex:1;display:flex;flex-direction:column;gap:13px;">
+                <div style="display:flex;align-items:center;gap:9px;font-size:13px;"><span style="width:9px;height:9px;border-radius:3px;background:#4d6bfe;"></span><span style="color:#3c4252;flex:1;">创始团队</span><b>62.0%</b></div>
+                <div style="display:flex;align-items:center;gap:9px;font-size:13px;"><span style="width:9px;height:9px;border-radius:3px;background:#7c5cff;"></span><span style="color:#3c4252;flex:1;">员工持股平台</span><b>18.0%</b></div>
+                <div style="display:flex;align-items:center;gap:9px;font-size:13px;"><span style="width:9px;height:9px;border-radius:3px;background:#0fc6c2;"></span><span style="color:#3c4252;flex:1;">天使投资人</span><b>15.0%</b></div>
+                <div style="display:flex;align-items:center;gap:9px;font-size:13px;"><span style="width:9px;height:9px;border-radius:3px;background:#d7d9de;"></span><span style="color:#3c4252;flex:1;">其他股东</span><b>5.0%</b></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ================= CHAT ================= -->
+    <div class="screen" id="chat">
+      <div class="chat">
+        <div class="chat-bar">
+          <div class="cname">AI 经营助手<small>跨工商 · 业务 · 人员 · 产供销 · 财务 · 融资联合分析</small></div>
+          <span style="width:1px;height:22px;background:var(--border-2);"></span>
+          <div class="model-sel" id="modelSel">
+            <button class="model-btn" id="modelBtn">
+              <span class="m-ic" id="curMIc" style="background:var(--grad)"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg></span>
+              <span id="curMName">智能选模型</span>
+              <span class="mchev"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></span>
+            </button>
+            <div class="model-pop" id="modelPop">
+              <div class="mp-label">模型路由</div>
+              <div class="mp-opt auto sel" data-m="智能选模型" data-auto="1">
+                <span class="m-ic"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg></span>
+                <span class="mt"><b>智能选模型（推荐）</b><span>平台按问题类型自动匹配最优模型</span></span>
+                <span class="chk"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>
+              </div>
+              <div class="mp-label">自定义模型</div>
+              <div class="mp-opt" data-m="豆包 Seed 1.6 Pro"><span class="m-ic" style="background:linear-gradient(135deg,#3aa0ff,#0a84ff)">豆</span><span class="mt"><b>豆包 Seed 1.6 Pro</b><span>综合分析 · 长文档理解强</span></span><span class="chk"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span></div>
+              <div class="mp-opt" data-m="DeepSeek R1"><span class="m-ic" style="background:linear-gradient(135deg,#7c5cff,#4d6bfe)">R1</span><span class="mt"><b>DeepSeek R1</b><span>深度推理 · 复杂勾稽与测算</span></span><span class="chk"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span></div>
+              <div class="mp-opt" data-m="DeepSeek V3"><span class="m-ic" style="background:linear-gradient(135deg,#0fc6c2,#0a84ff)">V3</span><span class="mt"><b>DeepSeek V3</b><span>高效通用 · 响应快成本低</span></span><span class="chk"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span></div>
+              <div class="mp-opt" data-m="GPT-5"><span class="m-ic" style="background:linear-gradient(135deg,#00b42a,#0a84ff)">G5</span><span class="mt"><b>GPT-5</b><span>多模态 · 图表与材料综合</span></span><span class="chk"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span></div>
+            </div>
+          </div>
+          <div class="sp"></div>
+          <button class="cicon" title="历史会话"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></button>
+          <button class="cicon" title="设置"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></button>
+        </div>
+
+        <div class="chat-scroll" id="chatScroll">
+          <div class="chat-inner" id="chatInner">
+            <div class="welcome" id="welcome">
+              <div class="wlogo"><svg aria-hidden="true" width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg></div>
+              <h2>你好，我是 Startup Harness AI</h2>
+              <p>导入企业资料后，我可跨板块做联合分析，每个结论都附原始出处</p>
+              <div class="wmode" id="wMode"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg>当前：智能选模型 · 自动路由</div>
+              <div class="sugg-grid">
+                <div class="sugg-card" data-q="生成一份当前企业的经营体检报告"><span class="sc-ic" style="background:#e8efff;color:var(--primary)"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span><b>经营体检报告</b><span>汇总各板块健康度与扣分项</span></div>
+                <div class="sugg-card" data-q="本轮融资后创始团队股权会被稀释到多少？"><span class="sc-ic" style="background:#f0ecff;color:var(--purple)"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l9 5v10l-9 5-9-5V7z"/></svg></span><b>股权稀释测算</b><span>本轮交割后创始团队持股</span></div>
+                <div class="sugg-card" data-q="按现在的烧钱速度现金还能撑几个月？"><span class="sc-ic" style="background:#fff3e6;color:var(--orange)"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><b>现金跑道测算</b><span>货币资金 / 月均净消耗</span></div>
+                <div class="sugg-card" data-q="这份投资协议里有哪些对创始人不利的条款？"><span class="sc-ic" style="background:#ffece8;color:var(--red)"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/></svg></span><b>协议风险审查</b><span>反稀释 / 清算权 / 回购条款</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="composer">
+          <div class="composer-inner">
+            <div class="composer-tools">
+              <span class="mini-model" id="miniModel"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg><span id="miniMName">智能选模型</span><svg aria-hidden="true" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></span>
+              <button class="ctool" title="上传文件"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg></button>
+              <button class="ctool" title="语音"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4"/></svg></button>
+              <button class="ctool" title="选择企业资料范围"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2 2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg></button>
+            </div>
+            <div class="composer-input">
+              <textarea id="chatInput" rows="1" placeholder="给 AI 助手发送消息，可跨板块提问…"></textarea>
+              <button class="send-btn" id="sendBtn" disabled><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/></svg></button>
+            </div>
+          </div>
+          <div class="composer-hint">AI 生成内容仅供参考，关键决策请核对原始文件 · 资料仅用于本企业分析</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= 企业基本信息 ================= -->
+    <div class="screen" id="info">
+      <div class="board-scroll">
+        <div class="sec-head"><h2>企业基本信息</h2><span class="sub">工商登记 · 注册资本 · 治理结构</span></div>
+        <div class="insight info"><span class="ai-badge">✦ AI</span><span class="itxt">近 12 个月发生 <b>2 次</b>变更（注册资本、经营范围）；登记信息、股东名册与出资进度<b>勾稽一致</b>。</span><span class="ibasis">查看依据</span></div>
+        <div class="grid g4">
+          <div class="card kpi"><div class="top"><span class="label">经营状态</span></div><div class="val" style="font-size:19px;color:var(--green);margin-top:12px;">存续（在营）</div><div class="chg">某市行政审批局</div></div>
+          <div class="card kpi"><div class="top"><span class="label">注册资本</span></div><div class="val" style="margin-top:12px;">500.00<small>万</small></div><div class="chg">实缴 100.00 万</div></div>
+          <div class="card kpi"><div class="top"><span class="label">实缴率</span></div><div class="val" style="margin-top:12px;">20.0<small>%</small></div><div class="pbar"><i style="width:20%;background:var(--orange)"></i></div></div>
+          <div class="card kpi"><div class="top"><span class="label">成立 / 核准日期</span></div><div class="val" style="font-size:18px;margin-top:12px;">2024-09-18</div><div class="chg">核准 2026-08-30</div></div>
+        </div>
+        <div class="grid g-1fr2 mt16">
+          <div class="card"><div class="card-h"><h3>登记信息</h3></div>
+            <div class="desc-item"><span class="dk">企业名称</span><span class="dv">示例宽温科技有限公司</span></div>
+            <div class="desc-item"><span class="dk">信用代码</span><span class="dv">91320505MA20X****</span></div>
+            <div class="desc-item"><span class="dk">企业类型</span><span class="dv">有限责任公司（自然人投资或控股）</span></div>
+            <div class="desc-item"><span class="dk">法定代表人</span><span class="dv">张明</span></div>
+            <div class="desc-item"><span class="dk">注册地址</span><span class="dv">某市高新区 XX 路 88 号 5 幢</span></div>
+            <div class="desc-item"><span class="dk">营业期限</span><span class="dv">长期</span></div>
+          </div>
+          <div class="card"><div class="card-h"><h3>变更记录</h3></div>
+            <table><thead><tr><th>变更日期</th><th>事项</th><th>变更前</th><th>变更后</th></tr></thead><tbody>
+              <tr><td>2026-08-30</td><td>注册资本</td><td>300.00 万</td><td>500.00 万</td></tr>
+              <tr><td>2026-03-12</td><td>经营范围</td><td>—</td><td>新增进出口</td></tr>
+            </tbody></table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= 业务概览 ================= -->
+    <div class="screen" id="bizov">
+      <div class="board-scroll">
+        <div class="sec-head"><h2>业务概览</h2><span class="sub">业务画像 · 产品矩阵 · 技术与知识产权</span></div>
+        <div class="insight"><span class="ai-badge">✦ AI</span><span class="itxt">核心产品 A 型进入小批量（TRL 7）；<b>1 项师生共创专利权属待确认</b>，建议融资交割前补齐。</span><span class="ibasis">查看依据</span></div>
+        <div class="grid g4">
+          <div class="card kpi"><div class="top"><span class="label">产品线</span></div><div class="val" style="margin-top:12px;">3<small>条</small></div><div class="chg">A/B/C 型</div></div>
+          <div class="card kpi"><div class="top"><span class="label">最高成熟度</span></div><div class="val" style="margin-top:12px;">TRL 7</div><div class="chg up">量产导入</div></div>
+          <div class="card kpi"><div class="top"><span class="label">知识产权</span></div><div class="val" style="margin-top:12px;">11<small>项</small></div><div class="chg">发明 3 / 软著 2</div></div>
+          <div class="card kpi"><div class="top"><span class="label">商业模式</span></div><div class="val" style="font-size:17px;margin-top:12px;">产品直销</div><div class="chg">+ 技术授权（规划）</div></div>
+        </div>
+        <div class="card mt16"><div class="card-h"><h3>产品矩阵</h3></div>
+          <table><thead><tr><th>产品</th><th>阶段</th><th>TRL</th><th>目标客户</th><th>状态</th></tr></thead><tbody>
+            <tr><td><b>宽温导电材料 A 型</b></td><td>小批量</td><td>7</td><td>功率半导体封装</td><td><span class="tag t-green">量产导入</span></td></tr>
+            <tr><td>高导热基板 B 型</td><td>中试</td><td>5</td><td>新能源车电控</td><td><span class="tag t-blue">验证中</span></td></tr>
+            <tr><td>封装结构件 C 型</td><td>样机</td><td>4</td><td>消费电子</td><td><span class="tag t-orange">研发</span></td></tr>
+          </tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= 人员管理 ================= -->
+    <div class="screen" id="hr">
+      <div class="board-scroll">
+        <div class="sec-head"><h2>人员管理</h2><span class="sub">组织架构 · 核心团队 · 期权激励</span></div>
+        <div class="insight info"><span class="ai-badge">✦ AI</span><span class="itxt">研发人员占比 <b>57.1%</b>；期权池 18.0% 已设立持股平台，建议明确归属与行权条件。</span><span class="ibasis">查看依据</span></div>
+        <div class="grid g4">
+          <div class="card kpi"><div class="top"><span class="label">在册员工</span></div><div class="val" style="margin-top:12px;">28<small>人</small></div><div class="chg up">▲ 本季 +4</div></div>
+          <div class="card kpi"><div class="top"><span class="label">研发占比</span></div><div class="val" style="margin-top:12px;">57.1<small>%</small></div><div class="chg">16 人</div></div>
+          <div class="card kpi"><div class="top"><span class="label">核心团队</span></div><div class="val" style="margin-top:12px;">5<small>人</small></div><div class="chg">创始人 / 技术 / 销售</div></div>
+          <div class="card kpi"><div class="top"><span class="label">期权池 ESOP</span></div><div class="val" style="margin-top:12px;">18.0<small>%</small></div><div class="chg">持股平台</div></div>
+        </div>
+        <div class="grid g2 mt16">
+          <div class="card"><div class="card-h"><h3>核心团队</h3></div>
+            <table><thead><tr><th>姓名</th><th>职务</th><th>背景</th></tr></thead><tbody>
+              <tr><td><b>张明</b></td><td>CEO / 创始人</td><td>材料 · 投融资</td></tr>
+              <tr><td>李 XX</td><td>CTO</td><td>半导体封装 12 年</td></tr>
+              <tr><td>王 XX</td><td>销售负责人</td><td>工业客户拓展</td></tr>
+            </tbody></table>
+          </div>
+          <div class="card"><div class="card-h"><h3>部门分布</h3></div>
+            <table><thead><tr><th>部门</th><th class="b">人数</th><th class="b">占比</th></tr></thead><tbody>
+              <tr><td>研发</td><td class="b">16</td><td class="b">57.1%</td></tr>
+              <tr><td>生产 / 质量</td><td class="b">6</td><td class="b">21.4%</td></tr>
+              <tr><td>销售 / 市场</td><td class="b">4</td><td class="b">14.3%</td></tr>
+              <tr><td>职能 / 财务</td><td class="b">2</td><td class="b">7.1%</td></tr>
+            </tbody></table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= 生产 ================= -->
+    <div class="screen" id="prod">
+      <div class="board-scroll">
+        <div class="sec-head"><h2>生产</h2><span class="sub">生产计划 · 产能良率 · 库存质量</span></div>
+        <div class="insight"><span class="ai-badge">✦ AI</span><span class="itxt">产能利用率 <b>68.0%</b>、良品率 96.2%；A 型订单交期集中于 Q4，建议排产预留缓冲。</span><span class="ibasis">查看依据</span></div>
+        <div class="grid g4">
+          <div class="card kpi"><div class="top"><span class="label">产能利用率</span></div><div class="val" style="margin-top:12px;">68.0<small>%</small></div><div class="pbar"><i style="width:68%"></i></div></div>
+          <div class="card kpi"><div class="top"><span class="label">良品率</span></div><div class="val" style="margin-top:12px;">96.2<small>%</small></div><div class="chg up">▲ 0.8pct</div></div>
+          <div class="card kpi"><div class="top"><span class="label">准时交付率</span></div><div class="val" style="margin-top:12px;">92.5<small>%</small></div><div class="chg flat">持平</div></div>
+          <div class="card kpi"><div class="top"><span class="label">库存金额</span></div><div class="val" style="margin-top:12px;">88.40<small>万</small></div><div class="chg">成品 / 在制 / 原料</div></div>
+        </div>
+        <div class="card mt16"><div class="card-h"><h3>生产计划与进度</h3><span class="sub">单位：批</span></div>
+          <table><thead><tr><th>工单</th><th>产品</th><th>计划量</th><th>完工</th><th>交期</th><th>状态</th></tr></thead><tbody>
+            <tr><td>MO-0912</td><td>A 型</td><td>1,200</td><td>960</td><td>2026-10-15</td><td><span class="tag t-green">进行中</span></td></tr>
+            <tr><td>MO-0911</td><td>B 型</td><td>600</td><td>600</td><td>2026-09-30</td><td><span class="tag t-gray">已完工</span></td></tr>
+            <tr><td>MO-0913</td><td>A 型</td><td>1,500</td><td>—</td><td>2026-11-10</td><td><span class="tag t-blue">待排产</span></td></tr>
+          </tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= 采购 ================= -->
+    <div class="screen" id="purch">
+      <div class="board-scroll">
+        <div class="sec-head"><h2>采购</h2><span class="sub">供应商 · 采购订单 · 价格合同</span></div>
+        <div class="insight info"><span class="ai-badge">✦ AI</span><span class="itxt">合格供应商 <b>26 家</b>；PO-2026-022 已到货未付款，请注意付款节点与现金安排。</span><span class="ibasis">查看依据</span></div>
+        <div class="grid g4">
+          <div class="card kpi"><div class="top"><span class="label">供应商</span></div><div class="val" style="margin-top:12px;">26<small>家</small></div><div class="chg up">合格 24</div></div>
+          <div class="card kpi"><div class="top"><span class="label">采购订单</span></div><div class="val" style="margin-top:12px;">23<small>份</small></div><div class="chg up">▲ 8</div></div>
+          <div class="card kpi"><div class="top"><span class="label">本期采购额</span></div><div class="val" style="margin-top:12px;">118.60<small>万</small></div><div class="chg up">▲ 9.6%</div></div>
+          <div class="card kpi"><div class="top"><span class="label">平均账期</span></div><div class="val" style="margin-top:12px;">45<small>天</small></div><div class="chg flat">月结</div></div>
+        </div>
+        <div class="card mt16"><div class="card-h"><h3>采购订单</h3><span class="sub">万元</span></div>
+          <table><thead><tr><th>订单号</th><th>供应商</th><th>金额</th><th>到货</th><th>状态</th><th class="b">已付</th></tr></thead><tbody>
+            <tr><td>PO-2026-023</td><td>XX 新材料</td><td>42.50</td><td>已到货</td><td><span class="tag t-blue">已到货</span></td><td class="b">42.50</td></tr>
+            <tr><td>PO-2026-022</td><td>XX 精密部件</td><td>18.80</td><td>已到货</td><td><span class="tag t-orange">待付款</span></td><td class="b">0.00</td></tr>
+            <tr><td>PO-2026-021</td><td>XX 化工</td><td>36.20</td><td>部分</td><td><span class="tag t-green">履行中</span></td><td class="b">20.00</td></tr>
+          </tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= 销售 ================= -->
+    <div class="screen" id="sales">
+      <div class="board-scroll">
+        <div class="sec-head"><h2>销售</h2><span class="sub">客户 · 销售订单 · 回款管理</span></div>
+        <div class="insight info"><span class="ai-badge">✦ AI</span><span class="itxt">在手订单 <b>386.00 万</b>，销售金额与收入勾稽一致；综合回款率 76.5%，关注 2 笔逾期应收。</span><span class="ibasis">查看依据</span></div>
+        <div class="grid g4">
+          <div class="card kpi"><div class="top"><span class="label">客户</span></div><div class="val" style="margin-top:12px;">11<small>家</small></div><div class="chg up">▲ 3</div></div>
+          <div class="card kpi"><div class="top"><span class="label">销售订单</span></div><div class="val" style="margin-top:12px;">18<small>份</small></div><div class="chg up">▲ 5</div></div>
+          <div class="card kpi"><div class="top"><span class="label">在手订单</span></div><div class="val" style="margin-top:12px;">386.00<small>万</small></div><div class="chg up">▲ 12.2%</div></div>
+          <div class="card kpi"><div class="top"><span class="label">回款率</span></div><div class="val" style="margin-top:12px;">76.5<small>%</small></div><div class="pbar"><i style="width:76.5%"></i></div></div>
+        </div>
+        <div class="card mt16"><div class="card-h"><h3>销售订单</h3><span class="sub">万元</span></div>
+          <table><thead><tr><th>订单号</th><th>客户</th><th>金额</th><th>状态</th><th class="b">已回款</th></tr></thead><tbody>
+            <tr><td>SO-2026-018</td><td>苏州 XX 电子</td><td>86.00</td><td><span class="tag t-green">履行中</span></td><td class="b">60.00</td></tr>
+            <tr><td>SO-2026-017</td><td>上海 XX 智造</td><td>120.00</td><td><span class="tag t-green">履行中</span></td><td class="b">84.00</td></tr>
+            <tr><td>SO-2026-016</td><td>无锡 XX 半导体</td><td>56.00</td><td><span class="tag t-gray">已完成</span></td><td class="b">56.00</td></tr>
+          </tbody></table>
+        </div>
+        <div class="card mt16"><div class="card-h"><h3>应收账款账龄</h3></div>
+          <table><thead><tr><th>客户</th><th>金额</th><th>账龄</th><th>风险</th></tr></thead><tbody>
+            <tr><td>上海 XX 智造</td><td>36.00</td><td>31–60 天</td><td><span class="tag t-orange">关注</span></td></tr>
+            <tr><td>宁波 XX 科技</td><td>14.50</td><td>90 天以上</td><td><span class="tag t-red">逾期</span></td></tr>
+          </tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= 市场 ================= -->
+    <div class="screen" id="mkt">
+      <div class="board-scroll">
+        <div class="sec-head"><h2>市场</h2><span class="sub">竞争格局 · 政策动态 · 前沿与研报</span></div>
+        <div class="insight"><span class="ai-badge">✦ AI</span><span class="itxt">高端宽温导电材料<b>国产化率仅 34.0%</b>，外资在高端温区占优；公司差异化在 -55~150℃ 宽温性能。</span><span class="ibasis">查看依据</span></div>
+
+        <div class="mkt-tabs">
+          <button class="mkt-tab on" data-pane="comp">竞争格局</button>
+          <button class="mkt-tab" data-pane="policy">政策动态</button>
+          <button class="mkt-tab" data-pane="front">前沿与研报</button>
+        </div>
+
+        <!-- 竞争格局 -->
+        <div class="mkt-pane on" data-pane="comp">
+          <div class="card">
+            <div class="card-h"><h3>竞争对手对比</h3></div>
+            <table><thead><tr><th>企业</th><th>定位</th><th>宽温性能</th><th>产能</th><th>市占率</th><th>威胁度</th></tr></thead><tbody>
+              <tr><td><b>A 公司（上市）</b></td><td>全系列导电材料</td><td>-40~125℃</td><td>高</td><td class="b">12.0%</td><td><span class="tag t-red">高</span></td></tr>
+              <tr><td>B 公司</td><td>导热基板为主</td><td>-30~105℃</td><td>中</td><td class="b">6.5%</td><td><span class="tag t-orange">中</span></td></tr>
+              <tr><td>C 公司（外资）</td><td>高端宽温材料</td><td>-55~150℃</td><td>中</td><td class="b">8.2%</td><td><span class="tag t-red">高</span></td></tr>
+              <tr><td>本公司</td><td>宽温域差异化</td><td>-55~150℃</td><td>低</td><td class="b">0.3%</td><td><span class="tag t-blue">—</span></td></tr>
+            </tbody></table>
+            <div class="src-line"><span class="src-tag src-report">研报 · 中金公司</span><span>竞争格局整理自行业研报及企查查工商数据</span></div>
+          </div>
+          <div class="grid g2 mt16">
+            <div class="card"><div class="card-h"><h3>竞争壁垒评估</h3></div>
+              <table><thead><tr><th>维度</th><th>本公司</th><th>主要竞品均值</th></tr></thead><tbody>
+                <tr><td>工作温区</td><td><b>-55~150℃</b></td><td>-40~125℃</td></tr>
+                <tr><td>量产良率</td><td>96.2%</td><td>97.5%</td></tr>
+                <tr><td>有效专利</td><td>7 项</td><td>22 项</td></tr>
+                <tr><td>头部客户认证</td><td>1 家</td><td>5 家以上</td></tr>
+              </tbody></table>
+            </div>
+            <div class="card"><div class="card-h"><h3>差异化切入点</h3></div>
+              <div class="desc-item"><span class="dk">性能差异</span><span class="dv">温区下探 -55℃、上拓 150℃，对标外资高端产品</span></div>
+              <div class="desc-item"><span class="dk">国产替代</span><span class="dv">国产化率仅 34.0%，高端宽温材料进口依赖度高</span></div>
+              <div class="desc-item"><span class="dk">待补短板</span><span class="dv">产能、专利储备与头部客户认证仍需追赶</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 政策动态 -->
+        <div class="mkt-pane" data-pane="policy">
+          <div class="card">
+            <div class="card-h"><h3>近期重点政策</h3></div>
+            <table><thead><tr><th>时间</th><th>政策 / 通知</th><th>发布主体</th><th>相关性</th></tr></thead><tbody>
+              <tr><td>2026-09-19</td><td>重点新材料首批次应用保险补偿申报通知</td><td>工信部</td><td><span class="tag t-red">高</span></td></tr>
+              <tr><td>2026-09-12</td><td>新材料产业高质量发展行动方案</td><td>工信部</td><td><span class="tag t-red">高</span></td></tr>
+              <tr><td>2026-08-28</td><td>先进制造业集群培育专项实施细则</td><td>江苏省工信厅</td><td><span class="tag t-orange">中</span></td></tr>
+            </tbody></table>
+            <div class="src-line"><span class="src-tag src-gov">政策 · 工信部</span><span>来源：工信部官网、江苏省工信厅公告</span></div>
+          </div>
+          <div class="card mt16">
+            <div class="card-h"><h3>对公司的影响</h3></div>
+            <div class="desc-item"><span class="dk">可申报支持</span><span class="dv">宽温导电材料符合首批次保险补偿方向，可降低下游试用风险</span></div>
+            <div class="desc-item"><span class="dk">地方配套</span><span class="dv">某市先进制造集群专项可对接研发与产业化补贴</span></div>
+            <div class="src-line"><span class="src-tag src-news">新闻 · 新华社</span><span>政策方向解读，2026-09-12</span></div>
+          </div>
+        </div>
+
+        <!-- 前沿与研报 -->
+        <div class="mkt-pane" data-pane="front">
+          <div class="grid g2">
+            <div class="card"><div class="card-h"><h3>技术前沿</h3></div>
+              <div class="desc-item"><span class="dk">学术进展</span><span class="dv">宽温域柔性导电复合体系工作温区拓宽至 -55~150℃</span></div>
+              <div class="src-line"><span class="src-tag src-paper">论文 · Nature Materials</span><span>2026-09，可靠性机理方向</span></div>
+              <div class="desc-item" style="margin-top:12px;"><span class="dk">预印本</span><span class="dv">极端温度循环下导电网络稳定性机理研究</span></div>
+              <div class="src-line"><span class="src-tag src-paper">论文 · arXiv</span><span>2026-09-19</span></div>
+            </div>
+            <div class="card"><div class="card-h"><h3>行业研报观点</h3></div>
+              <div class="desc-item"><span class="dk">中金公司</span><span class="dv">差异化宽温性能企业有望切入头部封装供应链</span></div>
+              <div class="src-line"><span class="src-tag src-report">研报 · 中金公司</span><span>2026-08</span></div>
+              <div class="desc-item" style="margin-top:12px;"><span class="dk">中信证券</span><span class="dv">国产高端材料替代加速，关注良率与客户认证进展</span></div>
+              <div class="src-line"><span class="src-tag src-report">研报 · 中信证券</span><span>2026-09-20</span></div>
+            </div>
+          </div>
+          <div class="card mt16">
+            <div class="card-h"><h3>行业动态</h3></div>
+            <table><thead><tr><th>时间</th><th>动态</th><th>来源</th></tr></thead><tbody>
+              <tr><td>2026-09-21</td><td>2026 柔性电子产业大会：国产宽温材料量产良率提升</td><td><span class="src-tag src-frontier">前沿 · 行业大会</span></td></tr>
+              <tr><td>2026-09-20</td><td>多家封装厂商上调全年材料采购指引</td><td><span class="src-tag src-news">新闻 · 财联社</span></td></tr>
+            </tbody></table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= 财务 ================= -->
+    <div class="screen" id="fin">
+      <div class="board-scroll">
+        <div class="sec-head"><h2>财务</h2><span class="sub">三表 · 成本费用 · 凭证</span></div>
+        <div class="insight"><span class="ai-badge">✦ AI</span><span class="itxt">净利润仍为负但<b>同比收窄 26.1%</b>；现金跑道 7.4 个月，建议融资前控制月均净消耗。</span><span class="ibasis">查看依据</span></div>
+        <div class="grid g4">
+          <div class="card kpi"><div class="top"><span class="label">营业收入</span></div><div class="val" style="margin-top:12px;">214.00<small>万</small></div><div class="chg up">▲ 27.4%</div></div>
+          <div class="card kpi"><div class="top"><span class="label">净利润</span></div><div class="val" style="margin-top:12px;">-38.60<small>万</small></div><div class="chg up">收窄 26.1%</div></div>
+          <div class="card kpi"><div class="top"><span class="label">毛利率</span></div><div class="val" style="margin-top:12px;">43.5<small>%</small></div><div class="chg up">▲ 2.1pct</div></div>
+          <div class="card kpi"><div class="top"><span class="label">现金跑道</span></div><div class="val" style="margin-top:12px;">7.4<small>月</small></div><div class="chg down">▼ 0.8</div></div>
+        </div>
+        <div class="grid g-2fr1 mt16">
+          <div class="card"><div class="card-h"><h3>利润表摘要</h3><span class="sub">1–9 月 · 万元</span></div>
+            <table><thead><tr><th>项目</th><th class="b">本期</th><th class="b">上期</th></tr></thead><tbody>
+              <tr><td><b>营业收入</b></td><td class="b"><b>214.00</b></td><td class="b">168.00</td></tr>
+              <tr><td>营业成本</td><td class="b">120.90</td><td class="b">98.40</td></tr>
+              <tr><td>研发费用</td><td class="b">58.00</td><td class="b">44.00</td></tr>
+              <tr><td><b>净利润</b></td><td class="b"><b>-38.60</b></td><td class="b">-52.20</td></tr>
+            </tbody></table>
+          </div>
+          <div class="card"><div class="card-h"><h3>资产负债关键项</h3><span class="sub">万元</span></div>
+            <div class="desc-item"><span class="dk">货币资金</span><span class="dv">196.00</span></div>
+            <div class="desc-item"><span class="dk">应收账款</span><span class="dv">142.00</span></div>
+            <div class="desc-item"><span class="dk">资产 / 负债</span><span class="dv">612.00 / 225.20</span></div>
+            <div class="desc-item"><span class="dk">资产负债率</span><span class="dv">36.8%</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= 融资 ================= -->
+    <div class="screen" id="fund">
+      <div class="board-scroll">
+        <div class="sec-head"><h2>融资</h2><span class="sub">融资历程 · Cap Table · 资料室</span></div>
+        <div class="insight risk"><span class="ai-badge">✦ AI</span><span class="itxt"><b>跨板块风险：</b>创始团队持股 62.0% 且附完全棘轮反稀释条款，下一轮估值若下行将进一步稀释。</span><span class="ibasis">依据：投资协议 + Cap Table</span></div>
+        <div class="grid g4">
+          <div class="card kpi"><div class="top"><span class="label">当前轮次</span></div><div class="val" style="font-size:19px;margin-top:12px;">天使轮</div><div class="chg">已交割</div></div>
+          <div class="card kpi"><div class="top"><span class="label">投后估值</span></div><div class="val" style="margin-top:12px;">7,000<small>万</small></div><div class="chg up">▲ 较种子轮 75%</div></div>
+          <div class="card kpi"><div class="top"><span class="label">累计融资</span></div><div class="val" style="margin-top:12px;">1,400<small>万</small></div><div class="chg">种子 500 + 天使 900</div></div>
+          <div class="card kpi"><div class="top"><span class="label">资料齐备度</span></div><div class="val" style="margin-top:12px;">81<small>%</small></div><div class="chg">缺 5 项</div></div>
+        </div>
+        <div class="grid g2 mt16">
+          <div class="card"><div class="card-h"><h3>融资历程</h3></div>
+            <table><thead><tr><th>轮次</th><th>时间</th><th>金额</th><th>投后估值</th></tr></thead><tbody>
+              <tr><td>种子轮</td><td>2025-12</td><td>500.00 万</td><td>4,000.00 万</td></tr>
+              <tr><td>天使轮</td><td>2026-09</td><td>900.00 万</td><td>7,000.00 万</td></tr>
+            </tbody></table>
+          </div>
+          <div class="card"><div class="card-h"><h3>股权结构 Cap Table</h3></div>
+            <div class="donut" style="margin:0 auto;width:128px;height:128px;">
+              <svg aria-hidden="true" width="128" height="128" viewBox="0 0 148 148">
+                <circle cx="74" cy="74" r="58" fill="none" stroke="#f0f1f3" stroke-width="16"/>
+                <circle cx="74" cy="74" r="58" fill="none" stroke="#4d6bfe" stroke-width="16" stroke-dasharray="226 364.4" transform="rotate(-90 74 74)"/>
+                <circle cx="74" cy="74" r="58" fill="none" stroke="#7c5cff" stroke-width="16" stroke-dasharray="65.6 364.4" stroke-dashoffset="-226" transform="rotate(-90 74 74)"/>
+              </svg>
+              <div class="ctr" style="font-size:20px;"><b>62%</b><span>创始团队</span></div>
+            </div>
+            <div class="dlegend" style="margin-top:12px;">
+              <div class="dl"><i style="background:#4d6bfe"></i>创始团队<b>62.0%</b></div>
+              <div class="dl"><i style="background:#7c5cff"></i>期权池<b>18.0%</b></div>
+              <div class="dl"><i style="background:#ffb400"></i>投资人合计<b>20.0%</b></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= 扩展中心 ================= -->
+    <div class="screen" id="ext">
+      <div class="board-scroll">
+        <div class="sec-head"><h2>扩展中心</h2><span class="sub">插件 · 技能 · MCP，按需接入外部数据与协作工具</span></div>
+        <div class="ext-hint-bar">
+          <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>
+          扩展能力可被 AI 助手在分析时自动调用；接入外部接口（如 Wind、企查查）需先完成授权，数据仅用于本企业分析。
+        </div>
+        <div class="ext-tabs">
+          <button class="ext-tab on" data-ep="plugin">插件<span class="badge-n" id="cntPlugin"></span></button>
+          <button class="ext-tab" data-ep="skill">技能<span class="badge-n" id="cntSkill"></span></button>
+          <button class="ext-tab" data-ep="mcp">MCP<span class="badge-n" id="cntMcp"></span></button>
+        </div>
+
+        <!-- 插件 -->
+        <div class="ext-pane on" data-ep="plugin">
+          <div class="ext-grid" id="gridPlugin"></div>
+        </div>
+        <!-- 技能 -->
+        <div class="ext-pane" data-ep="skill">
+          <div class="ext-grid" id="gridSkill"></div>
+        </div>
+        <!-- MCP -->
+        <div class="ext-pane" data-ep="mcp">
+          <div class="ext-grid" id="gridMcp"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= 日程 ================= -->
+    <div class="screen" id="cal">
+      <div class="board-scroll">
+        <div class="sec-head"><h2>日程</h2><span class="sub">工作事项 · 提醒 · 会议安排</span></div>
+        <div class="cal-wrap">
+          <div class="cal-main">
+            <div class="cal-toolbar">
+              <button class="nav-arw" id="calPrev"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+              <b id="calTitle">2026 年 9 月</b>
+              <button class="nav-arw" id="calNext"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></button>
+              <span class="sp"></span>
+              <button class="today-btn">今天</button>
+            </div>
+            <div class="cal-grid" id="calGrid"></div>
+          </div>
+          <div class="cal-side">
+            <div class="cal-side-card">
+              <h3><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M3 10h18"/></svg>今日安排</h3>
+              <div id="agendaList"></div>
+            </div>
+            <div class="cal-side-card">
+              <h3><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5l3 2"/></svg>近期提醒</h3>
+              <div class="agenda-item"><span class="agenda-dot" style="background:var(--red)"></span><div class="agenda-main">现金跑道预警<small>预计剩余 7.2 个月，建议启动融资</small></div></div>
+              <div class="agenda-item"><span class="agenda-dot" style="background:var(--orange)"></span><div class="agenda-main">首批次材料申报截止<small>准备检测报告与应用案例</small></div></div>
+              <div class="agenda-item"><span class="agenda-dot" style="background:var(--green)"></span><div class="agenda-main">MO-0912 工单交付<small>2026-10-15 · A 型 1200 批</small></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= 云盘 ================= -->
+    <div class="screen" id="drive">
+      <div class="board-scroll">
+        <div class="sec-head"><h2>云盘</h2><span class="sub">企业资料 · 导入文件 · 协作空间</span></div>
+        <div class="drive-stats">
+          <div class="dstat"><div class="l">全部文件</div><div class="v">186<small> 个</small></div></div>
+          <div class="dstat"><div class="l">已用空间</div><div class="v">2.4<small> GB / 20 GB</small></div></div>
+          <div class="dstat"><div class="l">本月新增</div><div class="v">23<small> 个</small></div></div>
+          <div class="dstat"><div class="l">共享给我</div><div class="v">7<small> 个</small></div></div>
+        </div>
+        <div class="drive-toolbar">
+          <div class="crumb-chain">
+            <span class="seg">全部文件</span>
+            <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--t3)" stroke-width="2.4" stroke-linecap="round"><path d="M9 18l6-6-6-6"/></svg>
+            <span class="seg cur">企业资料</span>
+          </div>
+          <span class="sp"></span>
+          <button class="drive-btn"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>上传</button>
+          <button class="drive-btn">新建文件夹</button>
+          <button class="drive-btn primary" data-go="chat"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg>导入 AI 分析</button>
+        </div>
+        <div class="drive-files">
+          <table><thead><tr><th>名称</th><th>大小</th><th>更新时间</th><th>来源</th><th class="b">操作</th></tr></thead><tbody id="driveFiles"></tbody></table>
+        </div>
+        <div class="drive-conn">
+          <span class="drive-conn-chip"><span class="ok"></span>飞书云文档已连接</span>
+          <span class="drive-conn-chip"><span class="ok"></span>本地文件已同步</span>
+          <span class="drive-conn-chip" data-go="ext">＋ 接入更多存储 / 协作来源</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 消息关注设置弹窗 -->
+    <div class="nset-mask" id="newsSetMask">
+      <div class="nset" role="dialog" aria-modal="true" aria-label="消息关注设置">
+        <div class="nset-h"><b>消息关注设置</b><span class="sp"></span><span class="x" id="newsSetClose"><svg aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></span></div>
+        <div class="nset-b">
+          <div class="nset-g">关注来源（可多选）</div>
+          <div class="src-opts" id="srcOpts">
+            <div class="src-opt on" data-type="news"><span class="so-box"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span><span class="so-t">新闻社 / 财经媒体<small>新华社 · 财联社 · 证券时报等</small></span></div>
+            <div class="src-opt on" data-type="report"><span class="so-box"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span><span class="so-t">券商 / 行业研报<small>中金 · 中信 · 行业研究院</small></span></div>
+            <div class="src-opt on" data-type="paper"><span class="so-box"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span><span class="so-t">学术论文<small>Nature · 期刊 · 知网 / arXiv</small></span></div>
+            <div class="src-opt on" data-type="frontier"><span class="so-box"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span><span class="so-t">行业前沿进展<small>技术动态 · 产业大会 · 新品</small></span></div>
+            <div class="src-opt on" data-type="gov"><span class="so-box"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span><span class="so-t">政策 / 政府公告<small>发改委 · 工信部 · 地方政策</small></span></div>
+          </div>
+          <div class="nset-g">关注关键词 / 主题（每行一个）</div>
+          <textarea class="kw-input" id="kwInput" placeholder="宽温导电材料&#10;柔性电子封装&#10;国产替代"></textarea>
+          <div class="kw-hint">系统将每日按所选来源 + 关键词汇总到「消息关注」，每条标注原始出处。</div>
+        </div>
+        <div class="nset-f">
+          <button id="newsSetCancel">取消</button>
+          <button class="save" id="newsSetSave">保存关注</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 消息详情弹窗 -->
+    <div class="nd-mask" id="newsDetailMask">
+      <div class="nd" role="dialog" aria-modal="true" aria-label="重点消息详情">
+        <div class="nd-h">
+          <div class="nd-meta" id="ndMeta"></div>
+          <b id="ndTitle"></b>
+        </div>
+        <div class="nd-b">
+          <div class="nd-g"><span class="g-ic" style="background:#e8efff;color:var(--primary)"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span>关键点提炼</div>
+          <ul class="nd-points" id="ndPoints"></ul>
+          <div id="ndImpactWrap"></div>
+          <div id="ndActionWrap"></div>
+        </div>
+        <div class="nd-f">
+          <button id="ndCloseBtn">关闭</button>
+          <button class="ask" id="ndAskBtn">向 AI 追问应对方案</button>
+        </div>
+      </div>
+    </div>
+
+    </div><!-- /content -->
+  </section>
+</div>
+
+<script>
+(function(){
+  var TITLES={
+    overview:"企业综合",chat:"AI 经营助手",info:"企业基本信息",bizov:"业务概览",hr:"人员管理",
+    prod:"生产",purch:"采购",sales:"销售",mkt:"市场",fin:"财务",fund:"融资",
+    ext:"扩展中心",cal:"日程",drive:"云盘"
+  };
+  var topbar=document.getElementById('topbar'),crumb=document.getElementById('crumb');
+
+  /* ---------- screen routing ---------- */
+  function go(id){
+    document.querySelectorAll('.screen').forEach(function(s){s.classList.toggle('active',s.id===id);});
+    document.querySelectorAll('.sub-item').forEach(function(n){n.classList.toggle('active',n.dataset.go===id);});
+    document.querySelectorAll('.ov-item,.sys-item').forEach(function(n){n.classList.toggle('active',n.dataset.go===id);});
+    crumb.textContent=TITLES[id]||'';
+    topbar.style.display=(id==='chat')?'none':'flex';
+  }
+  document.querySelectorAll('[data-go]').forEach(function(b){
+    b.addEventListener('click',function(){go(b.dataset.go);});
+  });
+
+  /* ---------- accordion ---------- */
+  document.querySelectorAll('.acc-head').forEach(function(h){
+    h.addEventListener('click',function(){h.parentElement.classList.toggle('open');});
+  });
+
+  /* ---------- model selector ---------- */
+  var pop=document.getElementById('modelPop');
+  document.getElementById('modelBtn').addEventListener('click',function(e){e.stopPropagation();pop.classList.toggle('open');});
+  document.getElementById('miniModel').addEventListener('click',function(e){e.stopPropagation();pop.classList.toggle('open');});
+  document.addEventListener('click',function(){pop.classList.remove('open');});
+  pop.addEventListener('click',function(e){e.stopPropagation();});
+
+  var curMName=document.getElementById('curMName'),miniMName=document.getElementById('miniMName'),
+      curMIc=document.getElementById('curMIc'),wMode=document.getElementById('wMode');
+  document.querySelectorAll('.mp-opt').forEach(function(o){
+    o.addEventListener('click',function(){
+      document.querySelectorAll('.mp-opt').forEach(function(x){x.classList.remove('sel');});
+      o.classList.add('sel');
+      var name=o.dataset.m;
+      curMName.textContent=name;miniMName.textContent=name;
+      if(o.classList.contains('auto')){
+        curMIc.style.background='linear-gradient(135deg,#4d6bfe,#7c5cff)';
+        curMIc.innerHTML='<svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg>';
+        wMode.style.display='inline-flex';wMode.innerHTML='<svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg>当前：智能选模型 · 自动路由';
+      }else{
+        curMIc.style.background=getComputedStyle(o.querySelector('.m-ic')).background;
+        curMIc.textContent=name.slice(0,2);
+        wMode.style.display='inline-flex';wMode.innerHTML='当前：自定义 · '+name;
+      }
+    });
+  });
+
+  /* ---------- chat demo ---------- */
+  var input=document.getElementById('chatInput'),sendBtn=document.getElementById('sendBtn'),
+      inner=document.getElementById('chatInner'),scroll=document.getElementById('chatScroll'),
+      welcome=document.getElementById('welcome'),started=false;
+
+  var ANSWERS={
+    "经营体检":{t:'综合各板块，当前企业健康度 <b>58 / 100</b>。主要扣分项：①注册资本实缴率仅 20.0%；②创始团队持股已降至 62.0% 且附完全棘轮条款；③1 项师生共创专利权属待确认。积极项：营收同比 +27.4%、毛利率提升至 43.5%。',c:[["经营看板 · 健康度模型","各板块指标加权 · 置信度 91%"]]},
+    "稀释":{t:'天使轮交割后，创始团队合计持股 <b>62.0%</b>（张明 52.8%、联创 9.2%），较设立时累计稀释 38.0pct。期权池 18.0%、投资人合计 20.0%。若本轮拟新增 1,000 万、投后 1 亿，创始团队将进一步降至约 55.8%。',c:[["Cap Table（含历轮）.xlsx","股东名册 · 2026-09"],["天使轮投资协议.pdf","交割条款 第2–4页"]]},
+    "烧钱":{t:'当前货币资金 <b>196.00 万</b>，近 3 月月均净消耗 26.40 万，测算现金跑道约 <b>7.4 个月</b>（置信度 88%）。建议 4 个月内启动下一轮融资。',c:[["现金流量表 / 银行流水","2026 年 7–9 月 · 模型测算"]]},
+    "协议":{t:'历轮投资协议中识别出对创始人较关键的条款：①<b>完全棘轮反稀释</b>（种子轮第8条）——下轮估值下行时创始人稀释幅度最大；②<b>1× 参与型优先清算权</b>；③<b>股权回购权</b>与重大事项一票否决。建议重点复核第①项。',c:[["种子轮投资协议.pdf","第 8 条 · 反稀释"],["天使轮条款清单","第 5 条 · 清算优先权"]]},
+    "财务整理":{t:'已对导入的账表做归集与勾稽：①利润表净利润 <b>-38.60 万</b>与资产负债表未分配利润变动一致；②经营性现金流净额 -52.40 万，与净利润差异主要来自应收增加与折旧；③资产 = 负债 + 所有者权益 = <b>612.00 万</b>，三表平衡。',c:[["利润表/资产负债表/现金流量表","2026 年 1–9 月"],["科目余额表.xlsx","勾稽底稿"]]},
+    "股权梳理":{t:'Cap Table 已更新：创始团队 <b>62.0%</b>、期权池 18.0%、投资人合计 20.0%。历轮共稀释 38.0pct，其中天使轮释放 20.0%。另标注：期权池中有 6.5% 尚未明确授予对象。',c:[["Cap Table（含历轮）.xlsx","2026-09 版"],["股东出资认缴表","工商口径核对"]]},
+    "工商核对":{t:'工商登记与内部股东名册核对结果：股东名称、认缴出资额、持股比例<b>三项一致</b>；注册资本 500.00 万与章程一致，但实缴仅 100.00 万（20.0%），认缴到期日需关注。',c:[["营业执照/章程","工商登记"],["股东名册与出资证明","内部台账"]]},
+    "知产":{t:'共盘点知识产权 <b>11 项</b>：发明专利 3、实用新型 3、软著 2、商标 3。其中 <b>1 项师生共创发明专利</b>未取得权属约定，2 项专利的年费节点在 Q4。',c:[["知识产权清单","专利/软著/商标台账"],["专利证书与申请文件","权属核查"]]},
+    "应收":{t:'应收账款余额 <b>142.00 万</b>：30 天内占 64.0%、31–60 天占 25.4%、90 天以上 14.50 万。<b>2 笔已逾期</b>（宁波 XX 科技 14.50 万账龄超 90 天），建议计提并跟进。',c:[["应收账款账龄表","2026-09"],["销售合同与验收单","SO 对应单据"]]},
+    "人力":{t:'在册员工 <b>28 人</b>，研发占比 57.1%。期权池 18.0% 已通过持股平台持有，已授予 11.5%、未授予 6.5%；现有授予协议多为 4 年归属、1 年 cliff，建议统一台账。',c:[["员工花名册","2026-09"],["ESOP 授予协议与持股平台","归属明细"]]},
+    "default":{t:'我已基于已导入的企业资料进行分析。该问题涉及跨板块核对，相关数据已与原始文件勾稽，具体数值与出处见下方引用。',c:[["企业资料库","AI 解析 · 补充更多资料可提升准确度"]]}
+  };
+  function pick(q){
+    if(q.indexOf("体检")>=0)return ANSWERS["经营体检"];
+    if(q.indexOf("稀释")>=0||q.indexOf("融资")>=0)return ANSWERS["稀释"];
+    if(q.indexOf("烧钱")>=0||q.indexOf("撑")>=0||q.indexOf("跑道")>=0)return ANSWERS["烧钱"];
+    if(q.indexOf("协议")>=0||q.indexOf("条款")>=0||q.indexOf("不利")>=0)return ANSWERS["协议"];
+    if(q.indexOf("财务")>=0||q.indexOf("三表")>=0||q.indexOf("勾稽")>=0)return ANSWERS["财务整理"];
+    if(q.indexOf("股权")>=0||q.indexOf("Cap")>=0)return ANSWERS["股权梳理"];
+    if(q.indexOf("工商")>=0||q.indexOf("登记")>=0)return ANSWERS["工商核对"];
+    if(q.indexOf("知识产权")>=0||q.indexOf("专利")>=0||q.indexOf("权属")>=0)return ANSWERS["知产"];
+    if(q.indexOf("应收")>=0||q.indexOf("逾期")>=0||q.indexOf("账龄")>=0)return ANSWERS["应收"];
+    if(q.indexOf("花名册")>=0||q.indexOf("期权")>=0||q.indexOf("ESOP")>=0||q.indexOf("人力")>=0)return ANSWERS["人力"];
+    return ANSWERS["default"];
+  }
+  function modelUsed(){
+    var name=curMName.textContent;
+    if(name==='智能选模型')return '已自动路由至 DeepSeek R1（推理 / 勾稽类问题）';
+    return '模型：'+name;
+  }
+  function addUser(q){
+    if(!started){welcome.style.display='none';started=true;}
+    var d=document.createElement('div');d.className='msg user';
+    d.innerHTML='<span class="ma">范</span><div class="mbody"><div class="bubble"></div></div>';
+    d.querySelector('.bubble').textContent=q;inner.appendChild(d);
+    scroll.scrollTop=scroll.scrollHeight;
+  }
+  function addBot(q){
+    var a=pick(q);
+    var d=document.createElement('div');d.className='msg bot';
+    var cites=a.c.map(function(c){return '<div class="cite"><span class="ci-ic"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/></svg></span><span class="ci-tx"><b>'+c[0]+'</b><span>'+c[1]+'</span></span><span class="ci-go"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></span></div>';}).join('');
+    d.innerHTML='<span class="ma"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg></span><div class="mbody"><div class="bubble">'+a.t+'</div>'+cites+'<div class="msg-meta"><span class="fm"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg>'+modelUsed()+'</span></div></div>';
+    setTimeout(function(){inner.appendChild(d);scroll.scrollTop=scroll.scrollHeight;},460);
+  }
+  function ask(q){go('chat');addUser(q);addBot(q);}
+
+  document.querySelectorAll('.sugg-card').forEach(function(c){
+    c.addEventListener('click',function(){ask(c.dataset.q);});
+  });
+  document.querySelectorAll('.skill').forEach(function(c){
+    c.addEventListener('click',function(){ask(c.dataset.q);});
+  });
+
+  input.addEventListener('input',function(){
+    input.style.height='auto';input.style.height=Math.min(input.scrollHeight,140)+'px';
+    sendBtn.disabled=input.value.trim().length===0;
+  });
+  function submit(){
+    var q=input.value.trim();if(!q)return;
+    ask(q);input.value='';input.style.height='auto';sendBtn.disabled=true;input.focus();
+  }
+  sendBtn.addEventListener('click',submit);
+  input.addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submit();}});
+
+  /* ========== 市场标签切换 ========== */
+  document.querySelectorAll('.mkt-tab').forEach(function(tab){
+    tab.addEventListener('click',function(){
+      var k=tab.dataset.pane;
+      document.querySelectorAll('.mkt-tab').forEach(function(t){t.classList.toggle('on',t===tab);});
+      document.querySelectorAll('.mkt-pane').forEach(function(p){p.classList.toggle('on',p.dataset.pane===k);});
+    });
+  });
+
+  /* ========== 扩展中心 ========== */
+  var EXTS={
+    plugin:[
+      {n:'Wind 金融终端',d:'行情 · 财务 · 宏观与行业数据',ic:'📈',tag:'数据源',on:true,conn:'已授权'},
+      {n:'企查查',d:'工商 · 股权穿透 · 风险与司法',ic:'🏢',tag:'数据源',on:true,conn:'已连接'},
+      {n:'飞书',d:'云文档 · 表格 · 日历与消息协作',ic:'🐦',tag:'协作',on:true,conn:'已授权'},
+      {n:'邮件',d:'收发邮件 · 往来资料自动归档',ic:'✉️',tag:'协作',on:false,conn:'未授权'},
+      {n:'金山文档',d:'在线文档与项目资料库读取',ic:'📄',tag:'协作',on:false,conn:'未授权'},
+      {n:'云日历',d:'日程同步与会议提醒',ic:'📅',tag:'工具',on:true,conn:'已连接'}
+    ],
+    skill:[
+      {n:'财务整理',d:'凭证 · 三表自动归集与勾稽校验',ic:'🧾',tag:'技能',on:true,conn:'可调用'},
+      {n:'股权梳理',d:'Cap Table · 稀释测算与条款审查',ic:'📊',tag:'技能',on:true,conn:'可调用'},
+      {n:'经营体检',d:'健康度评分与风险归因',ic:'🩺',tag:'技能',on:true,conn:'可调用'},
+      {n:'现金跑道测算',d:'现金流预测与消耗预警',ic:'⏳',tag:'技能',on:true,conn:'可调用'},
+      {n:'协议风险审查',d:'投资协议特殊条款识别',ic:'⚖️',tag:'技能',on:true,conn:'可调用'},
+      {n:'投决辅助',d:'要点提炼 · 资料整合与结论生成',ic:'🎯',tag:'技能',on:false,conn:'可添加'}
+    ],
+    mcp:[
+      {n:'Wind MCP Server',d:'标准化接口，供 AI 实时调用 Wind 数据',ic:'🔌',tag:'MCP',on:true,conn:'运行中'},
+      {n:'企查查 MCP Server',d:'工商与风险数据标准化接口',ic:'🔌',tag:'MCP',on:true,conn:'运行中'},
+      {n:'飞书 MCP Server',d:'文档与协作能力标准化接口',ic:'🔌',tag:'MCP',on:false,conn:'未启用'},
+      {n:'自定义 MCP',d:'填写 Server 地址接入内部 / 第三方服务',ic:'➕',tag:'MCP',on:false,conn:'可配置'}
+    ]
+  };
+  var ICONBG={'数据源':'#e8efff','协作':'#e6fbf4','工具':'#fff3e6','技能':'#f1ebff','MCP':'#e7f7f6'};
+  function extCard(o){
+    return '<div class="ext-card"><div class="ext-ic" style="background:'+(ICONBG[o.tag]||'#f2f3f5')+'">'+o.ic+'</div>'
+      +'<div class="ext-body"><b>'+o.n+'</b><span>'+o.d+'</span><div class="ext-meta"><span class="ext-tag">'+o.tag+'</span><span class="ext-conn '+(o.on?'on':'')+'">'+o.conn+'</span></div></div>'
+      +'<label class="ext-sw"><input type="checkbox" '+(o.on?'checked':'')+'><span></span></label></div>';
+  }
+  ['plugin','skill','mcp'].forEach(function(k){
+    document.getElementById('grid'+(k.charAt(0).toUpperCase()+k.slice(1))).innerHTML=EXTS[k].map(extCard).join('');
+    document.getElementById('cnt'+(k.charAt(0).toUpperCase()+k.slice(1))).textContent=EXTS[k].filter(function(x){return x.on;}).length;
+  });
+  document.querySelectorAll('.ext-tab').forEach(function(tab){
+    tab.addEventListener('click',function(){
+      document.querySelectorAll('.ext-tab').forEach(function(t){t.classList.toggle('on',t===tab);});
+      document.querySelectorAll('.ext-pane').forEach(function(p){p.classList.toggle('on',p.dataset.ep===tab.dataset.ep);});
+    });
+  });
+  document.querySelectorAll('.ext-sw input').forEach(function(cb){
+    cb.addEventListener('change',function(){
+      var card=cb.closest('.ext-card'),conn=card.querySelector('.ext-conn');
+      conn.classList.toggle('on',cb.checked);
+      conn.textContent=cb.checked?'已启用':'未启用';
+    });
+  });
+
+  /* ========== 日程 ========== */
+  var calY=2026,calM=8; // 0-based: 9月
+  var EVENTS={
+    '2026-9-12':[{c:'var(--primary)',t:'首批次材料申报沟通'},{c:'var(--orange)',t:'材料准备'}],
+    '2026-9-20':[{c:'var(--primary)',t:'客户认证评审'}],
+    '2026-9-23':[{c:'var(--red)',t:'现金跑道复盘'},{c:'var(--green)',t:'MO-0912 排产'}],
+    '2026-9-26':[{c:'var(--primary)',t:'投资人例会'}]
+  };
+  var TODAY='2026-9-22';
+  var WD=['日','一','二','三','四','五','六'];
+  function renderCal(){
+    document.getElementById('calTitle').textContent=calY+' 年 '+(calM+1)+' 月';
+    var first=new Date(calY,calM,1).getDay(),days=new Date(calY,calM+1,0).getDate();
+    var html=WD.map(function(w){return '<div class="cal-dow">'+w+'</div>';}).join('');
+    for(var i=0;i<first;i++) html+='<div class="cal-cell blank"></div>';
+    for(var d=1;d<=days;d++){
+      var key=calY+'-'+(calM+1)+'-'+d,ev=EVENTS[key]||[];
+      var cls='cal-cell'+(key===TODAY?' today':'');
+      html+='<div class="'+cls+'"><span class="cal-num">'+d+'</span>'
+        +ev.map(function(e){return '<div class="cal-ev" style="color:'+e.c+'"><span style="background:'+e.c+'"></span>'+e.t+'</div>';}).join('')+'</div>';
+    }
+    document.getElementById('calGrid').innerHTML=html;
+    renderAgenda();
+  }
+  function renderAgenda(){
+    var list=[
+      {c:'var(--red)',t:'现金跑道复盘',tm:'10:00',s:'预计剩余 7.2 个月，讨论融资启动'},
+      {c:'var(--green)',t:'MO-0912 排产确认',tm:'14:00',s:'A 型 1200 批 · 交付 10-15'},
+      {c:'var(--primary)',t:'客户认证材料评审',tm:'16:30',s:'头部封装客户导入进度'}
+    ];
+    document.getElementById('agendaList').innerHTML=list.map(function(a){
+      return '<div class="agenda-item"><span class="agenda-dot" style="background:'+a.c+'"></span><div class="agenda-main">'+a.t+'<small>'+a.tm+' · '+a.s+'</small></div></div>';
+    }).join('');
+  }
+  document.getElementById('calPrev').addEventListener('click',function(){calM--;if(calM<0){calM=11;calY--;}renderCal();});
+  document.getElementById('calNext').addEventListener('click',function(){calM++;if(calM>11){calM=0;calY++;}renderCal();});
+  renderCal();
+
+  /* ========== 云盘 ========== */
+  var FILES=[
+    {n:'营业执照与公司章程.pdf',s:'2.1 MB',d:'09-18 14:20',src:'企查查导入',f:false},
+    {n:'2025年度审计报告.pdf',s:'8.6 MB',d:'09-15 09:32',src:'本地上传',f:false},
+    {n:'1–9月财务凭证及三表.xlsx',s:'3.4 MB',d:'09-21 17:05',src:'财务整理生成',f:false},
+    {n:'股权 Cap Table_当前.xlsx',s:'1.2 MB',d:'09-19 11:40',src:'股权梳理生成',f:false},
+    {n:'天使轮投资协议(扫描件).pdf',s:'5.7 MB',d:'09-12 16:18',src:'飞书同步',f:false},
+    {n:'首批次申报材料（草稿）',s:'文件夹',d:'09-20 10:22',src:'协作空间',f:true},
+    {n:'客户认证资料包',s:'文件夹',d:'09-16 13:55',src:'协作空间',f:true},
+    {n:'行业研报合集_2026Q3',s:'文件夹',d:'09-21 08:47',src:'消息关注',f:true}
+  ];
+  document.getElementById('driveFiles').innerHTML=FILES.map(function(x){
+    var ic=x.f?'📁':'📄';
+    return '<tr><td class="b"><span class="file-ic">'+ic+'</span>'+x.n+'</td><td>'+x.s+'</td><td>'+x.d+'</td><td><span class="file-src">'+x.src+'</span></td><td class="b"><span class="file-act">预览</span><span class="file-act" data-go="chat">AI 分析</span></td></tr>';
+  }).join('');
+
+  /* ========== 消息关注 ========== */
+  var NEWS=[
+    {t:'09:12',type:'news',src:'新华社',lv:'key',
+     title:'工信部印发新材料产业高质量发展行动方案，宽温域材料列入重点方向',
+     points:['宽温域材料被列入重点发展方向，属于明确的产业鼓励类','政策覆盖研发支持、首批次应用与下游推广等环节','高端材料国产替代是方案主线之一'],
+     impact:['公司主营宽温导电材料，直接处于政策鼓励赛道','有助于对接研发补贴与下游首批次应用，降低市场拓展阻力','融资叙事中的政策确定性增强，利于下一轮估值'],
+     action:'建议梳理可申报的专项与补贴清单，由专人对接工信部门，10 月底前形成申报计划。'},
+    {t:'09:19',type:'gov',src:'工信部',lv:'key',
+     title:'关于开展重点新材料首批次应用保险补偿申报工作的通知',
+     points:['对首批次应用新材料给予保险补偿，降低下游试用风险','明确申报材料、时间窗口与产品目录要求','宽温导电材料具备进入申报目录的条件'],
+     impact:['可借助保险补偿推动头部客户试用，缩短认证导入周期','直接降低客户对早期供应商的质量与稳定顾虑','与现有切入头部封装供应链的策略高度契合'],
+     action:'建议立即核对产品是否在目录范围，准备检测报告与应用案例，赶在申报截止前提交。'},
+    {t:'昨天',type:'paper',src:'Nature Materials',lv:'key',
+     title:'宽温域柔性导电复合体系研究取得新进展，工作温区拓宽至 -55~150℃',
+     points:['新型复合体系稳定工作温区达到 -55~150℃','在极端温度循环下保持导电网络稳定','材料路线与公司现有技术方向相近'],
+     impact:['从学术侧验证了宽温技术路线的可行性','公司现有产品温区与前沿成果一致，技术领先性获得旁证','需关注新路线对现有工艺的潜在替代，提前做专利布局'],
+     action:'建议技术团队精读原文并评估专利可绕开性，必要时补充专利申请，避免技术被动。'},
+    {t:'09:05',type:'report',src:'中金公司研报',lv:'watch',
+     title:'导电及封装材料 2026 年市场规模有望达 86 亿元，CAGR 18.2%',
+     points:['预计 2026 年市场规模约 86 亿元','2024–2028 年 CAGR 约 18.2%','增长主要来自先进封装与汽车电子'],
+     impact:['行业保持较快增长，为公司提供扩张空间','可作为融资材料中市场空间的第三方引用','规模为机构测算，仅供方向性参考']},
+    {t:'09-20',type:'report',src:'中信证券研报',lv:'watch',
+     title:'先进封装材料专题：差异化宽温性能企业有望切入头部供应链',
+     points:['头部封装厂对宽温材料需求上升','差异化性能是进入供应链的关键门槛','客户认证与良率是核心考察项'],
+     impact:['印证公司宽温差异化的切入点成立','同时提示客户认证和良率仍是需要补强的短板']},
+    {t:'昨天',type:'frontier',src:'行业大会',lv:'watch',
+     title:'2026 柔性电子产业大会：国产宽温导电材料量产良率显著提升',
+     points:['国产宽温材料量产良率普遍提升','产业界对国产替代信心增强','多家厂商公布扩产计划'],
+     impact:['利于国产材料整体接受度提升','也意味着后续竞争与产能扩张加速，需提前建立壁垒']},
+    {t:'09-20',type:'news',src:'财联社',lv:'normal',
+     title:'多家半导体封装厂商上调全年材料采购指引，关注上游国产替代',
+     points:['封装厂商上调全年采购指引','上游材料国产替代受关注']},
+    {t:'09-19',type:'paper',src:'arXiv',lv:'normal',
+     title:'高稳定导电网络在极端温度循环下的可靠性机理研究',
+     points:['研究极端温度循环下导电网络可靠性机理','为宽温材料设计提供理论参考']}
+  ];
+  var TYPE_LABEL={news:'新闻',report:'研报',paper:'论文',frontier:'前沿',gov:'政策'};
+  var LV_LABEL={key:'重点',watch:'关注',normal:'一般'};
+  var newsTrack=document.getElementById('newsTrack');
+  var newsFilters=document.getElementById('newsFilters');
+  var enabledTypes={news:1,report:1,paper:1,frontier:1,gov:1};
+  var lvFilter='all';
+  function visibleNews(){
+    return NEWS.filter(function(n){return enabledTypes[n.type]&&(lvFilter==='all'||n.lv===lvFilter);});
+  }
+  function row(n){
+    var detail=n.lv==='key'?'<span class="ni-detail">关键点 · 影响 ▸</span>':'';
+    return '<div class="news-item lv-'+n.lv+'" data-i="'+NEWS.indexOf(n)+'"><span class="ni-time">'+n.t+'</span>'+
+      '<span class="lv-tag t-'+n.lv+'">'+LV_LABEL[n.lv]+'</span>'+
+      '<span class="src-tag src-'+n.type+'">'+TYPE_LABEL[n.type]+' · '+n.src+'</span>'+
+      '<span class="ni-title">'+n.title+'</span>'+detail+'</div>';
+  }
+  function renderNews(){
+    var list=visibleNews();
+    if(list.length===0){newsTrack.innerHTML='<div class="news-item" style="justify-content:center;color:var(--t3);">当前筛选条件下暂无消息</div>';}
+    else{newsTrack.innerHTML=list.map(row).join('')+list.map(row).join('');}
+    newsOffset=0;newsTrack.style.transform='translateY(0)';
+  }
+  function renderFilters(){
+    var base=NEWS.filter(function(n){return enabledTypes[n.type];});
+    function cnt(lv){return base.filter(function(n){return n.lv===lv;}).length;}
+    var defs=[['all','全部'],['key','重点'],['watch','关注'],['normal','一般']];
+    newsFilters.innerHTML=defs.map(function(d){
+      var c=d[0]==='all'?base.length:cnt(d[0]);
+      return '<button class="nf'+(lvFilter===d[0]?' on':'')+'" data-lv="'+d[0]+'">'+d[1]+'<small>'+c+'</small></button>';
+    }).join('');
+  }
+  renderFilters();renderNews();
+  var newsOffset=0,newsPaused=false;
+  document.getElementById('newsViewport').addEventListener('mouseenter',function(){newsPaused=true;});
+  document.getElementById('newsViewport').addEventListener('mouseleave',function(){newsPaused=false;});
+  newsFilters.addEventListener('click',function(e){
+    var b=e.target.closest('.nf');if(!b)return;
+    lvFilter=b.dataset.lv;renderFilters();renderNews();
+  });
+  setInterval(function(){
+    if(newsPaused)return;
+    var list=visibleNews();if(list.length===0)return;
+    var half=newsTrack.scrollHeight/2;if(half<=0)return;
+    newsOffset+=0.5;if(newsOffset>=half){newsOffset-=half;}
+    newsTrack.style.transform='translateY('+(-newsOffset)+'px)';
+  },40);
+
+  /* ---- 消息详情 ---- */
+  var dMask=document.getElementById('newsDetailMask');
+  function openDetail(n){
+    document.getElementById('ndMeta').innerHTML=
+      '<span class="lv-tag t-'+n.lv+'">'+LV_LABEL[n.lv]+'</span>'+
+      '<span class="src-tag src-'+n.type+'">'+TYPE_LABEL[n.type]+' · '+n.src+'</span>'+
+      '<span style="font-size:11.5px;color:var(--t3);">'+n.t+'</span>';
+    document.getElementById('ndTitle').textContent=n.title;
+    document.getElementById('ndPoints').innerHTML=n.points.map(function(p){return '<li>'+p+'</li>';}).join('');
+    var iw=document.getElementById('ndImpactWrap'),aw=document.getElementById('ndActionWrap');
+    if(n.impact&&n.impact.length){
+      iw.innerHTML='<div class="nd-g"><span class="g-ic" style="background:#ffece8;color:var(--red)"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><circle cx="12" cy="12" r="9"/><path d="M12 8v5"/></svg></span>对本企业的影响</div>'+
+        '<div class="nd-impact">'+n.impact.map(function(m){return '<div class="im"><i></i><span>'+m+'</span></div>';}).join('')+'</div>';
+    }else{iw.innerHTML='';}
+    if(n.action){
+      aw.innerHTML='<div class="nd-action" style="margin-top:12px;"><span>💡</span><span>'+n.action+'</span></div>';
+    }else{aw.innerHTML='';}
+    document.getElementById('ndAskBtn').onclick=function(){closeDetail();ask('针对这条消息（'+n.title+'），给我一份应对方案');};
+    dMask.classList.add('show');
+  }
+  function closeDetail(){dMask.classList.remove('show');}
+  newsTrack.addEventListener('click',function(e){
+    var it=e.target.closest('.news-item');if(!it||it.dataset.i===undefined)return;
+    var n=NEWS[it.dataset.i];if(n)openDetail(n);
+  });
+  document.getElementById('ndCloseBtn').addEventListener('click',closeDetail);
+  dMask.addEventListener('click',function(e){if(e.target===dMask)closeDetail();});
+
+  /* ---- 关注设置弹窗 ---- */
+  var nMask=document.getElementById('newsSetMask');
+  function openNewsSet(){nMask.classList.add('show');}
+  function closeNewsSet(){nMask.classList.remove('show');}
+  document.getElementById('newsSetBtn').addEventListener('click',openNewsSet);
+  document.getElementById('newsSetClose').addEventListener('click',closeNewsSet);
+  document.getElementById('newsSetCancel').addEventListener('click',closeNewsSet);
+  nMask.addEventListener('click',function(e){if(e.target===nMask)closeNewsSet();});
+  document.querySelectorAll('#srcOpts .src-opt').forEach(function(o){
+    o.addEventListener('click',function(){o.classList.toggle('on');});
+  });
+  document.getElementById('newsSetSave').addEventListener('click',function(){
+    enabledTypes={news:0,report:0,paper:0,frontier:0,gov:0};
+    document.querySelectorAll('#srcOpts .src-opt').forEach(function(o){
+      if(o.classList.contains('on'))enabledTypes[o.dataset.type]=1;
+    });
+    renderFilters();renderNews();closeNewsSet();
+  });
+})();
+</script>
+</body>
+</html>

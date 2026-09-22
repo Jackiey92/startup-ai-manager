@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Jackiey92/startup-harness/schemas/fact-voucher.schema.json",
+  "title": "FactVoucher",
+  "description": "事实层中的单条可追责公司事实",
+  "type": "object",
+  "required": ["fact_id", "entity", "attribute", "value", "source", "valid_from", "status", "origin_zone"],
+  "properties": {
+    "fact_id": { "type": "string" },
+    "entity": {
+      "type": "object",
+      "required": ["entity_type", "entity_id"],
+      "properties": {
+        "entity_type": { "enum": ["company", "shareholder", "employee", "customer", "supplier", "product", "order", "document"] },
+        "entity_id": { "type": "string" },
+        "name": { "type": "string" }
+      }
+    },
+    "attribute": { "type": "string" },
+    "value": {
+      "type": "object",
+      "required": ["v"],
+      "properties": {
+        "v": {},
+        "unit": { "type": "string" },
+        "currency": { "type": "string" }
+      }
+    },
+    "source": {
+      "type": "object",
+      "required": ["file_hash"],
+      "properties": {
+        "file_hash": { "type": "string" },
+        "page": { "type": ["integer", "null"] },
+        "char_range": {
+          "type": ["object", "null"],
+          "properties": { "start": { "type": "integer" }, "end": { "type": "integer" } }
+        },
+        "url": { "type": ["string", "null"] }
+      }
+    },
+    "valid_from": { "type": "string", "format": "date" },
+    "valid_to": { "type": ["string", "null"], "default": null },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "status": { "enum": ["verified", "claimed", "inferred"] },
+    "origin_zone": { "enum": ["internal", "external"] },
+    "superseded_by": { "type": ["string", "null"], "default": null }
+  }
+}

@@ -1,0 +1,22 @@
+# Secrets / credentials
+.env
+.env.*
+*.token
+.gh_token
+.gh_device.json
+.ov_key
+**/secrets/**
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Node
+node_modules/
+
+# OS / editor
+.DS_Store
+*.swp
