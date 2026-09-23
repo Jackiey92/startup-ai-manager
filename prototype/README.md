@@ -2,7 +2,7 @@
 
 单文件、零依赖的纯前端演示，直接用浏览器打开即可：
 
-- [startup-harness_prototype.html](./startup-harness_prototype.html)
+- [startup-ai-manager.html](./startup-ai-manager.html)
 
 ## 包含
 

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/Jackiey92/startup-harness/schemas/fact-voucher.schema.json",
+  "$id": "https://github.com/Jackiey92/startup-ai-manager/schemas/fact-voucher.schema.json",
   "title": "FactVoucher",
   "description": "事实层中的单条可追责公司事实",
   "type": "object",

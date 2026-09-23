@@ -19,7 +19,7 @@
 
 - 豆包 / WorkBuddy / 通用平台：Agent 侧，但无持久公司模型，聊完即走；
 - 金蝶 / 用友：公司数据侧，但是表单中心、围墙内 AI；
-- Startup Harness：空象限——Agent 主动执行 + 持久公司专属模型。
+- Startup AI Manager：空象限——Agent 主动执行 + 持久公司专属模型。
 
 ## 国内
 
