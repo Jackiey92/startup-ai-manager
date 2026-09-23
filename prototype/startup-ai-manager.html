@@ -265,6 +265,39 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
 /* 表格横滑容器（桌面端不滚动） */
 .table-wrap{width:100%;}
 
+/* ============ 企业成长信息 ============ */
+.growth-card{margin-top:16px;}
+.growth-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:13px;}
+.growth-head .gh-title{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:700;}
+.growth-head .gh-title .gh-ic{width:26px;height:26px;border-radius:8px;background:var(--grad);display:grid;place-items:center;color:#fff;flex:none;}
+.growth-head .gh-desc{font-size:12px;color:var(--t3);}
+.growth-head .sp{flex:1;}
+.growth-head .gh-freq{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:var(--primary);background:#eef1ff;border:1px solid #dbe2ff;border-radius:99px;padding:5px 11px;}
+.growth-head .gh-run{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:var(--t2);background:#fff;border:1px solid var(--border);border-radius:99px;padding:5px 11px;cursor:pointer;font-family:inherit;}
+.growth-head .gh-run:hover{border-color:var(--primary);color:var(--primary);}
+
+.growth-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:13px;}
+.gc{border:1px solid var(--border);border-radius:12px;background:#fff;padding:15px 16px;display:flex;flex-direction:column;gap:11px;transition:.16s;cursor:pointer;}
+.gc:hover{border-color:var(--primary);box-shadow:0 8px 24px rgba(77,107,254,.1);transform:translateY(-1px);}
+.gc-top{display:flex;align-items:center;gap:10px;}
+.gc-ic{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;flex:none;}
+.gc-tt{font-size:13.5px;font-weight:700;}
+.gc-freq{font-size:11px;color:var(--t3);margin-top:1px;}
+.gc-badge{margin-left:auto;font-size:10.5px;font-weight:700;border-radius:99px;padding:3px 9px;flex:none;}
+.gc-badge.todo{background:#fff3e6;color:var(--orange);}
+.gc-badge.ok{background:#e8f7eb;color:var(--green);}
+.gc-line{font-size:12.5px;color:var(--t2);line-height:1.6;}
+.gc-line b{color:var(--t1);}
+.gc-list{display:flex;flex-direction:column;gap:7px;margin-top:1px;}
+.gc-todo{display:flex;align-items:flex-start;gap:8px;font-size:12px;color:var(--t2);line-height:1.5;}
+.gc-todo .dot{width:6px;height:6px;border-radius:50%;margin-top:6px;flex:none;}
+.gc-todo .dot.warn{background:var(--orange);}.gc-todo .dot.info{background:var(--primary);}.gc-todo .dot.danger{background:var(--red);}
+.gc-foot{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--t3);border-top:1px solid var(--border-2);padding-top:10px;margin-top:auto;}
+.gc-foot .go{margin-left:auto;color:var(--primary);display:inline-flex;align-items:center;gap:3px;font-weight:600;}
+
+@media(max-width:1100px){.growth-grid{grid-template-columns:1fr 1fr;}}
+@media(max-width:760px){.growth-grid{grid-template-columns:1fr;}}
+
 /* 移动端专用元素，桌面默认隐藏 */
 #menuToggle,#navOverlay,.m-chatback{display:none;}
 
@@ -839,6 +872,84 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
           <div class="mkpi"><div class="ml">净利润</div><div class="mv">-38.60<small>万</small></div><div class="mc up">同比收窄 26.1%</div></div>
           <div class="mkpi"><div class="ml">现金跑道</div><div class="mv">7.2<small>月</small></div><div class="mc down">月均净消耗 26.40 万</div></div>
           <div class="mkpi"><div class="ml">在手订单</div><div class="mv">386.00<small>万</small></div><div class="mc up">▲ 12.2%</div></div>
+        </div>
+
+        <!-- 企业成长信息（定期运行的企业成长分析） -->
+        <div class="card growth-card">
+          <div class="growth-head">
+            <span class="gh-title"><span class="gh-ic"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10M18 20V4M6 20v-4"/></svg></span>企业成长信息</span>
+            <span class="gh-desc">定期自动运行的企业成长分析 · 结论可溯源</span>
+            <span class="sp"></span>
+            <span class="gh-freq"><i style="width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block;"></i>已开启定期分析</span>
+            <button class="gh-run" type="button"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 11-2.6-6.4M21 3v6h-6"/></svg>立即运行</button>
+          </div>
+          <div class="growth-grid">
+
+            <!-- 员工激励待办 -->
+            <div class="gc" data-gkey="激励">
+              <div class="gc-top">
+                <span class="gc-ic" style="background:#f0ecff;color:var(--purple)"><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg></span>
+                <div><div class="gc-tt">员工激励待办</div><div class="gc-freq">每月 1 日运行 · ESOP 台账</div></div>
+                <span class="gc-badge todo">3 项待办</span>
+              </div>
+              <div class="gc-line">期权池 <b>18.0%</b>，已授予 <b>11.5%</b>、未授予 <b>6.5%</b>；其中 6.5% 尚未明确授予对象。</div>
+              <div class="gc-list">
+                <div class="gc-todo"><span class="dot warn"></span><span>2 名核心研发的期权授予协议待签署</span></div>
+                <div class="gc-todo"><span class="dot info"></span><span>本月 1 名员工满 1 年 cliff，首批归属待确认</span></div>
+                <div class="gc-todo"><span class="dot info"></span><span>建议 Q4 前明确 6.5% 未授予池的分配方案</span></div>
+              </div>
+              <div class="gc-foot"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>最近运行：2026-09-01<span class="go">查看详情<svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 18l6-6-6-6"/></svg></span></div>
+            </div>
+
+            <!-- 研发项目进展 -->
+            <div class="gc" data-gkey="研发">
+              <div class="gc-top">
+                <span class="gc-ic" style="background:#e8efff;color:var(--primary)"><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v4l4 8a3 3 0 01-2.7 4.5H7.7A3 3 0 015 15l4-8z"/><path d="M7.5 14h9"/></svg></span>
+                <div><div class="gc-tt">研发项目进展</div><div class="gc-freq">每两周运行 · 项目里程碑</div></div>
+                <span class="gc-badge ok">整体正常</span>
+              </div>
+              <div class="gc-line">在研项目 <b>4 个</b>，核心料号已进入客户验证阶段，整体研发进度 <b>达成率 82%</b>。</div>
+              <div class="gc-list">
+                <div class="gc-todo"><span class="dot info"></span><span>高耐温柔性导电料号：下游验证进行中，预计 Q4 出报告</span></div>
+                <div class="gc-todo"><span class="dot warn"></span><span>二代配方中试良率波动，需补充 2 批次工艺验证</span></div>
+                <div class="gc-todo"><span class="dot danger"></span><span>1 项师生共创专利权属待确认，影响项目结项</span></div>
+              </div>
+              <div class="gc-foot"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>最近运行：2026-09-15<span class="go">查看详情<svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 18l6-6-6-6"/></svg></span></div>
+            </div>
+
+            <!-- 订单进展 -->
+            <div class="gc" data-gkey="订单进展">
+              <div class="gc-top">
+                <span class="gc-ic" style="background:#e6faf1;color:#0a9d6e"><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg></span>
+                <div><div class="gc-tt">订单进展</div><div class="gc-freq">每周一运行 · 在手订单</div></div>
+                <span class="gc-badge todo">2 项关注</span>
+              </div>
+              <div class="gc-line">在手订单 <b>386.00 万</b>（▲12.2%），按计划交付占比 <b>88%</b>。</div>
+              <div class="gc-list">
+                <div class="gc-todo"><span class="dot info"></span><span>标杆客户验证订单已排产，交期 10 月下旬</span></div>
+                <div class="gc-todo"><span class="dot warn"></span><span>2 笔订单受上游原料到货影响，存在延期风险</span></div>
+                <div class="gc-todo"><span class="dot danger"></span><span>2 笔已发货订单回款逾期，合计 14.50 万</span></div>
+              </div>
+              <div class="gc-foot"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>最近运行：2026-09-21<span class="go">查看详情<svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 18l6-6-6-6"/></svg></span></div>
+            </div>
+
+            <!-- 每月财务诊断 -->
+            <div class="gc" data-gkey="财务诊断">
+              <div class="gc-top">
+                <span class="gc-ic" style="background:#fff7e0;color:#c98a00"><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></span>
+                <div><div class="gc-tt">每月财务诊断</div><div class="gc-freq">每月 5 日运行 · 三表勾稽</div></div>
+                <span class="gc-badge todo">3 项提示</span>
+              </div>
+              <div class="gc-line">三表<b>勾稽平衡</b>；1–9 月营收 214.00 万、净利润 -38.60 万，现金跑道约 <b>7.2 个月</b>。</div>
+              <div class="gc-list">
+                <div class="gc-todo"><span class="dot warn"></span><span>现金跑道不足 8 个月，建议 4 个月内启动下一轮</span></div>
+                <div class="gc-todo"><span class="dot info"></span><span>经营性现金流净额 -52.40 万，主因应收增加</span></div>
+                <div class="gc-todo"><span class="dot info"></span><span>注册资本实缴率仅 20.0%，认缴到期日需关注</span></div>
+              </div>
+              <div class="gc-foot"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>最近运行：2026-09-05<span class="go">查看详情<svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 18l6-6-6-6"/></svg></span></div>
+            </div>
+
+          </div>
         </div>
 
         <!-- 消息关注 -->
@@ -1509,6 +1620,10 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
     "工商核对":{t:'工商登记与内部股东名册核对结果：股东名称、认缴出资额、持股比例<b>三项一致</b>；注册资本 500.00 万与章程一致，但实缴仅 100.00 万（20.0%），认缴到期日需关注。',c:[["营业执照/章程","工商登记"],["股东名册与出资证明","内部台账"]]},
     "知产":{t:'共盘点知识产权 <b>11 项</b>：发明专利 3、实用新型 3、软著 2、商标 3。其中 <b>1 项师生共创发明专利</b>未取得权属约定，2 项专利的年费节点在 Q4。',c:[["知识产权清单","专利/软著/商标台账"],["专利证书与申请文件","权属核查"]]},
     "应收":{t:'应收账款余额 <b>142.00 万</b>：30 天内占 64.0%、31–60 天占 25.4%、90 天以上 14.50 万。<b>2 笔已逾期</b>（宁波 XX 科技 14.50 万账龄超 90 天），建议计提并跟进。',c:[["应收账款账龄表","2026-09"],["销售合同与验收单","SO 对应单据"]]},
+    "激励":{t:'员工激励定期分析：期权池 <b>18.0%</b>，已授予 <b>11.5%</b>、未授予 <b>6.5%</b>。本月待办：①2 名核心研发授予协议待签署；②1 名员工满 1 年 cliff、首批归属待确认；③建议 Q4 前明确未授予池的分配。现有协议多为 4 年归属、1 年 cliff，建议统一台账。',c:[["ESOP 授予协议与持股平台","归属明细 · 2026-09"],["员工花名册","授予对象核对"]]},
+    "研发":{t:'研发项目定期分析：在研项目 <b>4 个</b>，整体进度达成率 <b>82%</b>。核心高耐温料号已进入客户验证、预计 Q4 出报告；需关注：①二代配方中试良率波动，需补 2 批次工艺验证；②<b>1 项师生共创专利权属待确认</b>，会影响项目结项。',c:[["研发项目里程碑台账","2026-09 双周更新"],["专利申请文件","权属核查"]]},
+    "订单进展":{t:'订单定期分析：在手订单 <b>386.00 万</b>（▲12.2%），按计划交付占比 <b>88%</b>。标杆客户验证订单已排产（10 月下旬交期）；风险：①2 笔订单受原料到货影响或延期；②<b>2 笔已发货订单回款逾期合计 14.50 万</b>，需重点跟进。',c:[["销售订单与生产计划","SO / 工单 2026-09"],["应收账款账龄表","逾期单据"]]},
+    "财务诊断":{t:'每月财务诊断：三表<b>勾稽平衡</b>（资产=负债+权益=612.00 万）。1–9 月营收 <b>214.00 万</b>（+27.4%）、净利润 <b>-38.60 万</b>同比收窄 26.1%；现金跑道约 <b>7.2 个月</b>，建议 4 个月内启动下一轮。另：注册资本实缴率仅 20.0%，认缴到期日需关注。',c:[["利润表/资产负债表/现金流量表","2026 年 1–9 月"],["科目余额表与勾稽底稿","月度诊断"]]},
     "政策":{t:'近期与本企业相关的产业政策梳理：①新材料“<b>首批次应用示范</b>”——可对下游验证给予最高 30% 保费补贴，本企业核心料号符合目录，建议 Q4 申报；②高新技术企业资格今年到期需重新认定（影响 15% 所得税率）；③专精特新“小巨人”培育，研发占比 57.1% 已达标。<b>预计可申报补贴合计约 40–60 万元</b>。',c:[["产业政策汇编 / 申报指南","工信部·地方主管部门 2026"],["企业资质与研发台账","补贴资格匹配测算"]]},
     "竞争":{t:'行业呈“<b>头部集中 + 长尾分散</b>”格局，CR3 约 52%。对标头部：本企业耐温性能已接近一线、毛利率 43.5% 优于行业均值约 5pct，但<b>产能规模与品牌客户数量差距明显</b>，市占率仍低。建议聚焦 1–2 个标杆客户做国产替代验证，再横向放量。',c:[["竞争对手对比表","产能/性能/市占率 2026"],["行业研究报告","市场规模与竞争格局"]]},
     "简报":{t:'<b>本月经营简报</b>：营收 34.00 万（环比回升），1–9 月累计 214.00 万、同比 +27.4%；净利润 -38.60 万同比收窄 26.1%；现金跑道约 7.4 个月，建议 4 个月内启动下一轮。重点待办：①2 笔逾期应收 14.50 万跟进；②Q4 申报首批次补贴；③1 项师生共创专利权属确认。',c:[["经营看板 / 财务报表","2026 年 1–9 月"],["待办与风险台账","AI 自动汇总"]]},
@@ -1544,20 +1659,26 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
     d.querySelector('.bubble').textContent=q;inner.appendChild(d);
     scroll.scrollTop=scroll.scrollHeight;
   }
-  function addBot(q){
-    var a=pick(q);
+  function addBot(q,gkey){
+    var a=(gkey&&ANSWERS[gkey])?ANSWERS[gkey]:pick(q);
     var d=document.createElement('div');d.className='msg bot';
     var cites=a.c.map(function(c){return '<div class="cite"><span class="ci-ic"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/></svg></span><span class="ci-tx"><b>'+c[0]+'</b><span>'+c[1]+'</span></span><span class="ci-go"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></span></div>';}).join('');
     d.innerHTML='<span class="ma"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg></span><div class="mbody"><div class="bubble">'+a.t+'</div>'+cites+'<div class="msg-meta"><span class="fm"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg>'+modelUsed()+'</span></div></div>';
     setTimeout(function(){inner.appendChild(d);scroll.scrollTop=scroll.scrollHeight;},460);
   }
-  function ask(q){go('chat');addUser(q);addBot(q);}
+  function ask(q,gkey){go('chat');addUser(q);addBot(q,gkey);}
 
   document.querySelectorAll('.sugg-card').forEach(function(c){
     c.addEventListener('click',function(){ask(c.dataset.q);});
   });
   document.querySelectorAll('.skill').forEach(function(c){
     c.addEventListener('click',function(){ask(c.dataset.q);});
+  });
+  document.querySelectorAll('.gc[data-gkey]').forEach(function(c){
+    c.addEventListener('click',function(){
+      var qmap={"激励":"员工激励有哪些待办？","研发":"研发项目进展如何？","订单进展":"订单进展如何？","财务诊断":"本月财务诊断结果如何？"};
+      ask(qmap[c.dataset.gkey]||'企业成长分析',c.dataset.gkey);
+    });
   });
 
   input.addEventListener('input',function(){
