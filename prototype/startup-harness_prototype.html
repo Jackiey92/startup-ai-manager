@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Startup Harness · AI 企业管理平台 v5</title>
+<title>Startup AI Manager · 企业经营智能体原型</title>
 <style>
 :root{
   --primary:#4d6bfe;--primary-d:#3b55e6;
@@ -321,7 +321,7 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
   .topbar .tbtn.pri{display:none;}
   .iconbtn{width:36px;height:36px;}
   .topbar .sp{display:none;}
-  .topbar .iconbtn{margin-left:auto;}
+  .topbar .iconbtn[title="通知"]{margin-left:auto;}
 
   /* ---- 内容滚动区：减小内边距 ---- */
   .board-scroll{padding:14px 13px 28px;}
@@ -756,7 +756,7 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
       <div class="ai-entry">
         <button data-go="chat">
           <span class="s"><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg></span>
-          <span class="at">AI 经营助手<small>跨板块联合分析 · 可溯源</small></span>
+          <span class="at">Startup AI Manager<small>跨板块联合分析 · 可溯源</small></span>
           <span class="n">新会话</span>
         </button>
       </div>
@@ -785,7 +785,7 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
 
   <!-- ============ MAIN ============ -->
   <section class="main">
-    <h1 style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;">Startup Harness AI 企业管理平台</h1>
+    <h1 style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;">Startup AI Manager 企业经营智能体</h1>
 
     <!-- 顶栏（非对话屏显示） -->
     <header class="topbar" id="topbar">
@@ -910,7 +910,7 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
       <div class="chat">
         <div class="chat-bar">
           <button class="cicon m-chatback" type="button" aria-label="返回企业综合" onclick="go('overview')"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button>
-          <div class="cname">AI 经营助手<small>跨工商 · 业务 · 人员 · 产供销 · 财务 · 融资联合分析</small></div>
+          <div class="cname">Startup AI Manager<small>跨工商 · 业务 · 人员 · 产供销 · 财务 · 融资 · 政策联合分析</small></div>
           <span style="width:1px;height:22px;background:var(--border-2);"></span>
           <div class="model-sel" id="modelSel">
             <button class="model-btn" id="modelBtn">
@@ -941,7 +941,7 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
           <div class="chat-inner" id="chatInner">
             <div class="welcome" id="welcome">
               <div class="wlogo"><svg aria-hidden="true" width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg></div>
-              <h2>你好，我是 Startup Harness AI</h2>
+              <h2>你好，我是 Startup AI Manager</h2>
               <p>导入企业资料后，我可跨板块做联合分析，每个结论都附原始出处</p>
               <div class="wmode" id="wMode"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg>当前：智能选模型 · 自动路由</div>
               <div class="sugg-grid">
@@ -949,6 +949,10 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
                 <div class="sugg-card" data-q="本轮融资后创始团队股权会被稀释到多少？"><span class="sc-ic" style="background:#f0ecff;color:var(--purple)"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l9 5v10l-9 5-9-5V7z"/></svg></span><b>股权稀释测算</b><span>本轮交割后创始团队持股</span></div>
                 <div class="sugg-card" data-q="按现在的烧钱速度现金还能撑几个月？"><span class="sc-ic" style="background:#fff3e6;color:var(--orange)"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><b>现金跑道测算</b><span>货币资金 / 月均净消耗</span></div>
                 <div class="sugg-card" data-q="这份投资协议里有哪些对创始人不利的条款？"><span class="sc-ic" style="background:#ffece8;color:var(--red)"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/></svg></span><b>协议风险审查</b><span>反稀释 / 清算权 / 回购条款</span></div>
+                <div class="sugg-card" data-q="近期产业支持政策对我们有什么影响？能申报哪些补贴？"><span class="sc-ic" style="background:#e6faf1;color:#0a9d6e"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/></svg></span><b>政策解读与补贴</b><span>产业政策影响 · 可申报项目匹配</span></div>
+                <div class="sugg-card" data-q="行业竞争格局如何？我们相对头部竞品的差距在哪？"><span class="sc-ic" style="background:#e8f4ff;color:#0a74d9"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="10" width="3" height="7"/><rect x="12" y="6" width="3" height="11"/><rect x="17" y="13" width="3" height="4"/></svg></span><b>竞争格局分析</b><span>行业格局 · 对标头部差距</span></div>
+                <div class="sugg-card" data-q="客户集中度和回款风险怎么样？哪些订单要重点跟进？"><span class="sc-ic" style="background:#fff7e0;color:#c98a00"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><b>客户回款风险</b><span>集中度 · 账龄 · 逾期跟进</span></div>
+                <div class="sugg-card" data-q="生成一份本月经营简报，汇总关键指标与待办事项"><span class="sc-ic" style="background:#f0f0f5;color:#5b6072"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M9 13h6M9 17h4"/></svg></span><b>月度经营简报</b><span>关键指标 · 风险 · 待办汇总</span></div>
               </div>
             </div>
           </div>
@@ -963,7 +967,7 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
               <button class="ctool" title="选择企业资料范围"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2 2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg></button>
             </div>
             <div class="composer-input">
-              <textarea id="chatInput" rows="1" placeholder="给 AI 助手发送消息，可跨板块提问…"></textarea>
+              <textarea id="chatInput" rows="1" placeholder="向 Startup AI Manager 提问，可跨板块分析…"></textarea>
               <button class="send-btn" id="sendBtn" disabled><svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/></svg></button>
             </div>
           </div>
@@ -1440,7 +1444,7 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
 })();
 (function(){
   var TITLES={
-    overview:"企业综合",chat:"AI 经营助手",info:"企业基本信息",bizov:"业务概览",hr:"人员管理",
+    overview:"企业综合",chat:"Startup AI Manager",info:"企业基本信息",bizov:"业务概览",hr:"人员管理",
     prod:"生产",purch:"采购",sales:"销售",mkt:"市场",fin:"财务",fund:"融资",
     ext:"扩展中心",cal:"日程",drive:"云盘"
   };
@@ -1505,6 +1509,9 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
     "工商核对":{t:'工商登记与内部股东名册核对结果：股东名称、认缴出资额、持股比例<b>三项一致</b>；注册资本 500.00 万与章程一致，但实缴仅 100.00 万（20.0%），认缴到期日需关注。',c:[["营业执照/章程","工商登记"],["股东名册与出资证明","内部台账"]]},
     "知产":{t:'共盘点知识产权 <b>11 项</b>：发明专利 3、实用新型 3、软著 2、商标 3。其中 <b>1 项师生共创发明专利</b>未取得权属约定，2 项专利的年费节点在 Q4。',c:[["知识产权清单","专利/软著/商标台账"],["专利证书与申请文件","权属核查"]]},
     "应收":{t:'应收账款余额 <b>142.00 万</b>：30 天内占 64.0%、31–60 天占 25.4%、90 天以上 14.50 万。<b>2 笔已逾期</b>（宁波 XX 科技 14.50 万账龄超 90 天），建议计提并跟进。',c:[["应收账款账龄表","2026-09"],["销售合同与验收单","SO 对应单据"]]},
+    "政策":{t:'近期与本企业相关的产业政策梳理：①新材料“<b>首批次应用示范</b>”——可对下游验证给予最高 30% 保费补贴，本企业核心料号符合目录，建议 Q4 申报；②高新技术企业资格今年到期需重新认定（影响 15% 所得税率）；③专精特新“小巨人”培育，研发占比 57.1% 已达标。<b>预计可申报补贴合计约 40–60 万元</b>。',c:[["产业政策汇编 / 申报指南","工信部·地方主管部门 2026"],["企业资质与研发台账","补贴资格匹配测算"]]},
+    "竞争":{t:'行业呈“<b>头部集中 + 长尾分散</b>”格局，CR3 约 52%。对标头部：本企业耐温性能已接近一线、毛利率 43.5% 优于行业均值约 5pct，但<b>产能规模与品牌客户数量差距明显</b>，市占率仍低。建议聚焦 1–2 个标杆客户做国产替代验证，再横向放量。',c:[["竞争对手对比表","产能/性能/市占率 2026"],["行业研究报告","市场规模与竞争格局"]]},
+    "简报":{t:'<b>本月经营简报</b>：营收 34.00 万（环比回升），1–9 月累计 214.00 万、同比 +27.4%；净利润 -38.60 万同比收窄 26.1%；现金跑道约 7.4 个月，建议 4 个月内启动下一轮。重点待办：①2 笔逾期应收 14.50 万跟进；②Q4 申报首批次补贴；③1 项师生共创专利权属确认。',c:[["经营看板 / 财务报表","2026 年 1–9 月"],["待办与风险台账","AI 自动汇总"]]},
     "人力":{t:'在册员工 <b>28 人</b>，研发占比 57.1%。期权池 18.0% 已通过持股平台持有，已授予 11.5%、未授予 6.5%；现有授予协议多为 4 年归属、1 年 cliff，建议统一台账。',c:[["员工花名册","2026-09"],["ESOP 授予协议与持股平台","归属明细"]]},
     "default":{t:'我已基于已导入的企业资料进行分析。该问题涉及跨板块核对，相关数据已与原始文件勾稽，具体数值与出处见下方引用。',c:[["企业资料库","AI 解析 · 补充更多资料可提升准确度"]]}
   };
@@ -1519,6 +1526,10 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
     if(q.indexOf("知识产权")>=0||q.indexOf("专利")>=0||q.indexOf("权属")>=0)return ANSWERS["知产"];
     if(q.indexOf("应收")>=0||q.indexOf("逾期")>=0||q.indexOf("账龄")>=0)return ANSWERS["应收"];
     if(q.indexOf("花名册")>=0||q.indexOf("期权")>=0||q.indexOf("ESOP")>=0||q.indexOf("人力")>=0)return ANSWERS["人力"];
+    if(q.indexOf("回款")>=0||q.indexOf("集中度")>=0)return ANSWERS["应收"];
+    if(q.indexOf("政策")>=0||q.indexOf("补贴")>=0||q.indexOf("申报")>=0||q.indexOf("资质")>=0)return ANSWERS["政策"];
+    if(q.indexOf("竞争")>=0||q.indexOf("格局")>=0||q.indexOf("竞品")>=0||q.indexOf("对标")>=0)return ANSWERS["竞争"];
+    if(q.indexOf("简报")>=0||q.indexOf("月度")>=0||q.indexOf("待办")>=0)return ANSWERS["简报"];
     return ANSWERS["default"];
   }
   function modelUsed(){
