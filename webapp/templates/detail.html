@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ file.original_name }}</title>
+<style>
+:root{--p:#4d6bfe;--bg:#f6f7f9;--bd:#e7e8eb;--t1:#1d2129;--t2:#4e5969;--t3:#86909c;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--t1);font-size:14px;}
+.top{background:#fff;border-bottom:1px solid var(--bd);padding:15px 28px;}
+.top a{color:var(--p);text-decoration:none;font-size:13px;}
+.wrap{max-width:1080px;margin:26px auto;padding:0 20px;}
+.meta{background:#fff;border:1px solid var(--bd);border-radius:12px;padding:18px 22px;margin-bottom:20px;display:flex;flex-wrap:wrap;gap:26px;}
+.meta b{display:block;font-size:12px;color:var(--t3);font-weight:500;margin-bottom:4px;}
+h2.sec{font-size:15px;margin:24px 0 12px;}
+.card{background:#fff;border:1px solid var(--bd);border-radius:12px;}
+.md{padding:24px 28px;line-height:1.8;color:var(--t2);}
+.md h2{font-size:15px;color:var(--t1);margin:22px 0 10px;}
+.md h2:first-child{margin-top:0;}
+.md .tbl-wrap{overflow-x:auto;border:1px solid var(--bd);border-radius:8px;margin:10px 0;}
+.md table{border-collapse:collapse;font-size:13px;min-width:720px;}
+.md th{color:var(--t3);font-weight:600;padding:8px 12px;border:1px solid var(--bd);background:#fafbfc;text-align:left;white-space:nowrap;}
+.md td{padding:8px 12px;border:1px solid var(--bd);white-space:nowrap;}
+.md p{margin:6px 0;}
+</style>
+</head>
+<body>
+<div class="top"><a href="{{ url_for('index') }}">← 返回文件列表</a></div>
+<div class="wrap">
+  <div class="meta">
+    <div><b>文件名</b>{{ file.original_name }}</div>
+    <div><b>格式</b>{{ file.file_format }}</div>
+    <div><b>归类</b>{{ file.module }} / {{ file.doc_type }}</div>
+    <div><b>大小</b>{{ '%.1f'|format(file.size/1024) }} KB</div>
+    <div><b>文件哈希</b>{{ file.file_hash[:16] }}…</div>
+  </div>
+
+  <h2 class="sec">结构化结果（Markdown）</h2>
+  <div class="card"><div class="md">{{ markdown_html|safe }}</div></div>
+</div>
+</body>
+</html>
+

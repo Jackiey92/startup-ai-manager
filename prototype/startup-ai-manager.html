@@ -255,6 +255,7 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
 .composer-tools{display:flex;align-items:center;gap:7px;margin-bottom:8px;}
 .mini-model{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:var(--primary);background:#eef1ff;border:1px solid #dbe2ff;border-radius:99px;padding:4px 11px;cursor:pointer;}
 .ctool{width:28px;height:28px;border-radius:7px;border:none;background:#f2f3f5;display:grid;place-items:center;cursor:pointer;color:var(--t2);}
+.bubble.thinking{color:var(--t3);font-style:normal;}
 .composer-input{display:flex;align-items:flex-end;gap:10px;}
 .composer-input textarea{flex:1;border:none;outline:none;resize:none;font-family:inherit;font-size:14px;line-height:1.5;max-height:140px;padding:6px 2px;color:var(--t1);background:transparent;}
 .composer-input textarea::placeholder{color:var(--t3);}
@@ -1469,7 +1470,8 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
             <span class="seg cur">企业资料</span>
           </div>
           <span class="sp"></span>
-          <button class="drive-btn"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>上传</button>
+          <button class="drive-btn" id="driveUploadBtn"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v4M17 8l-5-5-5 5M12 3v12"/></svg><span id="driveUploadLabel">上传</span></button>
+          <input type="file" id="driveFileInput" accept=".pdf,.xlsx,.xlsm,.xls" style="display:none">
           <button class="drive-btn">新建文件夹</button>
           <button class="drive-btn primary" data-go="chat"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg>导入 AI 分析</button>
         </div>
@@ -1659,12 +1661,28 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
     d.querySelector('.bubble').textContent=q;inner.appendChild(d);
     scroll.scrollTop=scroll.scrollHeight;
   }
-  function addBot(q,gkey){
-    var a=(gkey&&ANSWERS[gkey])?ANSWERS[gkey]:pick(q);
+  function botShell(){
     var d=document.createElement('div');d.className='msg bot';
-    var cites=a.c.map(function(c){return '<div class="cite"><span class="ci-ic"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/></svg></span><span class="ci-tx"><b>'+c[0]+'</b><span>'+c[1]+'</span></span><span class="ci-go"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></span></div>';}).join('');
-    d.innerHTML='<span class="ma"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg></span><div class="mbody"><div class="bubble">'+a.t+'</div>'+cites+'<div class="msg-meta"><span class="fm"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg>'+modelUsed()+'</span></div></div>';
-    setTimeout(function(){inner.appendChild(d);scroll.scrollTop=scroll.scrollHeight;},460);
+    d.innerHTML='<span class="ma"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg></span><div class="mbody"><div class="bubble thinking">思考中…</div><div class="msg-meta"><span class="fm"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg>'+modelUsed()+'</span></div></div>';
+    inner.appendChild(d);scroll.scrollTop=scroll.scrollHeight;
+    return d;
+  }
+  function fillBot(d,text){
+    d.querySelector('.bubble').classList.remove('thinking');
+    d.querySelector('.bubble').textContent=text||'（无回复）';
+    scroll.scrollTop=scroll.scrollHeight;
+  }
+  function addBot(q,gkey){
+    if(gkey&&ANSWERS[gkey]){
+      var d=botShell();fillBot(d,ANSWERS[gkey].t);return;
+    }
+    var shell=botShell();
+    fetch('http://127.0.0.1:5000/api/chat',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({message:q})
+    }).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
+      .then(function(res){fillBot(shell,res.message);})
+      .catch(function(){fillBot(shell,'AI 暂时无法响应，请确认后端服务已启动。');});
   }
   function ask(q,gkey){go('chat');addUser(q);addBot(q,gkey);}
 
@@ -1803,6 +1821,49 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
     var ic=x.f?'📁':'📄';
     return '<tr><td class="b"><span class="file-ic">'+ic+'</span>'+x.n+'</td><td>'+x.s+'</td><td>'+x.d+'</td><td><span class="file-src">'+x.src+'</span></td><td class="b"><span class="file-act">预览</span><span class="file-act" data-go="chat">AI 分析</span></td></tr>';
   }).join('');
+
+  /* ========== 真实上传：接入 OpenClaw harness ========== */
+  var HARNESS_API='http://127.0.0.1:5000/api/upload';
+  var uploadBtn=document.getElementById('driveUploadBtn'),
+      fileInput=document.getElementById('driveFileInput'),
+      uploadLabel=document.getElementById('driveUploadLabel');
+
+  function fmtSize(bytes){
+    if(bytes<1024)return bytes+' B';
+    if(bytes<1024*1024)return (bytes/1024).toFixed(1)+' KB';
+    return (bytes/1024/1024).toFixed(1)+' MB';
+  }
+  function nowMMDD(){
+    var d=new Date();
+    function p(n){return (n<10?'0':'')+n;}
+    return p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes());
+  }
+  function prependFile(x){
+    var ic=x.f?'📁':'📄';
+    var tr=document.createElement('tr');
+    tr.innerHTML='<td class="b"><span class="file-ic">'+ic+'</span>'+x.n+'</td><td>'+x.s+'</td><td>'+x.d+'</td><td><span class="file-src">'+x.src+'</span></td><td class="b"><span class="file-act">预览</span><span class="file-act" data-go="chat">AI 分析</span></td>';
+    var tb=document.getElementById('driveFiles');
+    tb.insertBefore(tr,tb.firstChild);
+  }
+
+  uploadBtn.addEventListener('click',function(){fileInput.click();});
+  fileInput.addEventListener('change',function(){
+    var file=fileInput.files[0];if(!file)return;
+    var fd=new FormData();fd.append('file',file);
+    uploadBtn.disabled=true;uploadLabel.textContent='解析中…';
+    fetch(HARNESS_API,{method:'POST',body:fd})
+      .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
+      .then(function(res){
+        prependFile({n:res.original_name,s:fmtSize(res.size),d:nowMMDD(),src:'本地上传',f:false});
+        uploadLabel.textContent='上传';
+        fileInput.value='';
+      })
+      .catch(function(){
+        uploadLabel.textContent='上传失败';
+        setTimeout(function(){uploadLabel.textContent='上传';},1800);
+      })
+      .finally(function(){uploadBtn.disabled=false;});
+  });
 
   /* ========== 消息关注 ========== */
   var NEWS=[

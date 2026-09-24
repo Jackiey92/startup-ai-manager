@@ -1,0 +1,4 @@
+openpyxl
+pymupdf
+flask
+markdown

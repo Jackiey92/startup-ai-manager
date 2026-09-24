@@ -20,3 +20,21 @@ node_modules/
 # OS / editor
 .DS_Store
 *.swp
+
+# App runtime data
+data/app.db
+data/app.db-*
+data/objects/
+data/sales_app/
+*.sqlite
+*.sqlite-*
+
+# OpenClaw runtime
+harness-openclaw/state/openclaw.json
+harness-openclaw/state/agents/
+harness-openclaw/state/state/
+harness-openclaw/state/tmp/
+harness-openclaw/cache/
+harness-openclaw/data/
+harness-openclaw/inbox/*.json
+harness-openclaw/outbox/*.json

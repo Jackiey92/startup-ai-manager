@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>销售文件导入</title>
+<style>
+:root{--p:#4d6bfe;--bg:#f6f7f9;--card:#fff;--bd:#e7e8eb;--t1:#1d2129;--t2:#4e5969;--t3:#86909c;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--t1);font-size:14px;}
+.top{background:#fff;border-bottom:1px solid var(--bd);padding:16px 28px;font-size:17px;font-weight:700;}
+.wrap{max-width:960px;margin:28px auto;padding:0 20px;}
+.drop{background:var(--card);border:2px dashed #c6ccd8;border-radius:14px;padding:40px;text-align:center;margin-bottom:28px;}
+.drop h2{font-size:16px;margin-bottom:8px;}
+.drop p{color:var(--t3);font-size:13px;margin-bottom:20px;}
+.btn{display:inline-block;background:var(--p);color:#fff;border:none;border-radius:9px;padding:11px 26px;font-size:14px;font-weight:600;cursor:pointer;}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;overflow:hidden;}
+table{width:100%;border-collapse:collapse;}
+th{text-align:left;font-size:12px;color:var(--t3);font-weight:500;padding:12px 16px;background:#fafbfc;border-bottom:1px solid var(--bd);}
+td{padding:13px 16px;border-bottom:1px solid #f0f1f3;color:var(--t2);}
+tr:last-child td{border-bottom:none;}
+.tag{font-size:11px;padding:3px 9px;border-radius:6px;background:#eef1ff;color:var(--p);}
+.empty{padding:36px;text-align:center;color:var(--t3);}
+a{color:var(--p);text-decoration:none;}
+</style>
+</head>
+<body>
+<div class="top">销售文件导入</div>
+<div class="wrap">
+  <form class="drop" method="post" action="{{ url_for('upload') }}" enctype="multipart/form-data">
+    <h2>上传销售文件</h2>
+    <p>支持 PDF（合同 / 订单）和 Excel（销售台账），上传后自动归类、解析并结构化</p>
+    <input type="file" name="file" id="f" accept=".pdf,.xlsx,.xlsm,.xls" style="display:none" required>
+    <button type="button" class="btn" onclick="document.getElementById('f').click()">选择文件</button>
+    <span id="fn" style="margin-left:14px;color:var(--t2)"></span>
+    <div style="margin-top:18px"><button type="submit" class="btn">开始上传</button></div>
+  </form>
+
+  <div class="card">
+    <table>
+      <thead><tr><th>文件名</th><th>格式</th><th>归类</th><th>大小</th><th></th></tr></thead>
+      <tbody>
+      {% for f in files %}
+        <tr>
+          <td style="color:var(--t1);font-weight:600">{{ f.original_name }}</td>
+          <td>{{ f.file_format }}</td>
+          <td><span class="tag">{{ f.doc_type }}</span></td>
+          <td>{{ '%.1f'|format(f.size/1024) }} KB</td>
+          <td><a href="{{ url_for('detail', file_id=f.id) }}">查看结构化结果</a></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="empty">还没有文件，先上传一个试试</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<script>
+document.getElementById('f').addEventListener('change',function(){
+  document.getElementById('fn').textContent=this.files.length?this.files[0].name:'';
+});
+</script>
+</body>
+</html>
