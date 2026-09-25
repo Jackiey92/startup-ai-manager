@@ -17,12 +17,17 @@ requested output path (or stdout). The output has:
 - source metadata: `source_id`, `filename`, `format`, `size_bytes`,
   `uploaded_at`, `file_hash`;
 - `pages[]`, with page number, text items, table rows and optional `bbox`;
+- `images[]`, with image hash, MIME, local-only path and source locator;
 - `parse_summary`, including engine, status, warnings and counts.
 
 Every evidence item must carry a source locator. PDF locators use page and
 bbox; spreadsheets use sheet and cell/range; Word uses paragraph/table
 indices; PowerPoint uses slide and shape/table indices. A missing locator is a
 warning, not permission to invent one.
+
+Embedded image bytes are extracted only to the local L2 image store. They are
+not sent to a model; an external model may receive only an approved marker or
+caption. `images[]` is an evidence reference, not a verified 2b fact.
 
 ## Engine selection
 

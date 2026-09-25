@@ -3,7 +3,7 @@
   "$id": "https://startup-ai-manager.local/schemas/l2-manifest.schema.json",
   "title": "SAM L2 document extraction manifest",
   "type": "object",
-  "required": ["source_id", "filename", "format", "size_bytes", "uploaded_at", "file_hash", "pages", "parse_summary"],
+  "required": ["source_id", "filename", "format", "size_bytes", "uploaded_at", "file_hash", "pages", "images", "parse_summary"],
   "additionalProperties": false,
   "properties": {
     "source_id": {"type": "string", "minLength": 1},
@@ -26,6 +26,10 @@
           "tables": {"type": "array", "items": {"$ref": "#/$defs/table"}}
         }
       }
+    },
+    "images": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/image"}
     },
     "parse_summary": {
       "type": "object",
@@ -78,6 +82,22 @@
       "properties": {
         "headers": {"type": "array", "items": {"type": "string"}},
         "rows": {"type": "array", "items": {"type": "array", "items": {"type": ["string", "number", "boolean", "null"]}}},
+        "source_loc": {"$ref": "#/$defs/sourceLoc"}
+      }
+    },
+    "image": {
+      "type": "object",
+      "required": ["image_id", "filename", "mime", "page_no", "bbox", "image_hash", "local_path", "source_loc"],
+      "additionalProperties": false,
+      "properties": {
+        "image_id": {"type": "string", "minLength": 1},
+        "filename": {"type": "string", "minLength": 1},
+        "mime": {"type": "string", "minLength": 1},
+        "page_no": {"type": ["integer", "null"], "minimum": 1},
+        "bbox": {"type": ["array", "null"], "items": {"type": "number"}, "minItems": 4, "maxItems": 4},
+        "image_hash": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"},
+        "local_path": {"type": "string", "minLength": 1},
+        "caption": {"type": ["string", "null"]},
         "source_loc": {"$ref": "#/$defs/sourceLoc"}
       }
     }

@@ -25,6 +25,24 @@ MinerU 服务配置为本地 UDS/回环 managed server，bridge 调用本地 `mi
 
 每份 manifest 都带 `source_id`、原文件 SHA-256、文件名/格式/大小/上传时间、`pages`、`parse_summary`，并强制 `raw_bytes_external=false`、`full_text_external=false`。PDF 的 table/text `source_loc` 含 `file_hash/page_no/bbox/locator`；XLSX 行通过 `source_loc` 绑定页级表块，后续可扩展 sheet/cell 坐标。
 
+## 内嵌图片实测
+
+bridge 现在另产 `images[]`。图片字节只写入本地
+`.sam-isolated/data/l2-images/<file_hash>/`，每项含 `image_id`、文件名、MIME、
+页码、bbox、图片 SHA-256、本地路径和 `source_loc`；仍由 manifest 的
+`raw_bytes_external=false` / `full_text_external=false` 约束，模型侧只应看到“此处有图”
+及可选说明，不直接传图片字节。
+
+对同四份真实样本的结果：
+
+- PDF 公积金：抽出 1 张 PNG（约盖章/标识区域），页 1，bbox
+  `[485.69,38.59,553.61,106.51]`，本地 hash/path 可回溯。
+- XLSX 营业外支出：0 张；该样本没有 OOXML `media` 对象。
+- DOCX 股东会纪要：0 张；该样本没有 `word/media` 对象。
+- PPTX 架构图：0 张；该样本没有 `ppt/media` 对象。
+
+因此“能否抽图”已在 PDF 上实测成功，但 Office 三份样本没有嵌图，不能据此评价 Office 抽图质量。Office bridge 已支持从 OOXML `*/media/*` 本地解包；页/slide 锚点需后续按关系文件和 shape anchor 补齐。手写、复杂图表和低清印章仍未单独验收。
+
 Docling 对同三份 Office 文件做了对照（同一台机器、纯本地）：
 
 | 格式 | 文本项 | 表格 | provenance |

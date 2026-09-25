@@ -14,6 +14,7 @@ import importlib.util
 import json
 import mimetypes
 import os
+import zipfile
 import subprocess
 import sys
 import tempfile
@@ -250,12 +251,78 @@ def _run_docling(source: Path, file_hash: str, fmt: str) -> tuple[list[dict[str,
     return [page_map[key] for key in sorted(page_map)], summary
 
 
+def _image_root() -> Path:
+    return Path(os.environ.get("SAM_L2_IMAGE_ROOT", ".sam-isolated/data/l2-images"))
+
+
+def _store_image(data: bytes, filename: str, file_hash: str, page_no: int | None, bbox: list[float] | None, locator: str) -> dict[str, Any]:
+    image_hash = hashlib.sha256(data).hexdigest()
+    suffix = Path(filename).suffix.lower() or ".bin"
+    target_dir = _image_root() / file_hash
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = target_dir / f"{image_hash[:16]}{suffix}"
+    if not target.exists():
+        target.write_bytes(data)
+    try:
+        local_path = target.relative_to(Path.cwd()).as_posix()
+    except ValueError:
+        local_path = target.as_posix()
+    return {
+        "image_id": f"{file_hash[:16]}:{image_hash[:16]}",
+        "filename": filename,
+        "mime": mimetypes.guess_type(filename)[0] or "application/octet-stream",
+        "page_no": page_no,
+        "bbox": bbox,
+        "image_hash": image_hash,
+        "local_path": local_path,
+        "caption": None,
+        "source_loc": {"file_hash": file_hash, "page_no": page_no, "bbox": bbox, "locator": locator},
+    }
+
+
+def _extract_embedded_images(source: Path, file_hash: str, fmt: str) -> list[dict[str, Any]]:
+    """Extract embedded image bytes locally, independently of text parsing."""
+    images: list[dict[str, Any]] = []
+    if fmt == "pdf":
+        try:
+            import pymupdf
+
+            document = pymupdf.open(source)
+            for page_index, page in enumerate(document):
+                for image_index, item in enumerate(page.get_images(full=True)):
+                    xref = int(item[0])
+                    payload = document.extract_image(xref)
+                    if not payload or not payload.get("image"):
+                        continue
+                    rects = page.get_image_rects(xref)
+                    rect = rects[0] if rects else None
+                    bbox = [float(rect.x0), float(rect.y0), float(rect.x1), float(rect.y1)] if rect else None
+                    ext = str(payload.get("ext") or "bin")
+                    images.append(_store_image(payload["image"], f"page-{page_index + 1}-image-{image_index}.{ext}", file_hash, page_index + 1, bbox, f"pdf:page/{page_index + 1}/image/{image_index}"))
+            document.close()
+        except Exception:
+            return images
+        return images
+    if fmt not in {"docx", "xlsx", "pptx"}:
+        return images
+    try:
+        with zipfile.ZipFile(source) as archive:
+            media = [name for name in archive.namelist() if "/media/" in name.lower()]
+            for name in media:
+                data = archive.read(name)
+                images.append(_store_image(data, Path(name).name, file_hash, None, None, f"ooxml:{name}"))
+    except (zipfile.BadZipFile, OSError):
+        pass
+    return images
+
+
 def _manifest(task: dict[str, Any], source: Path) -> dict[str, Any]:
     engine, warnings = _select_engine()
     file_hash = str(task.get("file_hash") or _sha256(source))
     filename = str(task.get("filename") or source.name)
     fmt = _format(source, task)
     pages: list[dict[str, Any]] = []
+    images: list[dict[str, Any]] = _extract_embedded_images(source, file_hash, fmt)
     if engine == "mineru" and not warnings:
         try:
             pages, summary = _run_mineru(source, file_hash)
@@ -287,6 +354,7 @@ def _manifest(task: dict[str, Any], source: Path) -> dict[str, Any]:
         "uploaded_at": str(task.get("uploaded_at") or _now()),
         "file_hash": file_hash,
         "pages": pages,
+        "images": images,
         "parse_summary": summary,
     }
 
