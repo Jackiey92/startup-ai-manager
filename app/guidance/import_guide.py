@@ -109,18 +109,19 @@ class ImportGuideService:
                 "AI import guide is not configured: set SAM_GUIDE_MODEL_API_KEY."
             )
 
-        body = json.dumps(
-            {
-                "model": model,
-                "temperature": 0.2,
-                "response_format": {"type": "json_object"},
-                "messages": [
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
-                ],
-            },
-            ensure_ascii=False,
-        ).encode("utf-8")
+        request_body = {
+            "model": model,
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+            ],
+        }
+        # Token Plan's auto router rejects sampling controls; fixed model IDs
+        # may use the low-temperature setting for more stable JSON output.
+        if model != "auto":
+            request_body["temperature"] = 0.2
+        body = json.dumps(request_body, ensure_ascii=False).encode("utf-8")
         request = urllib.request.Request(
             f"{base_url}/chat/completions",
             data=body,
