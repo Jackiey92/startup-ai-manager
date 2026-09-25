@@ -11,6 +11,7 @@ import json
 import os
 import subprocess
 from pathlib import Path
+from collections.abc import Callable
 
 from ..contracts import ParseResult, TextSpan, TableRow, SourceLoc, ClassificationHint
 from ..staging import StagingStore
@@ -20,12 +21,14 @@ from ...runtime_config import RuntimeConfig
 
 class OpenClawAdapter(RuntimeProvider):
     def __init__(self, staging: StagingStore, *, config: RuntimeConfig | None = None,
-                 objects_dir: Path | None = None, db_path: Path | None = None):
+                 objects_dir: Path | None = None, db_path: Path | None = None,
+                 runner: Callable[..., subprocess.CompletedProcess[str]] | None = None):
         self.staging = staging
         self.config = config or RuntimeConfig.from_env()
         self.root = self.config.harness_root
         self.objects_dir = Path(objects_dir) if objects_dir else self.config.objects_dir
         self.db_path = Path(db_path) if db_path else self.config.main_db
+        self._runner = runner or subprocess.run
 
     def supports(self, format: str) -> bool:
         return format in self.config.skill_for_format
@@ -53,8 +56,11 @@ class OpenClawAdapter(RuntimeProvider):
         result = _result_from_dict(payload)
         return self.staging.save_parse(result)
 
-    def run_agent_message(self, message: str, *, timeout: int = 600) -> str:
-        return self._invoke_agent(message, timeout=timeout)
+    def run_agent_message(self, message: str, *, context_text: str | None = None, timeout: int = 600) -> str:
+        prompt = message
+        if context_text:
+            prompt = context_text.rstrip() + "\n\n用户问题：" + message
+        return self._invoke_agent(prompt, timeout=timeout)
 
     def _write_task(self, file_hash: str, format: str) -> Path:
         inbox = self.root / "inbox"
@@ -93,7 +99,7 @@ class OpenClawAdapter(RuntimeProvider):
         cmd = [self.config.node_bin, str(self.config.openclaw_entry), "agent", "--local",
                "--agent", "main", "--session-id", session_id, "--json",
                "--message", message, "--timeout", str(timeout)]
-        proc = subprocess.run(
+        proc = self._runner(
             cmd, cwd=self.root, env=env, capture_output=True,
             text=True, encoding="utf-8", errors="replace",
             timeout=timeout + 30,

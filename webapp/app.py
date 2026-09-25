@@ -5,6 +5,7 @@ import json
 import os
 import sqlite3
 import subprocess
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -20,9 +21,11 @@ from app.db.database import init_db as init_core_db
 from app.guidance import ImportGuideService, ModelUnavailable
 from app.harness.staging import StagingStore
 from app.memory import ExtractionMemoryService
+from app.memory_map import MapBuilder, MemoryMapTools
 from app.ports import MemoryUnavailable
 from app.providers import memory_provider, model_provider, runtime_provider
 from app.runtime_config import RuntimeConfig
+from app.runtime_memory import RuntimeWorkingMemory
 from markdown_render import render_markdown
 import markdown as md_lib
 
@@ -115,9 +118,37 @@ def api_chat():
     if not question:
         return {"error": "empty message"}, 400
 
+    session_id = str(payload.get("session_id") or ("session-" + uuid.uuid4().hex))
+    company_id = str(payload.get("company_id") or os.environ.get("SAM_COMPANY_ID", "default"))
+    memory = app.extensions["sam_memory_provider"]
+    source_store = SourceFileStore(objects_path=OBJECTS_DIR, db_path=MAIN_DB)
+    map_result = MapBuilder(memory).load_or_rebuild(company_id)
+    map_data = map_result.map
+    # This is deliberately navigation-only.  No L2/L1 body or 2b value is
+    # inserted into the resident prompt; the agent is told to drill down via
+    # the three scoped tools when needed.
+    map_json = json.dumps(map_data, ensure_ascii=False, sort_keys=True)
+    context_text = (
+        "公司记忆地图（仅导航，不含事实正文）：\n" + map_json[:12000] +
+        "\n\n可用公司范围工具：memory_read(uri)、memory_search(query)、file_get(file_hash)。"
+        "工具只允许访问当前 company_id 的 viking URI；回答前按需下钻，并保留读取过的 URI。"
+    )
+    tools = MemoryMapTools(memory, source_store, company_id)
+    runtime = RuntimeWorkingMemory(memory)
+    try:
+        try:
+            state = runtime.get_runtime(session_id, "conversation")
+            if state.get("state") == "expired":
+                runtime.cleanup(session_id, "conversation")
+                raise KeyError(session_id)
+        except (KeyError, FileNotFoundError):
+            runtime.create(session_id, "conversation", goal=f"公司 {company_id} 对话", company_id=company_id)
+    except Exception:
+        # Runtime memory is useful but must not turn a chat into a 500.
+        map_data["degraded"] = True
     adapter = runtime_provider(RUNTIME_CONFIG, StagingStore(db_path=MAIN_DB))
     try:
-        raw = adapter.run_agent_message(question, timeout=600)
+        raw = adapter.run_agent_message(question, context_text=context_text, timeout=600)
     except (RuntimeError, OSError, subprocess.SubprocessError):
         return {"error": "agent failed"}, 502
     data = json.loads(raw)
@@ -127,7 +158,21 @@ def api_chat():
     if not answer:
         for pl in data.get("payloads", []):
             answer += pl.get("text", "")
-    return {"message": answer, "model": os.environ.get(RUNTIME_CONFIG.model_name_env, RUNTIME_CONFIG.model_default)}
+    try:
+        refs = [uri for uri in tools.navigation if uri.startswith("viking://")]
+        runtime.append_event(session_id, "conversation", "action", {
+            "kind": "memory_map_turn", "question": question[:1000],
+            "map_uri": MapBuilder(memory).map_uri(company_id),
+            "navigation": refs[:50], "answer_summary": answer[:1000],
+        })
+    except Exception:
+        map_data["degraded"] = True
+    return {
+        "message": answer,
+        "model": os.environ.get(RUNTIME_CONFIG.model_name_env, RUNTIME_CONFIG.model_default),
+        "session_id": session_id,
+        "context": {"map_uri": MapBuilder(memory).map_uri(company_id), "degraded": bool(map_data.get("degraded")), "navigation_count": len(tools.navigation)},
+    }
 
 
 @app.route("/api/upload", methods=["POST", "OPTIONS"])

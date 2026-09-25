@@ -23,7 +23,7 @@ class RuntimeProvider(Protocol):
     def run_parse(self, file_hash: str, format: str, timeout: int = 600) -> int:
         """Run the configured parser and return a staging record id."""
 
-    def run_agent_message(self, message: str, *, timeout: int = 600) -> str:
+    def run_agent_message(self, message: str, *, context_text: str | None = None, timeout: int = 600) -> str:
         """Run one agent turn and return its serialized result."""
 
 
@@ -60,6 +60,9 @@ class MemoryProvider(Protocol):
 
     def delete(self, uri: str, *, recursive: bool = False) -> None:
         """Delete an explicitly scoped runtime-memory resource."""
+
+    def list_facts(self, company_id: str) -> list[dict[str, Any]]:
+        """List verified 2b facts for one company."""
 
 
 class LocalMemoryProvider:
@@ -129,6 +132,23 @@ class LocalMemoryProvider:
             shutil.rmtree(path)
         elif path.exists():
             path.unlink()
+
+    def list_facts(self, company_id: str) -> list[dict[str, Any]]:
+        prefix = f"viking://user/default/memories/projects/10_startup_ai_manager/2b_facts/{company_id}"
+        facts = []
+        for item in self.query(prefix=prefix):
+            uri = item.get("uri", "")
+            if not uri.endswith(".json"):
+                continue
+            try:
+                fact = json.loads(item.get("content", ""))
+            except (TypeError, json.JSONDecodeError):
+                continue
+            if isinstance(fact, dict) and fact.get("status") == "verified":
+                fact.setdefault("fact_key", uri.rsplit("/", 1)[-1][:-5])
+                fact.setdefault("uri", uri)
+                facts.append(fact)
+        return sorted(facts, key=lambda value: str(value.get("fact_key", "")))
 
 
 class MemoryUnavailable(RuntimeError):
@@ -275,3 +295,22 @@ class OpenVikingMemoryProvider:
 
     def reindex(self, uri: str, *, recursive: bool = True) -> None:
         self._run(["reindex", uri, "--mode", "semantic_and_vectors", "--wait", "true", "--recursive", str(recursive).lower()])
+
+    def list_facts(self, company_id: str) -> list[dict[str, Any]]:
+        prefix = f"viking://user/default/memories/projects/10_startup_ai_manager/2b_facts/{company_id}"
+        facts: list[dict[str, Any]] = []
+        for item in self._items(self._run(["ls", prefix, "--recursive"])):
+            uri = item.get("uri") or item.get("path")
+            if not isinstance(uri, str) or not uri.endswith(".json"):
+                continue
+            try:
+                fact = json.loads(self.read(uri))
+            except (MemoryUnavailable, json.JSONDecodeError, TypeError):
+                # A broken individual fact must not turn a company map into a
+                # fabricated result.  The caller can mark the map degraded.
+                continue
+            if isinstance(fact, dict) and fact.get("status") == "verified":
+                fact.setdefault("fact_key", uri.rsplit("/", 1)[-1][:-5])
+                fact.setdefault("uri", uri)
+                facts.append(fact)
+        return sorted(facts, key=lambda value: str(value.get("fact_key", "")))
