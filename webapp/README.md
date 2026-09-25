@@ -22,7 +22,7 @@ python -m venv .venv
 导入弹窗通过 `/api/import-guide` 调用阿里云百炼 Token Plan。默认使用：
 
 - Base URL：`https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`
-- 模型：`qwen3.7-plus`
+- 模型：`auto`（由 Token Plan 自动选择可用模型）
 
 仅在运行环境注入 `SAM_GUIDE_MODEL_API_KEY` 后才会调用模型；密钥不得写入
 仓库、`.coze` 或日志。可选环境变量 `SAM_GUIDE_MODEL_BASE_URL` 与

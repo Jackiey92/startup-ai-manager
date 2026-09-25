@@ -37,7 +37,7 @@ percent 必须是 0 到 100 的整数。没有足够证据时明确说明不确�
 文件名猜测为已核实事实。"""
 
 TOKEN_PLAN_BASE_URL = "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
-TOKEN_PLAN_DEFAULT_MODEL = "qwen3.7-plus"
+TOKEN_PLAN_DEFAULT_MODEL = "auto"
 
 
 class ModelUnavailable(RuntimeError):
