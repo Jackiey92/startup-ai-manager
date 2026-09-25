@@ -1,22 +1,23 @@
 #!/usr/bin/env python3
-"""Stable L2 bridge for MinerU/Docling document ingestion.
+"""Stable L2 bridge for local MinerU/Docling document ingestion.
 
-This first implementation deliberately keeps the engine adapter narrow. It
-always emits the L2 manifest shape and reports ``engine_unavailable`` when no
-supported local engine is installed, rather than claiming that a file was
-parsed. Future MinerU/Docling adapters may populate pages/items without
-changing the outer contract.
+The bridge owns the engine-specific conversion and always emits the same L2
+manifest.  Engines run locally; this process never sends source bytes or full
+text to a remote service.
 """
 from __future__ import annotations
 
 import argparse
 import hashlib
+from html.parser import HTMLParser
 import importlib.util
 import json
 import mimetypes
 import os
 import subprocess
 import sys
+import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -74,14 +75,200 @@ def _select_engine() -> tuple[str, list[str]]:
     return "none", ["neither MinerU nor Docling is installed"]
 
 
+class _TableParser(HTMLParser):
+    """Small stdlib HTML table reader for MinerU's local table output."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.rows: list[list[str]] = []
+        self._row: list[str] | None = None
+        self._cell: list[str] | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "tr":
+            self._row = []
+        elif tag == "td" and self._row is not None:
+            self._cell = []
+
+    def handle_data(self, data: str) -> None:
+        if self._cell is not None:
+            self._cell.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "td" and self._row is not None and self._cell is not None:
+            self._row.append("".join(self._cell).strip())
+            self._cell = None
+        elif tag == "tr" and self._row is not None:
+            self.rows.append(self._row)
+            self._row = None
+
+
+def _text_parts(content: Any) -> list[str]:
+    if isinstance(content, str):
+        return [content.strip()] if content.strip() else []
+    if not isinstance(content, list):
+        return []
+    parts: list[str] = []
+    for item in content:
+        if isinstance(item, dict):
+            parts.extend(_text_parts(item.get("content", "")))
+    return parts
+
+
+def _mineru_cache_json(file_hash: str, tier: str | None) -> Path | None:
+    home = Path(os.environ.get("MINERU_HOME", "~/.mineru")).expanduser()
+    root = home / "doclib" / "parsed" / file_hash[:2] / file_hash
+    roots = [root / tier] if tier else list(root.iterdir()) if root.exists() else []
+    candidates = sorted((p for r in roots if r.exists() for p in r.glob("*.json")), key=lambda p: p.stat().st_mtime, reverse=True)
+    return candidates[0] if candidates else None
+
+
+def _run_mineru(source: Path, file_hash: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Run only the local MinerU server and convert its local JSON cache."""
+    tier = os.environ.get("SAM_MINERU_TIER", "basic")
+    started = time.monotonic()
+    with tempfile.TemporaryDirectory(prefix="sam-mineru-") as temp:
+        mineru_bin = str(Path(sys.executable).with_name("mineru"))
+        command = [mineru_bin, "parse", str(source), "--json", "--force", "--wait", "300", "--output", str(Path(temp) / "parse.json")]
+        env = dict(os.environ)
+        env["MINERU_REMOTE"] = "0"
+        proc = subprocess.run(command, text=True, capture_output=True, env=env, timeout=360)
+    if proc.returncode != 0:
+        raise RuntimeError(f"local MinerU parse failed: {proc.stderr[-1000:]}")
+    response: dict[str, Any] = {}
+    try:
+        response = json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        pass
+    actual_tier = str(response.get("parse", {}).get("tier") or tier)
+    parsed = _mineru_cache_json(file_hash, actual_tier)
+    if parsed is None:
+        parsed = _mineru_cache_json(file_hash, None)
+    if parsed is None:
+        raise RuntimeError("MinerU completed but no local structured cache JSON was found")
+    payload = json.loads(parsed.read_text(encoding="utf-8"))
+    pages: list[dict[str, Any]] = []
+    text_count = table_count = row_count = 0
+    for page in payload.get("pages", []):
+        page_no = int(page.get("page_idx", 0)) + 1
+        text_items: list[dict[str, Any]] = []
+        tables: list[dict[str, Any]] = []
+        for block in page.get("blocks", []):
+            block_locator = f"mineru:page/{page_no}/block/{block.get('index', 0)}"
+            bbox = block.get("bbox")
+            block_type = block.get("type")
+            if block_type == "table":
+                html = "".join(_text_parts(block.get("content", [])))
+                table_parser = _TableParser()
+                table_parser.feed(html)
+                rows = table_parser.rows
+                headers = rows[0] if rows else []
+                values = rows[1:] if len(rows) > 1 else []
+                tables.append({"headers": headers, "rows": values, "source_loc": {"file_hash": file_hash, "page_no": page_no, "bbox": bbox, "locator": block_locator}})
+                table_count += 1
+                row_count += len(values)
+                continue
+            for text in _text_parts(block.get("content", [])):
+                text_items.append({"text": text, "source_loc": {"file_hash": file_hash, "page_no": page_no, "bbox": bbox, "locator": block_locator}})
+                text_count += 1
+        pages.append({"page_no": page_no, "bbox": None, "text_items": text_items, "tables": tables})
+    summary = {"status": "parsed", "engine": "mineru", "tier": actual_tier, "text_item_count": text_count, "table_count": table_count, "table_row_count": row_count, "warnings": [], "raw_bytes_external": False, "full_text_external": False, "elapsed_ms": round((time.monotonic() - started) * 1000)}
+    return pages, summary
+
+
+def _docling_bbox(provenance: Any) -> list[float] | None:
+    bbox = getattr(provenance, "bbox", None)
+    if bbox is None:
+        return None
+    values = [getattr(bbox, name, None) for name in ("l", "t", "r", "b")]
+    if any(value is None for value in values):
+        return None
+    return [float(value) for value in values]
+
+
+def _docling_provenance(item: Any, file_hash: str, fallback: str) -> dict[str, Any]:
+    provenance = next(iter(getattr(item, "prov", []) or []), None)
+    page_no = getattr(provenance, "page_no", None) if provenance else None
+    return {
+        "file_hash": file_hash,
+        "page_no": int(page_no) if page_no is not None else None,
+        "slide_no": int(page_no) if page_no is not None else None,
+        "bbox": _docling_bbox(provenance),
+        "locator": str(getattr(item, "self_ref", None) or fallback),
+    }
+
+
+def _run_docling(source: Path, file_hash: str, fmt: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Convert a local file with Docling's Python API.
+
+    ``docling-slim`` handles Office files without Torch.  PDF conversion may
+    require the optional layout/model stack; that failure is reported plainly
+    instead of silently falling back to another engine.
+    """
+    started = time.monotonic()
+    from docling.document_converter import DocumentConverter
+
+    document = DocumentConverter().convert(str(source)).document
+    page_map: dict[int, dict[str, Any]] = {}
+
+    def page(page_no: int) -> dict[str, Any]:
+        return page_map.setdefault(page_no, {"page_no": page_no, "bbox": None, "text_items": [], "tables": []})
+
+    text_count = 0
+    for index, item in enumerate(getattr(document, "texts", []) or []):
+        loc = _docling_provenance(item, file_hash, f"docling:text/{index}")
+        text = str(getattr(item, "text", "") or "").strip()
+        if not text:
+            continue
+        text_count += 1
+        page_no = loc.get("page_no") or 1
+        page(page_no)["text_items"].append({"text": text, "source_loc": loc})
+
+    table_count = row_count = 0
+    for index, item in enumerate(getattr(document, "tables", []) or []):
+        dataframe = item.export_to_dataframe()
+        values = dataframe.fillna("").astype(str).values.tolist()
+        headers = [str(value) for value in dataframe.columns.tolist()]
+        loc = _docling_provenance(item, file_hash, f"docling:table/{index}")
+        page_no = loc.get("page_no") or 1
+        page(page_no)["tables"].append({"headers": headers, "rows": values, "source_loc": loc})
+        table_count += 1
+        row_count += len(values)
+
+    summary = {
+        "status": "parsed",
+        "engine": "docling",
+        "tier": None,
+        "text_item_count": text_count,
+        "table_count": table_count,
+        "table_row_count": row_count,
+        "warnings": ["Docling provenance is unavailable for some Office text items"] if fmt == "docx" else [],
+        "raw_bytes_external": False,
+        "full_text_external": False,
+        "elapsed_ms": round((time.monotonic() - started) * 1000),
+    }
+    return [page_map[key] for key in sorted(page_map)], summary
+
+
 def _manifest(task: dict[str, Any], source: Path) -> dict[str, Any]:
     engine, warnings = _select_engine()
     file_hash = str(task.get("file_hash") or _sha256(source))
     filename = str(task.get("filename") or source.name)
     fmt = _format(source, task)
     pages: list[dict[str, Any]] = []
-    status = "engine_unavailable" if engine == "none" or warnings else "adapter_pending"
-    summary = {
+    if engine == "mineru" and not warnings:
+        try:
+            pages, summary = _run_mineru(source, file_hash)
+        except Exception as exc:
+            summary = {"status": "parse_failed", "engine": "mineru", "text_item_count": 0, "table_count": 0, "table_row_count": 0, "warnings": [str(exc)], "raw_bytes_external": False, "full_text_external": False}
+    elif engine == "docling" and not warnings:
+        try:
+            pages, summary = _run_docling(source, file_hash, fmt)
+        except Exception as exc:
+            summary = {"status": "parse_failed", "engine": "docling", "text_item_count": 0, "table_count": 0, "table_row_count": 0, "warnings": [str(exc)], "raw_bytes_external": False, "full_text_external": False}
+    else:
+        status = "engine_unavailable" if engine == "none" or warnings else "adapter_pending"
+        summary = {
         "status": status,
         "engine": engine,
         "text_item_count": 0,
@@ -90,7 +277,7 @@ def _manifest(task: dict[str, Any], source: Path) -> dict[str, Any]:
         "warnings": warnings or [f"{engine} adapter is not enabled in this contract-only bridge"],
         "raw_bytes_external": False,
         "full_text_external": False,
-    }
+        }
     return {
         "source_id": str(task.get("source_id") or file_hash),
         "filename": filename,

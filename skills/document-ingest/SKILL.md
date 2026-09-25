@@ -28,9 +28,11 @@ warning, not permission to invent one.
 
 The bridge selects `SAM_INGEST_ENGINE` (`auto`, `mineru`, or `docling`). The
 selected engine is behind the bridge and may be replaced without changing the
-application layer. `auto` prefers MinerU, then Docling. The current repository
-contains only the bridge contract; install and real-sample verification of
-either engine are explicitly pending.
+application layer. `auto` prefers MinerU, then Docling. The local POC has
+verified MinerU 4.0.7 on CPU with a basic ONNX tier for PDF, DOCX, XLSX and
+PPTX, and Docling slim 2.130.0 for Office. Docling PDF requires its optional
+Torch/OCR stack and is reported as `parse_failed` when that stack is absent;
+the bridge must not pretend that this path succeeded.
 
 ## Safety and memory boundary
 

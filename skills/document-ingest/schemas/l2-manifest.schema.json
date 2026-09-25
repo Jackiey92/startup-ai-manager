@@ -34,9 +34,11 @@
       "properties": {
         "status": {"type": "string"},
         "engine": {"type": "string"},
+        "tier": {"type": ["string", "null"]},
         "text_item_count": {"type": "integer", "minimum": 0},
         "table_count": {"type": "integer", "minimum": 0},
         "table_row_count": {"type": "integer", "minimum": 0},
+        "elapsed_ms": {"type": ["integer", "null"], "minimum": 0},
         "warnings": {"type": "array", "items": {"type": "string"}},
         "raw_bytes_external": {"type": "boolean", "const": false},
         "full_text_external": {"type": "boolean", "const": false}
