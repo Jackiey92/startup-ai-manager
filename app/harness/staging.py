@@ -26,6 +26,10 @@ class StagingStore:
         return c(self._db_path) if self._db_path else c()
 
     def save_parse(self, result: ParseResult) -> int:
+        return self.save_manifest(result.to_dict())
+
+    def save_manifest(self, manifest: dict) -> int:
+        """Store an engine-neutral L2 manifest without interpreting it."""
         with self._conn() as conn:
             conn.execute(
                 "CREATE TABLE IF NOT EXISTS parse_staging ("
@@ -40,9 +44,9 @@ class StagingStore:
                 "INSERT INTO parse_staging(file_hash,format,payload,status,created_at)"
                 " VALUES (?,?,?,?,?)",
                 (
-                    result.file_hash,
-                    result.format,
-                    json.dumps(result.to_dict(), ensure_ascii=False),
+                    manifest["file_hash"],
+                    manifest["format"],
+                    json.dumps(manifest, ensure_ascii=False),
                     "pending",
                     _now(),
                 ),

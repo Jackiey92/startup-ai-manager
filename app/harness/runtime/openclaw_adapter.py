@@ -45,7 +45,12 @@ class OpenClawAdapter(RuntimeProvider):
         if not out_path.exists():
             raise RuntimeError(f"OpenClaw produced no output at {out_path}")
 
-        result = _result_from_dict(json.loads(out_path.read_text(encoding="utf-8")))
+        payload = json.loads(out_path.read_text(encoding="utf-8"))
+        # document-ingest emits the L2 manifest directly.  Keep it lossless in
+        # staging; legacy ParseResult payloads remain supported for migration.
+        if isinstance(payload, dict) and "parse_summary" in payload and "pages" in payload:
+            return self.staging.save_manifest(payload)
+        result = _result_from_dict(payload)
         return self.staging.save_parse(result)
 
     def run_agent_message(self, message: str, *, timeout: int = 600) -> str:

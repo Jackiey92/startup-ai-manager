@@ -19,6 +19,8 @@ from app.storage import SourceFileStore
 from app.db.database import init_db as init_core_db
 from app.guidance import ImportGuideService, ModelUnavailable
 from app.harness.staging import StagingStore
+from app.memory import ExtractionMemoryService
+from app.ports import MemoryUnavailable
 from app.providers import memory_provider, model_provider, runtime_provider
 from app.runtime_config import RuntimeConfig
 from markdown_render import render_markdown
@@ -152,16 +154,29 @@ def api_upload():
     file_hash = stored.file_hash
 
     harness_format = "xlsx" if file_format == "excel" else file_format
-    adapter = runtime_provider(RUNTIME_CONFIG, StagingStore(db_path=MAIN_DB))
+    staging = StagingStore(db_path=MAIN_DB)
+    adapter = runtime_provider(RUNTIME_CONFIG, staging)
     parse_status = "not_supported"
+    memory_status = "not_attempted"
     if adapter.supports(harness_format):
         try:
-            adapter.run_parse(file_hash, harness_format, timeout=600)
+            staging_id = adapter.run_parse(file_hash, harness_format, timeout=600)
             parse_status = "parsed"
+            staged = staging.get(staging_id)
+            payload = staged.get("payload", {})
+            if isinstance(payload, dict) and "parse_summary" in payload:
+                company_id = os.environ.get("SAM_COMPANY_ID", "default")
+                ExtractionMemoryService(app.extensions["sam_memory_provider"]).ingest(company_id, payload)
+                memory_status = "stored_2a"
+            else:
+                memory_status = "awaiting_l2_manifest"
+        except MemoryUnavailable:
+            memory_status = "unavailable"
         except (RuntimeError, OSError, subprocess.SubprocessError):
             # The immutable original is still stored. A failed optional parser
             # must not turn a completed upload into a false client-side failure.
             parse_status = "pending_runtime"
+            memory_status = "pending_runtime"
 
     response = {
         "file_hash": file_hash,
@@ -169,6 +184,7 @@ def api_upload():
         "format": file_format,
         "size": len(blob),
         "parse_status": parse_status,
+        "memory_status": memory_status,
     }
     try:
         response["guide"] = import_guide(event="upload", uploaded_file_hash=file_hash)
