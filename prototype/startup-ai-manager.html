@@ -266,6 +266,46 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
 /* 表格横滑容器（桌面端不滚动） */
 .table-wrap{width:100%;}
 
+/* ============ 主动式资料导入向导 ============ */
+.import-mask{position:fixed;inset:0;background:rgba(25,29,45,.48);backdrop-filter:blur(3px);z-index:180;display:none;align-items:center;justify-content:center;padding:20px;}
+.import-mask.open{display:flex;animation:in .18s ease;}
+.import-wizard{width:min(940px,100%);max-height:min(720px,calc(100dvh - 40px));overflow:hidden;background:#fff;border:1px solid rgba(255,255,255,.65);border-radius:18px;box-shadow:0 24px 80px rgba(20,28,60,.28);display:flex;flex-direction:column;position:relative;}
+.import-head{display:flex;align-items:flex-start;gap:16px;padding:22px 26px 16px;border-bottom:1px solid var(--border-2);flex:none;}
+.import-eyebrow{font-size:11px;color:var(--primary);font-weight:700;letter-spacing:.6px;margin-bottom:4px;}
+.import-head h2{font-size:20px;letter-spacing:-.3px;}
+.import-head p{font-size:12px;color:var(--t3);margin-top:5px;}
+.import-close{width:32px;height:32px;border:1px solid var(--border);border-radius:9px;background:#fff;color:var(--t2);display:grid;place-items:center;cursor:pointer;margin-left:auto;flex:none;}
+.import-close:hover{border-color:#c4cdff;color:var(--primary);}
+.import-progress{display:flex;align-items:center;gap:14px;padding:14px 26px;border-bottom:1px solid var(--border-2);background:#fbfcff;flex:none;}
+.import-ring{width:50px;height:50px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(var(--primary) calc(var(--progress,0) * 1%),#e9ecf5 0);position:relative;flex:none;}
+.import-ring::after{content:"";position:absolute;inset:5px;border-radius:50%;background:#fbfcff;}
+.import-ring b{position:relative;z-index:1;font-size:12px;color:var(--primary);}
+.import-progress-txt{min-width:0;}
+.import-progress-txt b{font-size:13px;display:block;}
+.import-progress-txt span{font-size:11.5px;color:var(--t3);display:block;margin-top:3px;}
+.import-progress-bar{height:6px;flex:1;min-width:90px;background:#e9ecf5;border-radius:9px;overflow:hidden;}
+.import-progress-bar i{display:block;width:0;height:100%;border-radius:9px;background:var(--grad);transition:width .25s ease;}
+.import-body{display:grid;grid-template-columns:238px 1fr;min-height:0;flex:1;}
+.import-steps{padding:18px 13px 20px 18px;border-right:1px solid var(--border-2);overflow-y:auto;background:#fcfcfe;}
+.import-step{width:100%;display:flex;align-items:flex-start;gap:10px;border:0;background:transparent;border-radius:10px;padding:10px 9px;text-align:left;font-family:inherit;cursor:pointer;color:var(--t2);}
+.import-step:hover{background:#f1f3ff;}
+.import-step.current{background:#eef1ff;color:var(--primary);}
+.import-step.done{color:var(--green);}
+.import-step-num{width:24px;height:24px;border:1px solid #d8dce8;border-radius:50%;display:grid;place-items:center;flex:none;font-size:11px;font-weight:700;background:#fff;color:var(--t3);}
+.import-step.current .import-step-num{border-color:var(--primary);background:var(--primary);color:#fff;}
+.import-step.done .import-step-num{border-color:#b8e8c5;background:#e8f7eb;color:var(--green);}
+.import-step.done .import-step-num::before{content:"✓";}.import-step.done .import-step-num{font-size:0;}
+.import-step-copy{min-width:0;}.import-step-copy b{font-size:12.5px;display:block;line-height:1.3;}.import-step-copy span{font-size:10.5px;display:block;margin-top:3px;color:var(--t3);line-height:1.35;}.import-step.current .import-step-copy span{color:#7181d9;}
+.import-main{padding:24px 28px 20px;overflow-y:auto;min-width:0;}
+.import-main::-webkit-scrollbar{width:7px;}.import-main::-webkit-scrollbar-thumb{background:#d7d9de;border-radius:8px;}
+.import-step-kicker{font-size:11px;color:var(--t3);font-weight:600;}.import-main h3{font-size:21px;margin-top:4px;letter-spacing:-.3px;}.import-main .step-note{font-size:12px;color:var(--t3);margin-top:5px;}
+.import-reasons{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin:19px 0 16px;}.import-reason{border:1px solid var(--border);border-radius:11px;padding:13px 14px;background:#fff;}.import-reason .label{font-size:11px;font-weight:700;color:var(--primary);display:flex;align-items:center;gap:6px;}.import-reason .label::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;}.import-reason p{font-size:12.5px;line-height:1.55;color:var(--t2);margin-top:6px;}
+.import-drop{border:1px dashed #b9c4ff;border-radius:13px;background:#f8f9ff;padding:20px;text-align:center;transition:.15s;}.import-drop.drag{border-color:var(--primary);background:#eef1ff;}.import-drop strong{font-size:13px;display:block;}.import-drop p{font-size:11.5px;color:var(--t3);margin-top:5px;}.import-pick{margin-top:12px;border:1px solid var(--primary);background:#fff;color:var(--primary);border-radius:8px;padding:8px 15px;font:600 12px var(--fs);cursor:pointer;}.import-pick:hover{background:#eef1ff;}
+.import-files{display:flex;flex-direction:column;gap:7px;margin-top:12px;}.import-file{display:flex;align-items:center;gap:9px;border:1px solid var(--border-2);border-radius:8px;padding:8px 10px;font-size:12px;}.import-file .name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.import-file .status{margin-left:auto;color:var(--t3);font-size:11px;white-space:nowrap;}.import-file.ok .status{color:var(--green);}.import-file.err .status{color:var(--red);}
+.import-foot{display:flex;align-items:center;gap:9px;margin-top:19px;padding-top:15px;border-top:1px solid var(--border-2);}.import-foot .hint{font-size:11px;color:var(--t3);margin-right:auto;}.import-nav{height:34px;padding:0 14px;border-radius:8px;border:1px solid var(--border);background:#fff;color:var(--t2);font:600 12px var(--fs);cursor:pointer;}.import-nav:hover:not(:disabled){border-color:#c4cdff;color:var(--primary);}.import-nav.primary{border-color:var(--primary);background:var(--primary);color:#fff;}.import-nav:disabled{opacity:.45;cursor:not-allowed;}
+.import-resume{font-size:11px;color:var(--t3);margin-top:10px;}
+.import-chat-float{position:absolute;right:22px;bottom:22px;z-index:2;display:flex;align-items:center;gap:7px;border:1px solid #dbe2ff;background:#fff;color:var(--primary);border-radius:99px;padding:8px 12px;box-shadow:0 8px 24px rgba(77,107,254,.18);font:600 12px var(--fs);cursor:pointer;}.import-chat-float:hover{background:#eef1ff;}
+
 /* ============ 企业成长信息 ============ */
 .growth-card{margin-top:16px;}
 .growth-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:13px;}
@@ -317,6 +357,18 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
   .ext-grid{grid-template-columns:1fr 1fr;}
   .drive-stats{grid-template-columns:1fr 1fr;}
   .cal-wrap{grid-template-columns:1fr;}
+
+  /* ---- 导入向导：手机端改为上下结构 ---- */
+  .import-mask{padding:0;align-items:stretch;}
+  .import-wizard{max-height:none;height:100dvh;border-radius:0;border:0;}
+  .import-head{padding:16px 15px 13px;}
+  .import-head h2{font-size:18px;}.import-head p{font-size:11px;}
+  .import-progress{padding:11px 15px;gap:10px;}.import-ring{width:42px;height:42px;}.import-ring::after{inset:4px;}.import-progress-bar{min-width:56px;}
+  .import-body{display:flex;flex-direction:column;}
+  .import-steps{display:flex;gap:5px;padding:10px 12px 9px;border-right:0;border-bottom:1px solid var(--border-2);overflow-x:auto;overflow-y:hidden;flex:none;}
+  .import-step{width:132px;min-width:132px;padding:7px 6px;gap:7px;}.import-step-copy b{font-size:11px;}.import-step-copy span{font-size:9.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.import-step-num{width:21px;height:21px;font-size:10px;}
+  .import-main{padding:17px 14px calc(18px + env(safe-area-inset-bottom));}.import-main h3{font-size:19px;}.import-reasons{grid-template-columns:1fr;gap:8px;margin:14px 0 12px;}.import-reason{padding:11px 12px;}.import-reason p{font-size:12px;}.import-drop{padding:18px 12px;}.import-foot{margin-top:14px;}.import-foot .hint{font-size:10px;}.import-nav{padding:0 11px;}
+  .import-chat-float{right:13px;bottom:calc(13px + env(safe-area-inset-bottom));}
 }
 
 /* ---- 手机（≤760px）：抽屉导航 + 全单列 ---- */
@@ -828,7 +880,7 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
       <div class="gsearch"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>搜索企业资料、指标、文件…</div>
       <span class="sp"></span>
       <button class="iconbtn" title="通知"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg></button>
-      <button class="tbtn pri"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>导入资料</button>
+      <button class="tbtn pri" id="importWizardBtn"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>导入资料</button>
     </header>
 
     <div class="content">
@@ -1471,9 +1523,8 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
           </div>
           <span class="sp"></span>
           <button class="drive-btn" id="driveUploadBtn"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v4M17 8l-5-5-5 5M12 3v12"/></svg><span id="driveUploadLabel">上传</span></button>
-          <input type="file" id="driveFileInput" accept=".pdf,.xlsx,.xlsm,.xls" style="display:none">
           <button class="drive-btn">新建文件夹</button>
-          <button class="drive-btn primary" data-go="chat"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg>导入 AI 分析</button>
+          <button class="drive-btn primary" id="driveWizardBtn"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg>导入 AI 分析</button>
         </div>
         <div class="drive-files">
           <div class="table-wrap"><table><thead><tr><th>名称</th><th>大小</th><th>更新时间</th><th>来源</th><th class="b">操作</th></tr></thead><tbody id="driveFiles"></tbody></table></div>
@@ -1484,6 +1535,42 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
           <span class="drive-conn-chip" data-go="ext">＋ 接入更多存储 / 协作来源</span>
         </div>
       </div>
+    </div>
+
+    <!-- ============ 主动式资料导入向导 ============ -->
+    <div class="import-mask" id="importMask" aria-hidden="true">
+      <section class="import-wizard" role="dialog" aria-modal="true" aria-labelledby="importTitle">
+        <div class="import-head">
+          <div><div class="import-eyebrow">STARTUP AI MANAGER · ONBOARDING</div><h2 id="importTitle">把企业资料变成可分析的事实</h2><p>按板块逐步导入，随时可暂停；下次回来会保留当前进度。</p></div>
+          <button class="import-close" id="importClose" type="button" aria-label="关闭导入向导">×</button>
+        </div>
+        <div class="import-progress">
+          <div class="import-ring" id="importRing" style="--progress:0"><b id="importRingText">0%</b></div>
+          <div class="import-progress-txt"><b id="importProgressTitle">资料完整度</b><span id="importProgressSub">0 / 6 个板块已完成 · 必备资料尚未齐备</span></div>
+          <div class="import-progress-bar"><i id="importProgressBar"></i></div>
+        </div>
+        <div class="import-body">
+          <nav class="import-steps" id="importSteps" aria-label="资料导入步骤"></nav>
+          <div class="import-main">
+            <div class="import-step-kicker" id="importStepKicker">STEP 1 / 6 · 必备</div>
+            <h3 id="importStepTitle">公司基本资料</h3>
+            <p class="step-note" id="importStepNote">营业执照、公司章程、股权结构</p>
+            <div class="import-reasons">
+              <div class="import-reason"><div class="label">为什么要传</div><p id="importWhy"></p></div>
+              <div class="import-reason"><div class="label">传完你能得到什么</div><p id="importGain"></p></div>
+            </div>
+            <div class="import-drop" id="importDrop">
+              <strong>把本步骤资料拖到这里</strong><p>当前支持 PDF、Excel；Word、PPT 解析接入中</p>
+              <button class="import-pick" id="importPick" type="button">选择文件</button>
+              <input type="file" id="importFileInput" multiple accept=".pdf,.xls,.xlsx,.xlsm" hidden>
+            </div>
+            <div class="import-files" id="importFiles"></div>
+            <div class="import-resume" id="importResume">进度自动保存在本机浏览器，仅用于这个原型。</div>
+            <div class="import-foot"><span class="hint" id="importFootHint">完成上传后即可进入下一步</span><button class="import-nav" id="importPrev" type="button">上一步</button><button class="import-nav primary" id="importNext" type="button">下一步</button></div>
+          </div>
+        </div>
+        <button class="import-chat-float" id="importChatFloat" type="button"><span>✦</span>需要帮忙？问 AI</button>
+      </section>
     </div>
 
     <!-- 消息关注设置弹窗 -->
@@ -1823,10 +1910,7 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
   }).join('');
 
   /* ========== 真实上传：接入 OpenClaw harness ========== */
-  var HARNESS_API='http://127.0.0.1:5000/api/upload';
-  var uploadBtn=document.getElementById('driveUploadBtn'),
-      fileInput=document.getElementById('driveFileInput'),
-      uploadLabel=document.getElementById('driveUploadLabel');
+  var HARNESS_API='/api/upload';
 
   function fmtSize(bytes){
     if(bytes<1024)return bytes+' B';
@@ -1846,24 +1930,77 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
     tb.insertBefore(tr,tb.firstChild);
   }
 
-  uploadBtn.addEventListener('click',function(){fileInput.click();});
-  fileInput.addEventListener('change',function(){
-    var file=fileInput.files[0];if(!file)return;
+  /* ---------- 主动式资料导入向导 ---------- */
+  var IMPORT_KEY='sam-import-progress-v1', importMask=document.getElementById('importMask'),
+      importInput=document.getElementById('importFileInput'), importFiles=document.getElementById('importFiles'),
+      importStepsEl=document.getElementById('importSteps'), importDrop=document.getElementById('importDrop'),
+      importCurrent=0;
+  var IMPORT_STEPS=[
+    {title:'公司基本资料',short:'营业执照 · 章程 · 股权',level:'必备',why:'先确认企业主体、股东和治理结构，后续所有结论才能对应到正确的公司。',gain:'自动建立企业基本档案、股权结构与关键主体关系图。'},
+    {title:'财务',short:'报表 · 流水',level:'必备',why:'财务资料让系统看见现金、负债和收入的真实变化，而不是只看业务描述。',gain:'自动算出现金跑道、月度诊断和主要经营风险。'},
+    {title:'销售与客户',short:'合同 · 订单 · 客户名单',level:'必备',why:'销售资料能把收入来源、客户集中度和订单兑现情况串起来。',gain:'得到销售漏斗、回款风险和重点客户跟进清单。'},
+    {title:'人员',short:'花名册 · 薪酬 · 社保',level:'建议',why:'人员成本和关键岗位决定现金消耗与交付能力，补齐后诊断会更准确。',gain:'得到人力成本结构、关键岗位缺口和团队稳定性提示。'},
+    {title:'研发',short:'专利 · 项目资料',level:'按需',why:'研发资料适合需要评估技术资产、项目进展或知识产权时上传。',gain:'得到研发里程碑、知识产权盘点和项目风险提示。'},
+    {title:'法务 / 市场材料',short:'协议 · 资质 · 市场资料',level:'按需',why:'法务与市场材料用于补充合同约束、合规风险和市场判断。',gain:'得到协议要点、合规待办和市场机会摘要。'}
+  ];
+  function loadImportState(){
+    var blank={step:0,done:[false,false,false,false,false,false],files:[[],[],[],[],[],[]]};
+    try{var saved=JSON.parse(localStorage.getItem(IMPORT_KEY)||'null');if(saved&&Array.isArray(saved.done)&&Array.isArray(saved.files))return saved;}catch(e){}
+    return blank;
+  }
+  var importState=loadImportState();
+  function saveImportState(){try{localStorage.setItem(IMPORT_KEY,JSON.stringify(importState));}catch(e){}}
+  function requiredDone(){return importState.done[0]&&importState.done[1]&&importState.done[2];}
+  function renderImportSteps(){
+    importStepsEl.innerHTML=IMPORT_STEPS.map(function(s,i){return '<button class="import-step '+(i===importCurrent?'current ':'')+(importState.done[i]?'done':'')+'" type="button" data-import-step="'+i+'"><span class="import-step-num">'+(i+1)+'</span><span class="import-step-copy"><b>'+s.title+'</b><span>'+s.level+' · '+s.short+'</span></span></button>';}).join('');
+    importStepsEl.querySelectorAll('[data-import-step]').forEach(function(el){el.addEventListener('click',function(){importCurrent=Number(el.dataset.importStep);importState.step=importCurrent;saveImportState();renderImport();});});
+  }
+  function renderImportProgress(){
+    var done=importState.done.filter(Boolean).length,pct=Math.round(done/IMPORT_STEPS.length*100),required=requiredDone();
+    document.getElementById('importRing').style.setProperty('--progress',pct);document.getElementById('importRingText').textContent=pct+'%';
+    document.getElementById('importProgressBar').style.width=pct+'%';
+    document.getElementById('importProgressSub').textContent=done+' / '+IMPORT_STEPS.length+' 个板块已完成 · '+(required?'必备资料已齐备，可进入核心分析':'必备资料尚未齐备');
+  }
+  function renderImportFiles(){
+    var list=importState.files[importCurrent]||[];
+    importFiles.innerHTML=list.map(function(f){return '<div class="import-file '+(f.ok?'ok':'err')+'"><span>📄</span><span class="name">'+f.name+'</span><span class="status">'+(f.ok?'已上传':(f.error||'上传失败'))+'</span></div>';}).join('');
+  }
+  function renderImport(){
+    var s=IMPORT_STEPS[importCurrent],done=!!importState.done[importCurrent];
+    renderImportSteps();renderImportProgress();
+    document.getElementById('importStepKicker').textContent='STEP '+(importCurrent+1)+' / '+IMPORT_STEPS.length+' · '+s.level;
+    document.getElementById('importStepTitle').textContent=s.title;document.getElementById('importStepNote').textContent=s.short;
+    document.getElementById('importWhy').textContent=s.why;document.getElementById('importGain').textContent=s.gain;
+    document.getElementById('importFootHint').textContent=done?'本步骤已完成，可继续补充或进入下一步':'完成上传后即可进入下一步';
+    document.getElementById('importPrev').disabled=importCurrent===0;
+    var next=document.getElementById('importNext');next.textContent=importCurrent===2&&requiredDone()?'进入核心分析':(importCurrent===IMPORT_STEPS.length-1?'完成导入':'下一步');
+    renderImportFiles();
+  }
+  function openImportWizard(){importState=loadImportState();importCurrent=Math.min(Number(importState.step)||0,IMPORT_STEPS.length-1);importMask.classList.add('open');importMask.setAttribute('aria-hidden','false');renderImport();}
+  function closeImportWizard(){importMask.classList.remove('open');importMask.setAttribute('aria-hidden','true');saveImportState();}
+  function uploadImportFile(file){
     var fd=new FormData();fd.append('file',file);
-    uploadBtn.disabled=true;uploadLabel.textContent='解析中…';
-    fetch(HARNESS_API,{method:'POST',body:fd})
-      .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
-      .then(function(res){
-        prependFile({n:res.original_name,s:fmtSize(res.size),d:nowMMDD(),src:'本地上传',f:false});
-        uploadLabel.textContent='上传';
-        fileInput.value='';
-      })
-      .catch(function(){
-        uploadLabel.textContent='上传失败';
-        setTimeout(function(){uploadLabel.textContent='上传';},1800);
-      })
-      .finally(function(){uploadBtn.disabled=false;});
+    var entry={name:file.name,ok:false,error:'上传中…'};importState.files[importCurrent].push(entry);renderImportFiles();
+    return fetch(HARNESS_API,{method:'POST',body:fd}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(res){
+      entry.ok=true;entry.error='';importState.done[importCurrent]=true;prependFile({n:res.original_name,s:fmtSize(res.size),d:nowMMDD(),src:'本地上传',f:false});
+    }).catch(function(err){entry.error=err.message||'上传失败';}).finally(function(){saveImportState();renderImport();});
+  }
+  function handleImportFiles(files){if(!files||!files.length)return;Promise.all(Array.prototype.slice.call(files).map(uploadImportFile));importInput.value='';}
+  document.getElementById('importWizardBtn').addEventListener('click',openImportWizard);
+  document.getElementById('driveUploadBtn').addEventListener('click',openImportWizard);
+  document.getElementById('driveWizardBtn').addEventListener('click',openImportWizard);
+  document.getElementById('importClose').addEventListener('click',closeImportWizard);
+  document.getElementById('importChatFloat').addEventListener('click',function(){closeImportWizard();go('chat');});
+  document.getElementById('importPick').addEventListener('click',function(){importInput.click();});
+  importInput.addEventListener('change',function(){handleImportFiles(importInput.files);});
+  ['dragenter','dragover'].forEach(function(evt){importDrop.addEventListener(evt,function(e){e.preventDefault();importDrop.classList.add('drag');});});
+  ['dragleave','drop'].forEach(function(evt){importDrop.addEventListener(evt,function(e){e.preventDefault();importDrop.classList.remove('drag');if(evt==='drop')handleImportFiles(e.dataTransfer.files);});});
+  document.getElementById('importPrev').addEventListener('click',function(){if(importCurrent>0){importCurrent--;importState.step=importCurrent;saveImportState();renderImport();}});
+  document.getElementById('importNext').addEventListener('click',function(){
+    if(importCurrent===2&&!requiredDone()){document.getElementById('importFootHint').textContent='请先完成前三个必备板块';return;}
+    if(importCurrent<IMPORT_STEPS.length-1){importCurrent++;importState.step=importCurrent;saveImportState();renderImport();}else{closeImportWizard();}
   });
+  importMask.addEventListener('click',function(e){if(e.target===importMask)closeImportWizard();});
 
   /* ========== 消息关注 ========== */
   var NEWS=[

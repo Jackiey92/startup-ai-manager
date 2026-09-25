@@ -30,6 +30,7 @@ data/sales_app/
 *.sqlite-*
 
 # OpenClaw runtime
+.sam-isolated/
 harness-openclaw/state/openclaw.json
 harness-openclaw/state/agents/
 harness-openclaw/state/state/

@@ -1,29 +1,29 @@
-"""Sales import web app: upload -> classify/store -> parse -> view."""
+"""Startup AI Manager prototype and document-import APIs."""
 from __future__ import annotations
 
-import hashlib
 import json
+import os
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-from flask import Flask, render_template, request, redirect, url_for, abort
+from flask import Flask, abort, render_template, request, send_file
 
 import sys as _sys
 BASE_DIR = Path(__file__).resolve().parent
 _PROJECT_ROOT = BASE_DIR.parent
 _sys.path.insert(0, str(_PROJECT_ROOT))
 
-from classify import classify
 from app.storage import SourceFileStore
 from app.harness.staging import StagingStore
 from app.harness.runtime.openclaw_adapter import OpenClawAdapter
 from markdown_render import render_markdown
 import markdown as md_lib
 
-DATA_DIR = BASE_DIR.parent / "data" / "sales_app"
-OBJECTS_DIR = BASE_DIR.parent / "data" / "objects"
-MAIN_DB = BASE_DIR.parent / "data" / "app.db"
+DATA_ROOT = Path(os.environ.get("SAM_DATA_ROOT", str(BASE_DIR.parent / "data")))
+DATA_DIR = DATA_ROOT / "sales_app"
+OBJECTS_DIR = DATA_ROOT / "objects"
+MAIN_DB = DATA_ROOT / "app.db"
 DB_PATH = DATA_DIR / "app.db"
 
 OBJECTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -79,74 +79,11 @@ def detect_format(filename: str) -> str:
 
 
 @app.route("/")
-def index():
-    with db() as conn:
-        rows = conn.execute(
-            "SELECT id,original_name,file_format,size,module,doc_type,uploaded_at"
-            " FROM files ORDER BY id DESC"
-        ).fetchall()
-    return render_template("index.html", files=rows)
-
-
-@app.route("/upload", methods=["POST"])
-def upload():
-    upload = request.files.get("file")
-    if upload is None or not upload.filename:
-        return redirect(url_for("index"))
-
-    blob = upload.read()
-    file_format = detect_format(upload.filename)
-    if file_format == "unknown":
-        return "仅支持 PDF / Excel 文件", 400
-
-    cls = classify(upload.filename)
-
-    mime = "application/pdf" if file_format == "pdf" else None
-    store = SourceFileStore(objects_path=OBJECTS_DIR, db_path=MAIN_DB)
-    stored = store.put_bytes(
-        blob,
-        original_name=upload.filename,
-        mime_type=mime,
-        origin_zone="internal",
-    )
-    file_hash = stored.file_hash
-    rel_path = stored.storage_path
-
-    harness_format = "xlsx" if file_format == "excel" else file_format
-    structured = {"format": file_format}
-    staging_id = None
-    adapter = OpenClawAdapter(
-        StagingStore(db_path=MAIN_DB),
-        objects_dir=OBJECTS_DIR,
-        db_path=MAIN_DB,
-    )
-    if adapter.supports(harness_format):
-        staging_id = adapter.run_parse(file_hash, harness_format, timeout=600)
-        structured = StagingStore(db_path=MAIN_DB).get(staging_id)["payload"]
-
-    with db() as conn:
-        conn.execute(
-            "INSERT OR IGNORE INTO files(file_hash,original_name,file_format,size,"
-            "storage_path,module,doc_type,confidence,structured,uploaded_at)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?)",
-            (
-                file_hash,
-                upload.filename,
-                file_format,
-                len(blob),
-                rel_path,
-                cls.module,
-                cls.doc_type,
-                cls.confidence,
-                json.dumps(structured, ensure_ascii=False),
-                now(),
-            ),
-        )
-        conn.commit()
-        row = conn.execute(
-            "SELECT id FROM files WHERE file_hash=?", (file_hash,)
-        ).fetchone()
-    return redirect(url_for("detail", file_id=row["id"]))
+@app.route("/prototype")
+def prototype_page():
+    """Serve the GitHub prototype as the single UI shell for every module."""
+    proto = BASE_DIR.parent / "prototype" / "startup-ai-manager.html"
+    return send_file(str(proto))
 
 
 @app.route("/api/chat", methods=["POST", "OPTIONS"])
@@ -186,13 +123,6 @@ def api_chat():
         for pl in data.get("payloads", []):
             answer += pl.get("text", "")
     return {"message": answer, "model": "doubao-ark"}
-
-
-@app.route("/prototype")
-def prototype_page():
-    from flask import send_file
-    proto = BASE_DIR.parent / "startup-ai-manager" / "prototype" / "startup-ai-manager.html"
-    return send_file(str(proto))
 
 
 @app.route("/api/upload", methods=["POST", "OPTIONS"])
@@ -250,6 +180,10 @@ def detail(file_id):
 
 
 if __name__ == "__main__":
+    import os
     init_db()
-    app.run(host="127.0.0.1", port=5000, debug=False)
-
+    app.run(
+        host=os.environ.get("HOST", "0.0.0.0"),
+        port=int(os.environ.get("PORT", "5000")),
+        debug=False,
+    )
