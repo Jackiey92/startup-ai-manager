@@ -8,6 +8,10 @@ from __future__ import annotations
 
 from pathlib import Path
 import json
+import os
+import subprocess
+import tempfile
+from collections.abc import Callable, Sequence
 from typing import Any, Protocol
 
 
@@ -119,42 +123,134 @@ class MemoryUnavailable(RuntimeError):
 
 
 class OpenVikingMemoryProvider:
-    """Explicit OV seam; transport is intentionally supplied by a later adapter.
+    """Thin adapter over the official ``ov`` client.
 
-    Keeping this class inert prevents accidental network calls while preserving
-    a stable provider shape for the real OpenViking client.  The endpoint and
-    key are configuration facts, never hard-coded in application code.
+    The OpenViking CLI is the supported transport boundary here.  It owns the
+    HTTP API details and its normal config discovery, while this class exposes
+    only the provider contract to SAM.  Optional endpoint/key overrides are
+    injected as environment variables; values are never logged or embedded in
+    the repository.  Tests can inject ``runner`` without making network calls.
     """
 
-    def __init__(self, *, base_url: str | None = None, api_key: str | None = None):
+    def __init__(
+        self,
+        *,
+        base_url: str | None = None,
+        api_key: str | None = None,
+        ov_bin: str = "ov",
+        runner: Callable[..., subprocess.CompletedProcess[str]] | None = None,
+    ):
         self.base_url = base_url
         self.api_key = api_key
+        self.ov_bin = ov_bin
+        self._runner = runner or subprocess.run
 
-    def _unavailable(self) -> None:
-        raise MemoryUnavailable("OpenViking transport adapter is not installed")
+    def _env(self) -> dict[str, str]:
+        env = os.environ.copy()
+        if self.base_url:
+            # These are the names supported by current OV CLI releases.  The
+            # CLI config remains the fallback when no override is injected.
+            env["OPENVIKING_URL"] = self.base_url
+            env["VIKINGBOT_ENDPOINT"] = self.base_url
+        if self.api_key:
+            env["OPENVIKING_API_KEY"] = self.api_key
+            env["VIKINGBOT_API_KEY"] = self.api_key
+        return env
+
+    @staticmethod
+    def _safe_error(text: str) -> str:
+        # Never echo an accidental credential-like value from a CLI error.
+        for marker in ("api_key=", "api-key=", "Authorization:", "Bearer "):
+            if marker in text:
+                text = text.split(marker, 1)[0] + marker + "<redacted>"
+        return text[-1000:]
+
+    def _run(self, args: Sequence[str]) -> Any:
+        command = [self.ov_bin, *args, "-o", "json", "-c", "true"]
+        try:
+            completed = self._runner(
+                command,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                env=self._env(),
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise MemoryUnavailable(f"OpenViking client unavailable: {exc}") from exc
+        if completed.returncode != 0:
+            detail = self._safe_error((completed.stderr or completed.stdout or "").strip())
+            raise MemoryUnavailable(f"OpenViking request failed: {detail or 'unknown error'}")
+        raw = (completed.stdout or "").strip()
+        if not raw:
+            return None
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            return raw
+
+    @staticmethod
+    def _items(payload: Any) -> list[dict[str, Any]]:
+        if isinstance(payload, list):
+            return [item for item in payload if isinstance(item, dict)]
+        if isinstance(payload, dict):
+            for key in ("results", "items", "nodes", "data"):
+                value = payload.get(key)
+                if isinstance(value, list):
+                    return [item for item in value if isinstance(item, dict)]
+        return []
 
     def put(self, uri: str, content: str, *, metadata: dict[str, Any] | None = None) -> None:
-        self._unavailable()
+        tags = None
+        if metadata:
+            tags = ",".join(f"{key}={value}" for key, value in metadata.items())
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".md") as handle:
+            handle.write(content)
+            handle.flush()
+            args = ["write", uri, "--from-file", handle.name, "--wait", "--processing-mode", "semantic_and_vectors"]
+            if tags:
+                args.extend(["--tags", tags])
+            self._run(args)
 
     def read(self, uri: str) -> str:
-        self._unavailable()
-        return ""
+        payload = self._run(["read", uri])
+        if isinstance(payload, str):
+            return payload
+        if isinstance(payload, dict):
+            for key in ("content", "text", "data"):
+                if isinstance(payload.get(key), str):
+                    return payload[key]
+        raise MemoryUnavailable(f"OpenViking read returned no content for {uri}")
 
     def query(self, *, prefix: str, query: str | None = None) -> list[dict[str, Any]]:
-        self._unavailable()
-        return []
+        if query:
+            return self._items(self._run(["find", query, "--uri", prefix, "--read-content"]))
+        return self._items(self._run(["ls", prefix, "--recursive"]))
 
     def search(self, query: str, *, prefix: str = "viking://") -> list[dict[str, Any]]:
-        self._unavailable()
-        return []
+        return self._items(self._run(["find", query, "--uri", prefix, "--read-content"]))
 
     def put_fact(self, company_id: str, fact_key: str, fact: dict[str, Any]) -> None:
-        self._unavailable()
+        if fact.get("status") != "verified":
+            raise ValueError("only verified facts may enter the 2b memory provider")
+        self.put(
+            f"viking://user/default/memories/projects/10_startup_ai_manager/2b_facts/{company_id}/{fact_key}.json",
+            json.dumps(fact, ensure_ascii=False, sort_keys=True),
+            metadata={"layer": "2b", "company_id": company_id, "fact_key": fact_key},
+        )
 
     def get_fact(self, company_id: str, fact_key: str) -> dict[str, Any] | None:
-        self._unavailable()
-        return None
+        uri = f"viking://user/default/memories/projects/10_startup_ai_manager/2b_facts/{company_id}/{fact_key}.json"
+        try:
+            return json.loads(self.read(uri))
+        except (FileNotFoundError, MemoryUnavailable) as exc:
+            if isinstance(exc, MemoryUnavailable) and "not found" not in str(exc).lower():
+                raise
+            return None
 
     def get_2b(self, company_id: str, key: str) -> dict[str, Any] | None:
-        self._unavailable()
-        return None
+        return self.get_fact(company_id, key)
+
+    def reindex(self, uri: str, *, recursive: bool = True) -> None:
+        self._run(["reindex", uri, "--mode", "semantic_and_vectors", "--wait", "true", "--recursive", str(recursive).lower()])
