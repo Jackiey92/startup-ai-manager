@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from ..db.database import connect
-from ..parsing.types import ParseResult
+from .contracts import ParseResult
 
 
 def _now() -> str:

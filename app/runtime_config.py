@@ -122,7 +122,7 @@ class RuntimeConfig:
         venv_bin = _path(configured_root, env.get("SAM_VENV_BIN", paths.get("venv_bin")), configured_root / ".venv/bin")
         state = _path(configured_root, env.get("SAM_OPENCLAW_STATE_DIR", paths.get("state_dir")), harness / "state")
         config_path = _path(configured_root, env.get("SAM_OPENCLAW_CONFIG", paths.get("config_path")), state / "openclaw.json")
-        mapping = dict(skills.get("map", {"xlsx": "parse-xlsx"}))
+        mapping = dict(skills.get("map", {"*": "document-ingest"}))
         raw_mapping = env.get("SAM_SKILL_MAP")
         if raw_mapping:
             loaded = json.loads(raw_mapping)

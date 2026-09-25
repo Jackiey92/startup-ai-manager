@@ -13,7 +13,7 @@ python -m venv .venv
 服务起在 `http://127.0.0.1:5000`：
 
 - `/prototype`：提供 `prototype/startup-ai-manager.html`。
-- `/api/upload`：原型上传入口（存内容寻址 blob，xlsx 走 OpenClaw 解析）。
+- `/api/upload`：原型上传入口（存内容寻址 blob，统一走 `document-ingest` staging）。
 - `/api/chat`：原型对话入口。
 - `/`、`/files/<id>`：已导入文件列表与结构化详情。
 
@@ -41,6 +41,6 @@ SAM_GUIDE_MODEL_API_KEY="$(< ~/.bl_tokenplan_key)" \
 
 - `app.py`：路由与启动入口。
 - `classify.py`：规则式浅度归类。
-- `sales_parser.py`：销售文件解析辅助。
+- `../skills/document-ingest/`：统一文档解析技能（MinerU 主引擎、Docling 备选）。
 - `markdown_render.py`：结构化结果渲染（表格外包一层容器解决超宽）。
 - `templates/`：列表与详情页。

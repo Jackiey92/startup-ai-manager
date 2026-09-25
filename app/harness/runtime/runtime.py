@@ -13,9 +13,13 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
 
-from ...parsing import ParseResult
-from ...parsing.base import ParserRegistry
+from ..contracts import ParseResult
+from typing import Protocol
 from ..staging import StagingStore
+
+
+class ParserRegistry(Protocol):
+    def get(self, format: str): ...
 
 
 def _now() -> str:
@@ -93,6 +97,5 @@ class HarnessRuntime:
                 "SELECT * FROM audit_log ORDER BY id DESC LIMIT ?", (limit,)
             ).fetchall()
         return [dict(r) for r in rows]
-
 
 

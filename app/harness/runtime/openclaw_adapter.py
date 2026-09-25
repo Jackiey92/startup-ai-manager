@@ -12,7 +12,7 @@ import os
 import subprocess
 from pathlib import Path
 
-from ...parsing.types import ParseResult, TextSpan, TableRow, SourceLoc, ClassificationHint
+from ..contracts import ParseResult, TextSpan, TableRow, SourceLoc, ClassificationHint
 from ..staging import StagingStore
 from ...ports import RuntimeProvider
 from ...runtime_config import RuntimeConfig

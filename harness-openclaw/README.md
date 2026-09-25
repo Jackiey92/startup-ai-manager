@@ -6,8 +6,7 @@
 
 - `inbox/`：每个待解析文件的任务 JSON（运行时生成，不入库）。
 - `outbox/`：技能产出的 `ParseResult` JSON，仅为 staging 数据（运行时生成，不入库）。
-- `scripts/parse_bridge.py`：技能桥接脚本，调用项目内 `app/parsing` 解析器。
-- `workspace/skills/parse-xlsx/`：Excel 解析技能定义。
+- `../skills/document-ingest/`：统一文档导入技能，负责 MinerU/Docling 解析与 L2 staging 输出。
 - `state/openclaw.example.json`：OpenClaw 配置模板；复制为 `state/openclaw.json`，路径和模型端点由 profile/环境变量注入。
 - `cache/`、`state/` 下的运行时数据不入库。
 
@@ -21,7 +20,7 @@
 - `SAM_NODE_BIN`：Node 可执行文件（默认 `node`）
 - `SAM_OPENCLAW_ENTRY`：`openclaw.mjs` 路径
 - `SAM_OPENCLAW_STATE_DIR` / `SAM_OPENCLAW_CONFIG`：状态与配置路径
-- `SAM_SKILL_MAP`：格式到 Skill 名称的 JSON 映射，例如 `{"xlsx":"parse-xlsx"}`
+- `SAM_SKILL_MAP`：格式到 Skill 名称的 JSON 映射，默认由 `document-ingest` 接管。
 - `SAM_DATA_ROOT` / `SAM_OBJECTS_DIR` / `SAM_MAIN_DB` / `SAM_APP_DB`：数据、对象和 SQLite 路径
 - `SAM_MEMORY_ROOT`：local MemoryProvider 的持久化根目录
 

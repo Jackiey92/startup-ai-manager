@@ -1,21 +1,21 @@
-"""Unified parse output shared by all parser skills (xlsx/pptx/word/pdf).
+"""Generic staging contracts shared by runtime adapters.
 
-Every parser, regardless of source format, produces a ParseResult:
-text spans and table rows, each locked to a source location
-(file_hash + page + char range), plus a coarse classification hint.
+Document parsing engines live behind ``skills/document-ingest``.  These small
+value objects are transport/staging contracts only; they do not implement a
+parser and therefore do not couple the application to a parsing library.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from typing import Any, Optional
 
 
 @dataclass
 class SourceLoc:
     file_hash: str
-    page: Optional[int] = None       # 1-based; sheet index for spreadsheets
-    char_range: Optional[str] = None  # e.g. "A1:C10" or char offset range
-    locator: Optional[str] = None    # human-readable location hint
+    page: Optional[int] = None
+    char_range: Optional[str] = None
+    locator: Optional[str] = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -25,11 +25,10 @@ class SourceLoc:
 class TextSpan:
     text: str
     loc: SourceLoc
-    kind: str = "text"               # text | heading | list_item | note
+    kind: str = "text"
 
     def to_dict(self) -> dict:
-        d = asdict(self)
-        return d
+        return asdict(self)
 
 
 @dataclass
@@ -58,7 +57,7 @@ class ClassificationHint:
 class ParseResult:
     file_hash: str
     original_name: str
-    format: str                       # xlsx | pptx | word | pdf
+    format: str
     text_spans: list[TextSpan] = field(default_factory=list)
     table_rows: list[TableRow] = field(default_factory=list)
     hint: ClassificationHint = field(default_factory=ClassificationHint)
