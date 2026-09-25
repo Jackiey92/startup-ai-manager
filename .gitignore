@@ -39,3 +39,6 @@ harness-openclaw/cache/
 harness-openclaw/data/
 harness-openclaw/inbox/*.json
 harness-openclaw/outbox/*.json
+
+# Runtime parser intermediate output
+blobs/
