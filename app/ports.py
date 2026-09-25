@@ -11,6 +11,7 @@ import json
 import os
 import subprocess
 import tempfile
+import shutil
 from collections.abc import Callable, Sequence
 from typing import Any, Protocol
 
@@ -56,6 +57,9 @@ class MemoryProvider(Protocol):
 
     def get_2b(self, company_id: str, key: str) -> dict[str, Any] | None:
         """Read one verified 2b value; pending/conflicting data is excluded."""
+
+    def delete(self, uri: str, *, recursive: bool = False) -> None:
+        """Delete an explicitly scoped runtime-memory resource."""
 
 
 class LocalMemoryProvider:
@@ -116,6 +120,15 @@ class LocalMemoryProvider:
 
     def get_2b(self, company_id: str, key: str) -> dict[str, Any] | None:
         return self.get_fact(company_id, key)
+
+    def delete(self, uri: str, *, recursive: bool = False) -> None:
+        path = self._path(uri)
+        if path.is_dir():
+            if not recursive:
+                raise ValueError("refusing to delete a directory without recursive=True")
+            shutil.rmtree(path)
+        elif path.exists():
+            path.unlink()
 
 
 class MemoryUnavailable(RuntimeError):
@@ -251,6 +264,12 @@ class OpenVikingMemoryProvider:
 
     def get_2b(self, company_id: str, key: str) -> dict[str, Any] | None:
         return self.get_fact(company_id, key)
+
+    def delete(self, uri: str, *, recursive: bool = False) -> None:
+        args = ["rm", uri]
+        if recursive:
+            args.append("--recursive")
+        self._run(args)
 
     def reindex(self, uri: str, *, recursive: bool = True) -> None:
         self._run(["reindex", uri, "--mode", "semantic_and_vectors", "--wait", "true", "--recursive", str(recursive).lower()])

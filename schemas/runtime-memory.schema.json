@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://startup-ai-manager.local/schemas/runtime-memory.schema.json",
+  "title": "SAM 2c runtime working memory",
+  "type": "object",
+  "required": ["session_id", "task_id", "state", "goal", "open_loops", "working_notes", "refs", "last_actions", "created_at", "updated_at", "expires_at", "version", "revision"],
+  "properties": {
+    "session_id": {"type": "string"}, "task_id": {"type": "string"}, "company_id": {"type": ["string", "null"]},
+    "state": {"enum": ["created", "running", "waiting", "blocked", "done", "cancelled", "expired"]}, "goal": {"type": "string"},
+    "open_loops": {"type": "array", "items": {"type": "object"}},
+    "working_notes": {"type": "array", "items": {"type": "object", "properties": {"confidence": {"type": "number"}, "inferred": {"type": "boolean"}, "status": {"not": {"const": "verified"}}}, "required": ["status"]}},
+    "refs": {"type": "array", "items": {"type": "string", "pattern": "^viking://"}}, "last_actions": {"type": "array", "items": {"type": "object"}},
+    "created_at": {"type": "string"}, "updated_at": {"type": "string"}, "expires_at": {"type": "string"}, "version": {"type": "integer"}, "revision": {"type": "integer"}
+  },
+  "additionalProperties": false
+}
