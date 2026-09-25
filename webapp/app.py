@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -15,6 +16,8 @@ _PROJECT_ROOT = BASE_DIR.parent
 _sys.path.insert(0, str(_PROJECT_ROOT))
 
 from app.storage import SourceFileStore
+from app.db.database import init_db as init_core_db
+from app.guidance import ImportGuideService, ModelUnavailable
 from app.harness.staging import StagingStore
 from app.harness.runtime.openclaw_adapter import OpenClawAdapter
 from markdown_render import render_markdown
@@ -51,6 +54,7 @@ def db() -> sqlite3.Connection:
 
 
 def init_db() -> None:
+    init_core_db(MAIN_DB)
     with db() as conn:
         conn.execute(
             "CREATE TABLE IF NOT EXISTS files ("
@@ -76,6 +80,14 @@ def detect_format(filename: str) -> str:
     if name.endswith(".pdf"):
         return "pdf"
     return "unknown"
+
+
+def import_guide(*, event: str, uploaded_file_hash: str | None = None) -> dict:
+    """Return a real model guide, never a browser-side fallback template."""
+    service = ImportGuideService(
+        store=SourceFileStore(objects_path=OBJECTS_DIR, db_path=MAIN_DB), db_path=MAIN_DB
+    )
+    return service.generate(event=event, uploaded_file_hash=uploaded_file_hash)
 
 
 @app.route("/")
@@ -154,15 +166,47 @@ def api_upload():
         objects_dir=OBJECTS_DIR,
         db_path=MAIN_DB,
     )
+    parse_status = "not_supported"
     if adapter.supports(harness_format):
-        adapter.run_parse(file_hash, harness_format, timeout=600)
+        try:
+            adapter.run_parse(file_hash, harness_format, timeout=600)
+            parse_status = "parsed"
+        except (RuntimeError, OSError, subprocess.SubprocessError):
+            # The immutable original is still stored. A failed optional parser
+            # must not turn a completed upload into a false client-side failure.
+            parse_status = "pending_runtime"
 
-    return {
+    response = {
         "file_hash": file_hash,
         "original_name": upload.filename,
         "format": file_format,
         "size": len(blob),
+        "parse_status": parse_status,
     }
+    try:
+        response["guide"] = import_guide(event="upload", uploaded_file_hash=file_hash)
+    except ModelUnavailable as exc:
+        response["guide_error"] = "AI import guide is temporarily unavailable."
+        app.logger.info("import guide unavailable after upload: %s", exc)
+    return response
+
+
+@app.route("/api/import-guide", methods=["POST", "OPTIONS"])
+def api_import_guide():
+    if request.method == "OPTIONS":
+        return ("", 204)
+    payload = request.get_json(silent=True) or {}
+    event = payload.get("event", "open")
+    if event not in {"open", "upload", "refresh"}:
+        return {"error": "invalid import guide event"}, 400
+    uploaded_file_hash = payload.get("uploaded_file_hash")
+    if uploaded_file_hash is not None and not isinstance(uploaded_file_hash, str):
+        return {"error": "invalid uploaded_file_hash"}, 400
+    try:
+        return {"guide": import_guide(event=event, uploaded_file_hash=uploaded_file_hash)}
+    except ModelUnavailable as exc:
+        app.logger.info("import guide unavailable: %s", exc)
+        return {"error": "import guide unavailable"}, 503
 
 
 @app.route("/files/<int:file_id>")
