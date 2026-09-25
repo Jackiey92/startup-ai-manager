@@ -59,3 +59,7 @@ def test_real_sample_l2_contract(fmt: str, raw_path: str) -> None:
         # The selected real pension PDF contains a small embedded logo.
         assert result["images"], "expected at least one embedded PDF image"
         assert all(item["local_path"] for item in result["images"])
+    if os.environ.get("SAM_REQUIRE_EMBEDDED_IMAGES") == "1":
+        assert len(result["images"]) == 1
+        assert result["images"][0]["image_hash"]
+        assert result["images"][0]["source_loc"]["file_hash"] == result["file_hash"]

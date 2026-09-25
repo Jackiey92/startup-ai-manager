@@ -43,6 +43,26 @@ bridge 现在另产 `images[]`。图片字节只写入本地
 
 因此“能否抽图”已在 PDF 上实测成功，但 Office 三份样本没有嵌图，不能据此评价 Office 抽图质量。Office bridge 已支持从 OOXML `*/media/*` 本地解包；页/slide 锚点需后续按关系文件和 shape anchor 补齐。手写、复杂图表和低清印章仍未单独验收。
 
+### Office 含图补充验证（合成容器样本）
+
+为避免把“空样本”当成能力结论，使用一张本地真实企业微信截图作为图片素材，
+用脚本生成三个仅用于本机验收的 Office 容器（明确为合成样本，不提交二进制）：
+
+- DOCX：1 张图，定位到 `paragraph=1`，无页码/bbox（DOCX 流本身不保证分页）。
+- PPTX：1 张图，定位到 `slide_no=1, shape=2`，返回 shape bbox（EMU 坐标）。
+- XLSX：1 张图，定位到 `sheet=Evidence, cell_range=Evidence!R2C2`；当前文件的 anchor 未提供可靠像素 bbox，因此 bbox 为 null。
+
+三者均成功抽出 1 张 PNG，images[] 全部通过 schema，图片哈希可回穿到各自原件。
+这证明 OOXML `word/media`、`ppt/media`、`xl/media` 的本地抽图路径成立；并不等于
+已经验证真实印章识别或图片内容理解。
+
+### 印章/低清场景
+
+将本地真实营业执照副本 JPG 封装为一个本机合成 PDF（不外发）后运行 MinerU
+basic CPU：1 页、20 个 OCR 文本项、抽出 1 张 JPEG，页 1 bbox 可回溯，且
+raw/full text external 均为 false。该结果验证了“带执照/可能含印章的低清图片容器”
+能被抽取，但没有对印章真伪或印章文字准确率做结论；后续仍需专门的低清盖章样本。
+
 Docling 对同三份 Office 文件做了对照（同一台机器、纯本地）：
 
 | 格式 | 文本项 | 表格 | provenance |

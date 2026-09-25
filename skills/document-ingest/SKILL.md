@@ -27,7 +27,10 @@ warning, not permission to invent one.
 
 Embedded image bytes are extracted only to the local L2 image store. They are
 not sent to a model; an external model may receive only an approved marker or
-caption. `images[]` is an evidence reference, not a verified 2b fact.
+caption. DOCX paragraph, PPTX slide/shape, and XLSX sheet/cell anchors are
+filled when the container exposes them; otherwise the locator remains explicit
+and coordinate fields are null. `images[]` is an evidence reference, not a
+verified 2b fact.
 
 ## Engine selection
 

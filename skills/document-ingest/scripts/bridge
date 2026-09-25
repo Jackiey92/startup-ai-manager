@@ -19,6 +19,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -255,7 +256,7 @@ def _image_root() -> Path:
     return Path(os.environ.get("SAM_L2_IMAGE_ROOT", ".sam-isolated/data/l2-images"))
 
 
-def _store_image(data: bytes, filename: str, file_hash: str, page_no: int | None, bbox: list[float] | None, locator: str) -> dict[str, Any]:
+def _store_image(data: bytes, filename: str, file_hash: str, page_no: int | None, bbox: list[float] | None, locator: str, **loc_fields: Any) -> dict[str, Any]:
     image_hash = hashlib.sha256(data).hexdigest()
     suffix = Path(filename).suffix.lower() or ".bin"
     target_dir = _image_root() / file_hash
@@ -267,6 +268,8 @@ def _store_image(data: bytes, filename: str, file_hash: str, page_no: int | None
         local_path = target.relative_to(Path.cwd()).as_posix()
     except ValueError:
         local_path = target.as_posix()
+    source_loc = {"file_hash": file_hash, "page_no": page_no, "bbox": bbox, "locator": locator}
+    source_loc.update({key: value for key, value in loc_fields.items() if value is not None})
     return {
         "image_id": f"{file_hash[:16]}:{image_hash[:16]}",
         "filename": filename,
@@ -276,7 +279,7 @@ def _store_image(data: bytes, filename: str, file_hash: str, page_no: int | None
         "image_hash": image_hash,
         "local_path": local_path,
         "caption": None,
-        "source_loc": {"file_hash": file_hash, "page_no": page_no, "bbox": bbox, "locator": locator},
+        "source_loc": source_loc,
     }
 
 
@@ -308,9 +311,60 @@ def _extract_embedded_images(source: Path, file_hash: str, fmt: str) -> list[dic
     try:
         with zipfile.ZipFile(source) as archive:
             media = [name for name in archive.namelist() if "/media/" in name.lower()]
+            mapped: set[str] = set()
+            if fmt == "docx" and "word/document.xml" in archive.namelist():
+                rel_root = ET.fromstring(archive.read("word/_rels/document.xml.rels"))
+                rels = {item.attrib["Id"]: item.attrib["Target"] for item in rel_root}
+                document_root = ET.fromstring(archive.read("word/document.xml"))
+                embed_name = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed"
+                paragraph_tag = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}p"
+                blip_tag = "{http://schemas.openxmlformats.org/drawingml/2006/main}blip"
+                for paragraph_no, paragraph in enumerate(document_root.iter(paragraph_tag)):
+                    for blip in paragraph.iter(blip_tag):
+                        target = rels.get(blip.attrib.get(embed_name), "")
+                        name = str(Path("word") / target).replace("\\", "/")
+                        if name not in archive.namelist():
+                            name = "word/" + target.lstrip("/")
+                        if name not in media:
+                            continue
+                        mapped.add(name)
+                        images.append(_store_image(archive.read(name), Path(name).name, file_hash, None, None, f"docx:paragraph/{paragraph_no}", paragraph=paragraph_no))
+            elif fmt == "pptx":
+                from pptx import Presentation
+                from pptx.enum.shapes import MSO_SHAPE_TYPE
+                presentation = Presentation(str(source))
+                for slide_no, slide in enumerate(presentation.slides, start=1):
+                    for shape in slide.shapes:
+                        if shape.shape_type != MSO_SHAPE_TYPE.PICTURE:
+                            continue
+                        blob = shape.image.blob
+                        ext = str(shape.image.ext or "bin")
+                        bbox = [float(shape.left), float(shape.top), float(shape.left + shape.width), float(shape.top + shape.height)]
+                        images.append(_store_image(blob, f"slide-{slide_no}-shape-{shape.shape_id}.{ext}", file_hash, None, bbox, f"pptx:slide/{slide_no}/shape/{shape.shape_id}", slide_no=slide_no, shape=shape.shape_id))
+                mapped.update(media)
+            elif fmt == "xlsx":
+                from openpyxl import load_workbook
+                workbook = load_workbook(source, read_only=False, data_only=False)
+                for worksheet in workbook.worksheets:
+                    for image_index, image in enumerate(getattr(worksheet, "_images", [])):
+                        anchor = getattr(image, "anchor", None)
+                        origin = getattr(anchor, "_from", None)
+                        target = getattr(anchor, "to", None)
+                        if origin is None:
+                            continue
+                        row, col = int(origin.row), int(origin.col)
+                        end_row = int(getattr(target, "row", row)) if target else row
+                        end_col = int(getattr(target, "col", col)) if target else col
+                        ext = str(getattr(image, "format", None) or "bin")
+                        bbox = [float(col), float(row), float(end_col), float(end_row)] if target else None
+                        cell = f"{worksheet.title}!R{row + 1}C{col + 1}"
+                        images.append(_store_image(image._data(), f"{worksheet.title}-image-{image_index}.{ext}", file_hash, None, bbox, f"xlsx:{cell}", sheet=worksheet.title, cell_range=cell))
+                mapped.update(media)
+            # Keep any image whose relationship/anchor could not be resolved;
+            # the explicit null locator fields are safer than dropping bytes.
             for name in media:
-                data = archive.read(name)
-                images.append(_store_image(data, Path(name).name, file_hash, None, None, f"ooxml:{name}"))
+                if name not in mapped:
+                    images.append(_store_image(archive.read(name), Path(name).name, file_hash, None, None, f"ooxml:{name}"))
     except (zipfile.BadZipFile, OSError):
         pass
     return images
