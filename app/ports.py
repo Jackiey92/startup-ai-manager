@@ -231,7 +231,9 @@ class OpenVikingMemoryProvider:
         if isinstance(payload, str):
             return payload
         if isinstance(payload, dict):
-            for key in ("content", "text", "data"):
+            # Current CLI compact output wraps the file body in {"ok":true,
+            # "result": "<content>"}; older/other shapes use content/text/data.
+            for key in ("result", "content", "text", "data"):
                 if isinstance(payload.get(key), str):
                     return payload[key]
         raise MemoryUnavailable(f"OpenViking read returned no content for {uri}")
