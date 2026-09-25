@@ -1,7 +1,7 @@
 {
   "agents": {
     "defaults": {
-      "model": { "primary": "doubao-ark/doubao-seed-2-0-mini-260215" },
+      "model": { "primary": "${SAM_GUIDE_MODEL}" },
       "workspace": "<absolute path to harness-openclaw>"
     }
   },
@@ -15,14 +15,14 @@
   "models": {
     "mode": "merge",
     "providers": {
-      "doubao-ark": {
-        "baseUrl": "https://ark.cn-beijing.volces.com/api/v3",
-        "apiKey": "${ARK_API_KEY}",
+      "token-plan": {
+        "baseUrl": "${SAM_GUIDE_MODEL_BASE_URL}",
+        "apiKey": "${SAM_GUIDE_MODEL_API_KEY}",
         "api": "openai-completions",
         "models": [
           {
-            "id": "doubao-seed-2-0-mini-260215",
-            "name": "Doubao Seed 2.0 Mini",
+            "id": "${SAM_GUIDE_MODEL}",
+            "name": "SAM configured model",
             "contextWindow": 262144,
             "maxTokens": 131072
           }

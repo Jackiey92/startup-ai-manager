@@ -14,6 +14,12 @@ skills:
     pptx: document-ingest
     image: document-ingest
   ingest_engine_env: SAM_INGEST_ENGINE
+paths:
+  data_root: data
+  objects_dir: data/objects
+  main_db: data/app.db
+  app_db: data/sales_app/app.db
+  memory_root: .sam-memory
 memory:
   provider: openviking
   base_url_env: SAM_OV_BASE_URL

@@ -1,4 +1,6 @@
 profile: local
+memory:
+  provider: local
 paths:
   project_root: .
   harness_root: harness-openclaw
@@ -6,3 +8,8 @@ paths:
   openclaw_entry: .oc-runtime/node_modules/openclaw/openclaw.mjs
   state_dir: harness-openclaw/state
   config_path: harness-openclaw/state/openclaw.json
+  data_root: data
+  objects_dir: data/objects
+  main_db: data/app.db
+  app_db: data/sales_app/app.db
+  memory_root: .sam-memory

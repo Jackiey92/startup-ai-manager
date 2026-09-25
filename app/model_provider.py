@@ -7,12 +7,8 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-from .ports import ModelProvider
+from .ports import ModelProvider, ModelUnavailable
 from .runtime_config import RuntimeConfig
-
-
-class ModelUnavailable(RuntimeError):
-    """Raised when a configured model cannot produce a valid response."""
 
 
 class OpenAICompatibleProvider(ModelProvider):

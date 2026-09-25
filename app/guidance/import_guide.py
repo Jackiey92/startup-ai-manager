@@ -10,8 +10,7 @@ import os
 import sqlite3
 from typing import Any
 
-from app.model_provider import ModelUnavailable, OpenAICompatibleProvider
-from app.runtime_config import RuntimeConfig
+from app.ports import ModelProvider, ModelUnavailable
 from app.storage import SourceFileStore
 
 
@@ -44,14 +43,12 @@ class ImportGuideService:
         store: SourceFileStore,
         db_path: str | os.PathLike[str] | None = None,
         env: dict[str, str] | None = None,
-        model_provider: OpenAICompatibleProvider | None = None,
+        model_provider: ModelProvider,
     ):
         self.store = store
         self.db_path = os.fspath(db_path) if db_path else None
         self.env = env if env is not None else os.environ
-        self.model_provider = model_provider or OpenAICompatibleProvider(
-            env=self.env, config=RuntimeConfig.from_env(env=self.env)
-        )
+        self.model_provider = model_provider
 
     def snapshot(self) -> dict[str, Any]:
         files = self.store.list_files(origin_zone="internal")

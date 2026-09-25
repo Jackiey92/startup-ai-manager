@@ -17,17 +17,15 @@ from ..staging import StagingStore
 from ...ports import RuntimeProvider
 from ...runtime_config import RuntimeConfig
 
-HARNESS_ROOT = Path(__file__).resolve().parents[3] / "harness-openclaw"
-
 
 class OpenClawAdapter(RuntimeProvider):
-    def __init__(self, staging: StagingStore, harness_root: Path = HARNESS_ROOT,
+    def __init__(self, staging: StagingStore, *, config: RuntimeConfig | None = None,
                  objects_dir: Path | None = None, db_path: Path | None = None):
         self.staging = staging
-        self.config = RuntimeConfig.from_env(Path(harness_root).parent)
-        self.root = Path(harness_root) if harness_root != HARNESS_ROOT else self.config.harness_root
-        self.objects_dir = Path(objects_dir) if objects_dir else self.config.project_root / "data" / "objects"
-        self.db_path = Path(db_path) if db_path else None
+        self.config = config or RuntimeConfig.from_env()
+        self.root = self.config.harness_root
+        self.objects_dir = Path(objects_dir) if objects_dir else self.config.objects_dir
+        self.db_path = Path(db_path) if db_path else self.config.main_db
 
     def supports(self, format: str) -> bool:
         return format in self.config.skill_for_format

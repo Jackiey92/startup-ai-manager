@@ -19,20 +19,24 @@ from app.storage import SourceFileStore
 from app.db.database import init_db as init_core_db
 from app.guidance import ImportGuideService, ModelUnavailable
 from app.harness.staging import StagingStore
-from app.harness.runtime.openclaw_adapter import OpenClawAdapter
+from app.providers import memory_provider, model_provider, runtime_provider
+from app.runtime_config import RuntimeConfig
 from markdown_render import render_markdown
 import markdown as md_lib
 
-DATA_ROOT = Path(os.environ.get("SAM_DATA_ROOT", str(BASE_DIR.parent / "data")))
-DATA_DIR = DATA_ROOT / "sales_app"
-OBJECTS_DIR = DATA_ROOT / "objects"
-MAIN_DB = DATA_ROOT / "app.db"
-DB_PATH = DATA_DIR / "app.db"
+RUNTIME_CONFIG = RuntimeConfig.from_env(project_root=_PROJECT_ROOT)
+DATA_ROOT = RUNTIME_CONFIG.data_root
+DATA_DIR = RUNTIME_CONFIG.app_db.parent
+OBJECTS_DIR = RUNTIME_CONFIG.objects_dir
+MAIN_DB = RUNTIME_CONFIG.main_db
+DB_PATH = RUNTIME_CONFIG.app_db
 
 OBJECTS_DIR.mkdir(parents=True, exist_ok=True)
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 app = Flask(__name__)
+app.extensions["sam_runtime_config"] = RUNTIME_CONFIG
+app.extensions["sam_memory_provider"] = memory_provider(RUNTIME_CONFIG)
 
 
 @app.after_request
@@ -85,7 +89,9 @@ def detect_format(filename: str) -> str:
 def import_guide(*, event: str, uploaded_file_hash: str | None = None) -> dict:
     """Return a real model guide, never a browser-side fallback template."""
     service = ImportGuideService(
-        store=SourceFileStore(objects_path=OBJECTS_DIR, db_path=MAIN_DB), db_path=MAIN_DB
+        store=SourceFileStore(objects_path=OBJECTS_DIR, db_path=MAIN_DB),
+        db_path=MAIN_DB,
+        model_provider=model_provider(RUNTIME_CONFIG),
     )
     return service.generate(event=event, uploaded_file_hash=uploaded_file_hash)
 
@@ -107,7 +113,7 @@ def api_chat():
     if not question:
         return {"error": "empty message"}, 400
 
-    adapter = OpenClawAdapter(StagingStore(db_path=MAIN_DB), objects_dir=OBJECTS_DIR, db_path=MAIN_DB)
+    adapter = runtime_provider(RUNTIME_CONFIG, StagingStore(db_path=MAIN_DB))
     try:
         raw = adapter.run_agent_message(question, timeout=600)
     except (RuntimeError, OSError, subprocess.SubprocessError):
@@ -119,7 +125,7 @@ def api_chat():
     if not answer:
         for pl in data.get("payloads", []):
             answer += pl.get("text", "")
-    return {"message": answer, "model": "doubao-ark"}
+    return {"message": answer, "model": os.environ.get(RUNTIME_CONFIG.model_name_env, RUNTIME_CONFIG.model_default)}
 
 
 @app.route("/api/upload", methods=["POST", "OPTIONS"])
@@ -146,11 +152,7 @@ def api_upload():
     file_hash = stored.file_hash
 
     harness_format = "xlsx" if file_format == "excel" else file_format
-    adapter = OpenClawAdapter(
-        StagingStore(db_path=MAIN_DB),
-        objects_dir=OBJECTS_DIR,
-        db_path=MAIN_DB,
-    )
+    adapter = runtime_provider(RUNTIME_CONFIG, StagingStore(db_path=MAIN_DB))
     parse_status = "not_supported"
     if adapter.supports(harness_format):
         try:

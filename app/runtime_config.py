@@ -87,6 +87,12 @@ class RuntimeConfig:
     venv_bin: Path
     state_dir: Path
     config_path: Path
+    data_root: Path
+    objects_dir: Path
+    main_db: Path
+    app_db: Path
+    memory_root: Path
+    skill_root: Path
     git_dir: str | None
     skill_for_format: dict[str, str]
     model_api: str
@@ -106,15 +112,16 @@ class RuntimeConfig:
         config = _read_config(root, env)
         runtime = config.get("runtime", {})
         paths = config.get("paths", {})
+        configured_root = _path(root, env.get("SAM_PROJECT_ROOT", paths.get("project_root")), root)
         skills = config.get("skills", {})
         model = config.get("model", {})
         memory = config.get("memory", {})
-        harness = _path(root, env.get("SAM_HARNESS_ROOT", paths.get("harness_root")), root / "harness-openclaw")
+        harness = _path(configured_root, env.get("SAM_HARNESS_ROOT", paths.get("harness_root")), configured_root / "harness-openclaw")
         node_bin = env.get("SAM_NODE_BIN", runtime.get("node_bin", "node"))
-        entry = _path(root, env.get("SAM_OPENCLAW_ENTRY", paths.get("openclaw_entry")), root / ".oc-runtime/node_modules/openclaw/openclaw.mjs")
-        venv_bin = _path(root, env.get("SAM_VENV_BIN", paths.get("venv_bin")), root / ".venv/bin")
-        state = _path(root, env.get("SAM_OPENCLAW_STATE_DIR", paths.get("state_dir")), harness / "state")
-        config_path = _path(root, env.get("SAM_OPENCLAW_CONFIG", paths.get("config_path")), state / "openclaw.json")
+        entry = _path(configured_root, env.get("SAM_OPENCLAW_ENTRY", paths.get("openclaw_entry")), configured_root / ".oc-runtime/node_modules/openclaw/openclaw.mjs")
+        venv_bin = _path(configured_root, env.get("SAM_VENV_BIN", paths.get("venv_bin")), configured_root / ".venv/bin")
+        state = _path(configured_root, env.get("SAM_OPENCLAW_STATE_DIR", paths.get("state_dir")), harness / "state")
+        config_path = _path(configured_root, env.get("SAM_OPENCLAW_CONFIG", paths.get("config_path")), state / "openclaw.json")
         mapping = dict(skills.get("map", {"xlsx": "parse-xlsx"}))
         raw_mapping = env.get("SAM_SKILL_MAP")
         if raw_mapping:
@@ -126,7 +133,13 @@ class RuntimeConfig:
         name_env = str(env.get("SAM_MODEL_NAME_ENV", model.get("model_env", "SAM_GUIDE_MODEL")))
         key_env = str(env.get("SAM_MODEL_API_KEY_ENV", model.get("api_key_env", "SAM_GUIDE_MODEL_API_KEY")))
         return cls(
-            root, harness, node_bin, entry, venv_bin, state, config_path,
+            configured_root, harness, node_bin, entry, venv_bin, state, config_path,
+            _path(configured_root, env.get("SAM_DATA_ROOT", paths.get("data_root")), configured_root / "data"),
+            _path(configured_root, env.get("SAM_OBJECTS_DIR", paths.get("objects_dir")), configured_root / "data" / "objects"),
+            _path(configured_root, env.get("SAM_MAIN_DB", paths.get("main_db")), configured_root / "data" / "app.db"),
+            _path(configured_root, env.get("SAM_APP_DB", paths.get("app_db")), configured_root / "data" / "sales_app" / "app.db"),
+            _path(configured_root, env.get("SAM_MEMORY_ROOT", paths.get("memory_root")), configured_root / ".sam-memory"),
+            _path(configured_root, env.get("SAM_SKILL_ROOT", skills.get("root")), configured_root / "skills"),
             env.get("SAM_GIT_DIR"), mapping,
             str(model.get("api", "openai-completions")),
             str(model.get("base_url", "")), base_url_env, name_env, key_env,

@@ -8,7 +8,7 @@
 - `outbox/`：技能产出的 `ParseResult` JSON，仅为 staging 数据（运行时生成，不入库）。
 - `scripts/parse_bridge.py`：技能桥接脚本，调用项目内 `app/parsing` 解析器。
 - `workspace/skills/parse-xlsx/`：Excel 解析技能定义。
-- `state/openclaw.example.json`：OpenClaw 配置模板；复制为 `state/openclaw.json` 并填入本地路径与 `ARK_API_KEY`。
+- `state/openclaw.example.json`：OpenClaw 配置模板；复制为 `state/openclaw.json`，路径和模型端点由 profile/环境变量注入。
 - `cache/`、`state/` 下的运行时数据不入库。
 
 ## 可移植配置
@@ -22,6 +22,8 @@
 - `SAM_OPENCLAW_ENTRY`：`openclaw.mjs` 路径
 - `SAM_OPENCLAW_STATE_DIR` / `SAM_OPENCLAW_CONFIG`：状态与配置路径
 - `SAM_SKILL_MAP`：格式到 Skill 名称的 JSON 映射，例如 `{"xlsx":"parse-xlsx"}`
+- `SAM_DATA_ROOT` / `SAM_OBJECTS_DIR` / `SAM_MAIN_DB` / `SAM_APP_DB`：数据、对象和 SQLite 路径
+- `SAM_MEMORY_ROOT`：local MemoryProvider 的持久化根目录
 
 仓库根目录的 `sam-manifest.yaml` 与 `profiles/local.yaml`、`profiles/cloud.yaml` 记录运行时、Skill、记忆底座和模型端点的声明；密钥只通过环境变量注入。通过 `SAM_PROFILE=local|cloud` 选择路径配置。
 
@@ -29,8 +31,8 @@
 
 1. 安装 Node ≥ 24.16 与 OpenClaw 2026.9.5（使用 `--ignore-scripts`）。
 2. 复制配置模板：`state/openclaw.example.json` → `state/openclaw.json`，替换其中的绝对路径占位符。
-3. 通过环境变量 `ARK_API_KEY` 提供方舟密钥（不要写进配置或提交）。
-4. 如运行时不在默认位置，用 `NODE_DIR`、`OC_MJS`、`GIT_DIR` 环境变量覆盖。
+3. 通过 profile 声明的模型密钥环境变量提供凭证（不要写进配置或提交）。
+4. 不要使用旧的 `NODE_DIR`、`OC_MJS`、`GIT_DIR` 路径变量；运行时统一读取 `RuntimeConfig` 和 `SAM_*` 覆盖项。
 
 ## 安全基线
 

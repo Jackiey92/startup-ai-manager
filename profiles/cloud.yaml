@@ -1,4 +1,6 @@
 profile: cloud
+memory:
+  provider: openviking
 paths:
   project_root: /opt/sam/workspace
   harness_root: /opt/sam/workspace/harness-openclaw
@@ -6,3 +8,8 @@ paths:
   openclaw_entry: /opt/sam/workspace/.oc-runtime/node_modules/openclaw/openclaw.mjs
   state_dir: /opt/sam/workspace/harness-openclaw/state
   config_path: /opt/sam/workspace/harness-openclaw/state/openclaw.json
+  data_root: /opt/sam/workspace/data
+  objects_dir: /opt/sam/workspace/data/objects
+  main_db: /opt/sam/workspace/data/app.db
+  app_db: /opt/sam/workspace/data/sales_app/app.db
+  memory_root: /opt/sam/workspace/.sam-memory
