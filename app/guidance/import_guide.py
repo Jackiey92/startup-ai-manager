@@ -36,6 +36,9 @@ SYSTEM_PROMPT = """你是 Startup AI Manager 的企业资料导入引导助手�
 percent 必须是 0 到 100 的整数。没有足够证据时明确说明不确定性，不得把
 文件名猜测为已核实事实。"""
 
+TOKEN_PLAN_BASE_URL = "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+TOKEN_PLAN_DEFAULT_MODEL = "qwen3.7-plus"
+
 
 class ModelUnavailable(RuntimeError):
     """Raised when a real configured model cannot produce a guide."""
@@ -98,13 +101,12 @@ class ImportGuideService:
         return _validate_guide(result)
 
     def _call_model(self, payload: dict[str, Any]) -> dict[str, Any]:
-        base_url = self.env.get("SAM_GUIDE_MODEL_BASE_URL", "").rstrip("/")
-        model = self.env.get("SAM_GUIDE_MODEL", "")
-        api_key = self.env.get("SAM_GUIDE_MODEL_API_KEY") or self.env.get("ARK_API_KEY")
-        if not base_url or not model or not api_key:
+        base_url = self.env.get("SAM_GUIDE_MODEL_BASE_URL", TOKEN_PLAN_BASE_URL).rstrip("/")
+        model = self.env.get("SAM_GUIDE_MODEL", TOKEN_PLAN_DEFAULT_MODEL)
+        api_key = self.env.get("SAM_GUIDE_MODEL_API_KEY")
+        if not api_key:
             raise ModelUnavailable(
-                "AI import guide is not configured: set SAM_GUIDE_MODEL_BASE_URL, "
-                "SAM_GUIDE_MODEL and SAM_GUIDE_MODEL_API_KEY (or ARK_API_KEY)."
+                "AI import guide is not configured: set SAM_GUIDE_MODEL_API_KEY."
             )
 
         body = json.dumps(
