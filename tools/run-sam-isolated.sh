@@ -45,6 +45,7 @@ BWRAP_ARGS=(
   --chdir /opt/sam/workspace \
   --setenv HOME /opt/sam/home \
   --setenv SAM_ISOLATED_ROOT /opt/sam \
+  --setenv SAM_VENV_BIN /opt/sam/venv/bin \
   --setenv PATH /opt/sam/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
 )
 

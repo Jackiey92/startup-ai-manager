@@ -1,0 +1,19 @@
+# SAM portable contract. Secret values are never stored here.
+runtime:
+  node: 24.16.x
+  openclaw: 2026.9.5
+skills:
+  root: harness-openclaw/workspace/skills
+  map:
+    xlsx: parse-xlsx
+memory:
+  provider: openviking
+  base_url_env: SAM_OV_BASE_URL
+  api_key_env: SAM_OV_API_KEY
+model:
+  api: openai-completions
+  base_url: https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1
+  base_url_env: SAM_GUIDE_MODEL_BASE_URL
+  model_env: SAM_GUIDE_MODEL
+  api_key_env: SAM_GUIDE_MODEL_API_KEY
+  default_model: auto

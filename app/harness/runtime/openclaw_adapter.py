@@ -14,32 +14,30 @@ from pathlib import Path
 
 from ...parsing.types import ParseResult, TextSpan, TableRow, SourceLoc, ClassificationHint
 from ..staging import StagingStore
+from ...ports import RuntimeProvider
+from ...runtime_config import RuntimeConfig
 
 HARNESS_ROOT = Path(__file__).resolve().parents[3] / "harness-openclaw"
-NODE_DIR = Path(r"C:\Users\jacki\Documents\Codex\.node24")
-OC_DIR = Path(r"C:\Users\jacki\Documents\Codex\.oc-runtime")
-OC_MJS = OC_DIR / "node_modules" / "openclaw" / "openclaw.mjs"
-GIT_DIR = r"C:\Program Files\Git\cmd"
-SKILL_FOR_FORMAT = {"xlsx": "parse-xlsx"}
 
 
-class OpenClawAdapter:
+class OpenClawAdapter(RuntimeProvider):
     def __init__(self, staging: StagingStore, harness_root: Path = HARNESS_ROOT,
                  objects_dir: Path | None = None, db_path: Path | None = None):
         self.staging = staging
-        self.root = Path(harness_root)
-        self.objects_dir = Path(objects_dir) if objects_dir else HARNESS_ROOT.parent / "data" / "objects"
+        self.config = RuntimeConfig.from_env(Path(harness_root).parent)
+        self.root = Path(harness_root) if harness_root != HARNESS_ROOT else self.config.harness_root
+        self.objects_dir = Path(objects_dir) if objects_dir else self.config.project_root / "data" / "objects"
         self.db_path = Path(db_path) if db_path else None
 
     def supports(self, format: str) -> bool:
-        return format in SKILL_FOR_FORMAT
+        return format in self.config.skill_for_format
 
     def run_parse(self, file_hash: str, format: str, timeout: int = 600) -> int:
         if not self.supports(format):
             raise KeyError(f"no OpenClaw skill for format: {format}")
 
         task_path = self._write_task(file_hash, format)
-        message = f'Use the {SKILL_FOR_FORMAT[format]} skill with task file "{task_path}".'
+        message = f'Use the {self.config.skill_for_format[format]} skill with task file "{task_path}".'
         out_path = self.root / "outbox" / f"{file_hash}.json"
         if out_path.exists():
             out_path.unlink()
@@ -51,6 +49,9 @@ class OpenClawAdapter:
 
         result = _result_from_dict(json.loads(out_path.read_text(encoding="utf-8")))
         return self.staging.save_parse(result)
+
+    def run_agent_message(self, message: str, *, timeout: int = 600) -> str:
+        return self._invoke_agent(message, timeout=timeout)
 
     def _write_task(self, file_hash: str, format: str) -> Path:
         inbox = self.root / "inbox"
@@ -76,19 +77,17 @@ class OpenClawAdapter:
 
     def _invoke_agent(self, message: str, timeout: int) -> str:
         env = os.environ.copy()
-        venv_scripts = HARNESS_ROOT.parent / ".venv" / "Scripts"
-        env["PATH"] = f"{venv_scripts};{NODE_DIR};{GIT_DIR};{env.get('PATH', '')}"
-        env.setdefault("OPENROUTER_API_KEY", "")
-        state_dir = self.root / "state"
+        env["PATH"] = f"{self.config.venv_bin}:{env.get('PATH', '')}"
+        state_dir = self.config.state_dir
         state_dir.mkdir(parents=True, exist_ok=True)
         env["OPENCLAW_STATE_DIR"] = str(state_dir)
-        env["OPENCLAW_CONFIG_PATH"] = str(state_dir / "openclaw.json")
+        env["OPENCLAW_CONFIG_PATH"] = str(self.config.config_path)
         cache_dir = self.root / "cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
         env["XDG_CACHE_HOME"] = str(cache_dir)
         import uuid
         session_id = "oc-" + uuid.uuid4().hex
-        cmd = [str(NODE_DIR / "node.exe"), str(OC_MJS), "agent", "--local",
+        cmd = [self.config.node_bin, str(self.config.openclaw_entry), "agent", "--local",
                "--agent", "main", "--session-id", session_id, "--json",
                "--message", message, "--timeout", str(timeout)]
         proc = subprocess.run(

@@ -1,0 +1,8 @@
+profile: cloud
+paths:
+  project_root: /opt/sam/workspace
+  harness_root: /opt/sam/workspace/harness-openclaw
+  venv_bin: /opt/sam/venv/bin
+  openclaw_entry: /opt/sam/workspace/.oc-runtime/node_modules/openclaw/openclaw.mjs
+  state_dir: /opt/sam/workspace/harness-openclaw/state
+  config_path: /opt/sam/workspace/harness-openclaw/state/openclaw.json

@@ -107,27 +107,12 @@ def api_chat():
     if not question:
         return {"error": "empty message"}, 400
 
-    import os, subprocess, uuid
-    root = BASE_DIR.parent / "harness-openclaw"
-    ws_root = BASE_DIR.parents[2]
-    node_dir = ws_root / ".node24"
-    oc_mjs = ws_root / ".oc-runtime" / "node_modules" / "openclaw" / "openclaw.mjs"
-    env = os.environ.copy()
-    venv_scripts = BASE_DIR.parent / ".venv" / "Scripts"
-    env["PATH"] = f"{venv_scripts};{node_dir};C:\\Program Files\\Git\\cmd;{env.get('PATH','')}"
-    env["OPENCLAW_STATE_DIR"] = str(root / "state")
-    env["OPENCLAW_CONFIG_PATH"] = str(root / "state" / "openclaw.json")
-    env["XDG_CACHE_HOME"] = str(root / "cache")
-    session_id = "chat-" + uuid.uuid4().hex
-    cmd = [str(node_dir / "node.exe"), str(oc_mjs), "agent", "--local",
-           "--agent", "main", "--session-id", session_id, "--json",
-           "--message", question, "--timeout", "600"]
-    proc = subprocess.run(cmd, cwd=str(root), env=env, capture_output=True,
-                          text=True, encoding="utf-8", errors="replace", timeout=630)
-    if proc.returncode != 0:
+    adapter = OpenClawAdapter(StagingStore(db_path=MAIN_DB), objects_dir=OBJECTS_DIR, db_path=MAIN_DB)
+    try:
+        raw = adapter.run_agent_message(question, timeout=600)
+    except (RuntimeError, OSError, subprocess.SubprocessError):
         return {"error": "agent failed"}, 502
-
-    data = json.loads(proc.stdout)
+    data = json.loads(raw)
     answer = ""
     meta = data.get("meta") or {}
     answer = meta.get("finalAssistantVisibleText") or ""

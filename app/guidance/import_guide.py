@@ -6,13 +6,12 @@ the current evidence snapshot into a concise, company-specific next action.
 """
 from __future__ import annotations
 
-import json
 import os
 import sqlite3
-import urllib.error
-import urllib.request
 from typing import Any
 
+from app.model_provider import ModelUnavailable, OpenAICompatibleProvider
+from app.runtime_config import RuntimeConfig
 from app.storage import SourceFileStore
 
 
@@ -36,14 +35,6 @@ SYSTEM_PROMPT = """你是 Startup AI Manager 的企业资料导入引导助手�
 percent 必须是 0 到 100 的整数。没有足够证据时明确说明不确定性，不得把
 文件名猜测为已核实事实。"""
 
-TOKEN_PLAN_BASE_URL = "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
-TOKEN_PLAN_DEFAULT_MODEL = "auto"
-
-
-class ModelUnavailable(RuntimeError):
-    """Raised when a real configured model cannot produce a guide."""
-
-
 class ImportGuideService:
     """Build evidence snapshots and obtain a real guide from an OpenAI-compatible API."""
 
@@ -53,10 +44,14 @@ class ImportGuideService:
         store: SourceFileStore,
         db_path: str | os.PathLike[str] | None = None,
         env: dict[str, str] | None = None,
+        model_provider: OpenAICompatibleProvider | None = None,
     ):
         self.store = store
         self.db_path = os.fspath(db_path) if db_path else None
         self.env = env if env is not None else os.environ
+        self.model_provider = model_provider or OpenAICompatibleProvider(
+            env=self.env, config=RuntimeConfig.from_env(env=self.env)
+        )
 
     def snapshot(self) -> dict[str, Any]:
         files = self.store.list_files(origin_zone="internal")
@@ -101,47 +96,7 @@ class ImportGuideService:
         return _validate_guide(result)
 
     def _call_model(self, payload: dict[str, Any]) -> dict[str, Any]:
-        base_url = self.env.get("SAM_GUIDE_MODEL_BASE_URL", TOKEN_PLAN_BASE_URL).rstrip("/")
-        model = self.env.get("SAM_GUIDE_MODEL", TOKEN_PLAN_DEFAULT_MODEL)
-        api_key = self.env.get("SAM_GUIDE_MODEL_API_KEY")
-        if not api_key:
-            raise ModelUnavailable(
-                "AI import guide is not configured: set SAM_GUIDE_MODEL_API_KEY."
-            )
-
-        request_body = {
-            "model": model,
-            "response_format": {"type": "json_object"},
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
-            ],
-        }
-        # Token Plan's auto router rejects sampling controls; fixed model IDs
-        # may use the low-temperature setting for more stable JSON output.
-        if model != "auto":
-            request_body["temperature"] = 0.2
-        body = json.dumps(request_body, ensure_ascii=False).encode("utf-8")
-        request = urllib.request.Request(
-            f"{base_url}/chat/completions",
-            data=body,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=30) as response:
-                data = json.loads(response.read().decode("utf-8"))
-        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as exc:
-            raise ModelUnavailable("AI import guide request failed") from exc
-
-        try:
-            content = data["choices"][0]["message"]["content"]
-            return json.loads(content)
-        except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
-            raise ModelUnavailable("AI import guide returned an invalid response") from exc
+        return self.model_provider.complete_json(system_prompt=SYSTEM_PROMPT, payload=payload)
 
 
 def _format_from_name(name: str) -> str:

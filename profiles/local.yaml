@@ -1,0 +1,8 @@
+profile: local
+paths:
+  project_root: .
+  harness_root: harness-openclaw
+  venv_bin: .venv/bin
+  openclaw_entry: .oc-runtime/node_modules/openclaw/openclaw.mjs
+  state_dir: harness-openclaw/state
+  config_path: harness-openclaw/state/openclaw.json
