@@ -3,9 +3,17 @@ runtime:
   node: 24.16.x
   openclaw: 2026.9.5
 skills:
-  root: harness-openclaw/workspace/skills
+  root: skills
   map:
-    xlsx: parse-xlsx
+    pdf: document-ingest
+    doc: document-ingest
+    docx: document-ingest
+    xls: document-ingest
+    xlsx: document-ingest
+    ppt: document-ingest
+    pptx: document-ingest
+    image: document-ingest
+  ingest_engine_env: SAM_INGEST_ENGINE
 memory:
   provider: openviking
   base_url_env: SAM_OV_BASE_URL

@@ -1,0 +1,127 @@
+#!/usr/bin/env python3
+"""Stable L2 bridge for MinerU/Docling document ingestion.
+
+This first implementation deliberately keeps the engine adapter narrow. It
+always emits the L2 manifest shape and reports ``engine_unavailable`` when no
+supported local engine is installed, rather than claiming that a file was
+parsed. Future MinerU/Docling adapters may populate pages/items without
+changing the outer contract.
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import importlib.util
+import json
+import mimetypes
+import os
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+
+FORMATS = {
+    ".pdf": "pdf", ".doc": "doc", ".docx": "docx", ".xls": "xls",
+    ".xlsx": "xlsx", ".ppt": "ppt", ".pptx": "pptx",
+    ".png": "image", ".jpg": "image", ".jpeg": "image", ".tif": "image",
+    ".tiff": "image",
+}
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _format(path: Path, task: dict[str, Any]) -> str:
+    return str(task.get("format") or FORMATS.get(path.suffix.lower(), "unknown"))
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _engine_available(name: str) -> bool:
+    if name == "mineru":
+        return importlib.util.find_spec("mineru") is not None or _which("mineru")
+    if name == "docling":
+        return importlib.util.find_spec("docling") is not None or _which("docling")
+    return False
+
+
+def _which(command: str) -> bool:
+    for directory in os.environ.get("PATH", "").split(os.pathsep):
+        candidate = Path(directory) / command
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return True
+    return False
+
+
+def _select_engine() -> tuple[str, list[str]]:
+    requested = os.environ.get("SAM_INGEST_ENGINE", "auto").lower()
+    if requested not in {"auto", "mineru", "docling"}:
+        raise ValueError("SAM_INGEST_ENGINE must be auto, mineru, or docling")
+    if requested != "auto":
+        return requested, [] if _engine_available(requested) else [f"{requested} is not installed"]
+    for candidate in ("mineru", "docling"):
+        if _engine_available(candidate):
+            return candidate, []
+    return "none", ["neither MinerU nor Docling is installed"]
+
+
+def _manifest(task: dict[str, Any], source: Path) -> dict[str, Any]:
+    engine, warnings = _select_engine()
+    file_hash = str(task.get("file_hash") or _sha256(source))
+    filename = str(task.get("filename") or source.name)
+    fmt = _format(source, task)
+    pages: list[dict[str, Any]] = []
+    status = "engine_unavailable" if engine == "none" or warnings else "adapter_pending"
+    summary = {
+        "status": status,
+        "engine": engine,
+        "text_item_count": 0,
+        "table_count": 0,
+        "table_row_count": 0,
+        "warnings": warnings or [f"{engine} adapter is not enabled in this contract-only bridge"],
+        "raw_bytes_external": False,
+        "full_text_external": False,
+    }
+    return {
+        "source_id": str(task.get("source_id") or file_hash),
+        "filename": filename,
+        "format": fmt,
+        "mime_type": task.get("mime_type") or mimetypes.guess_type(filename)[0],
+        "size_bytes": source.stat().st_size,
+        "uploaded_at": str(task.get("uploaded_at") or _now()),
+        "file_hash": file_hash,
+        "pages": pages,
+        "parse_summary": summary,
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("task", type=Path, help="task JSON containing source_path or file_path")
+    parser.add_argument("--output", type=Path, help="write manifest JSON here instead of stdout")
+    args = parser.parse_args()
+    task = json.loads(args.task.read_text(encoding="utf-8"))
+    source = Path(task.get("source_path") or task.get("file_path", ""))
+    if not source.is_file():
+        raise SystemExit(f"source file does not exist: {source}")
+    result = _manifest(task, source)
+    encoded = json.dumps(result, ensure_ascii=False, indent=2) + "\n"
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(encoded, encoding="utf-8")
+    else:
+        sys.stdout.write(encoded)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

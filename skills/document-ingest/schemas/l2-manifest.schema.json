@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://startup-ai-manager.local/schemas/l2-manifest.schema.json",
+  "title": "SAM L2 document extraction manifest",
+  "type": "object",
+  "required": ["source_id", "filename", "format", "size_bytes", "uploaded_at", "file_hash", "pages", "parse_summary"],
+  "additionalProperties": false,
+  "properties": {
+    "source_id": {"type": "string", "minLength": 1},
+    "filename": {"type": "string", "minLength": 1},
+    "format": {"type": "string", "enum": ["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "image", "unknown"]},
+    "mime_type": {"type": ["string", "null"]},
+    "size_bytes": {"type": "integer", "minimum": 0},
+    "uploaded_at": {"type": "string", "format": "date-time"},
+    "file_hash": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"},
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["page_no", "text_items", "tables"],
+        "additionalProperties": false,
+        "properties": {
+          "page_no": {"type": "integer", "minimum": 1},
+          "bbox": {"type": ["array", "null"], "items": {"type": "number"}, "minItems": 4, "maxItems": 4},
+          "text_items": {"type": "array", "items": {"$ref": "#/$defs/textItem"}},
+          "tables": {"type": "array", "items": {"$ref": "#/$defs/table"}}
+        }
+      }
+    },
+    "parse_summary": {
+      "type": "object",
+      "required": ["status", "engine", "text_item_count", "table_count", "table_row_count", "warnings", "raw_bytes_external", "full_text_external"],
+      "additionalProperties": false,
+      "properties": {
+        "status": {"type": "string"},
+        "engine": {"type": "string"},
+        "text_item_count": {"type": "integer", "minimum": 0},
+        "table_count": {"type": "integer", "minimum": 0},
+        "table_row_count": {"type": "integer", "minimum": 0},
+        "warnings": {"type": "array", "items": {"type": "string"}},
+        "raw_bytes_external": {"type": "boolean", "const": false},
+        "full_text_external": {"type": "boolean", "const": false}
+      }
+    }
+  },
+  "$defs": {
+    "sourceLoc": {
+      "type": "object",
+      "required": ["file_hash", "locator"],
+      "additionalProperties": false,
+      "properties": {
+        "file_hash": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"},
+        "page_no": {"type": ["integer", "null"], "minimum": 1},
+        "sheet": {"type": ["string", "null"]},
+        "cell_range": {"type": ["string", "null"]},
+        "paragraph": {"type": ["integer", "null"], "minimum": 0},
+        "slide_no": {"type": ["integer", "null"], "minimum": 1},
+        "shape": {"type": ["integer", "null"], "minimum": 0},
+        "bbox": {"type": ["array", "null"], "items": {"type": "number"}, "minItems": 4, "maxItems": 4},
+        "locator": {"type": "string", "minLength": 1}
+      }
+    },
+    "textItem": {
+      "type": "object",
+      "required": ["text", "source_loc"],
+      "additionalProperties": false,
+      "properties": {
+        "text": {"type": "string"},
+        "source_loc": {"$ref": "#/$defs/sourceLoc"}
+      }
+    },
+    "table": {
+      "type": "object",
+      "required": ["rows", "source_loc"],
+      "additionalProperties": false,
+      "properties": {
+        "headers": {"type": "array", "items": {"type": "string"}},
+        "rows": {"type": "array", "items": {"type": "array", "items": {"type": ["string", "number", "boolean", "null"]}}},
+        "source_loc": {"$ref": "#/$defs/sourceLoc"}
+      }
+    }
+  }
+}
