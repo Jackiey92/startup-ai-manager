@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://startup-ai-manager.local/schemas/cap-table-event.schema.json",
+  "title": "SAM cap table event",
+  "type": "object",
+  "required": ["event_id", "company_id", "effective_at", "recorded_at", "event_type", "holder_id", "instrument", "shares_delta", "ownership_basis", "source_refs", "status"],
+  "properties": {
+    "event_id": {"type": "string"}, "company_id": {"type": "string"}, "effective_at": {"type": "string"}, "recorded_at": {"type": "string"},
+    "event_type": {"enum": ["founding_issuance", "transfer", "option_grant", "option_exercise", "cancellation", "new_round", "split", "buyback", "conversion", "correction"]},
+    "holder_id": {"type": "string"}, "instrument": {"type": "string"}, "shares_delta": {"type": "number"}, "shares_after": {"type": ["number", "null"]},
+    "price": {"type": ["number", "null"]}, "currency": {"type": ["string", "null"]}, "valuation": {"type": ["number", "null"]},
+    "ownership_basis": {"enum": ["issued", "fully_diluted"]}, "transaction_ref": {"type": ["string", "null"]}, "status": {"const": "verified"},
+    "source_refs": {"type": "array", "minItems": 1}, "supersedes": {"type": ["string", "null"]}, "from_holder_id": {"type": ["string", "null"]}
+  },
+  "additionalProperties": false
+}
