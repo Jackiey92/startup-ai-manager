@@ -83,9 +83,23 @@ class ThreadManager:
 
     def promote(self, company_id: str, thread_id: str, *, fact_key: str, fact: dict[str, Any]) -> None:
         self.open(company_id, thread_id)
-        if fact.get("status") != "verified" or not fact.get("source_refs"):
-            raise ValueError("only verified facts with evidence may be promoted")
-        self.memory.put_fact(_safe(company_id), _safe(fact_key), dict(fact))
+        if fact.get("status") != "verified" or not fact.get("source_refs") or not fact.get("derived_from_turn_ids"):
+            raise ValueError("only verified facts derived from evidenced turns may be promoted")
+        turns = ConversationStore(self.memory).read_range(company_id, thread_id)
+        turn_ids = {item.get("turn_id") for item in turns}
+        if not set(fact.get("derived_from_turn_ids", ())).issubset(turn_ids):
+            raise ValueError("fact references unknown conversation turns")
+        for ref in fact.get("source_refs", ()):
+            uri = ref.get("uri") if isinstance(ref, dict) else ref
+            if not isinstance(uri, str) or not uri.startswith("viking://"):
+                raise ValueError("fact evidence must be a viking URI")
+            try:
+                self.memory.read(uri)
+            except Exception as exc:
+                raise ValueError("fact evidence is unavailable") from exc
+        promoted = dict(fact)
+        promoted["derived_from"] = list(fact["derived_from_turn_ids"])
+        self.memory.put_fact(_safe(company_id), _safe(fact_key), promoted)
 
 
 class ConversationTools:

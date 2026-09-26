@@ -228,6 +228,8 @@ class OpenVikingMemoryProvider:
             raise MemoryUnavailable(f"OpenViking client unavailable: {exc}") from exc
         if completed.returncode != 0:
             detail = self._safe_error((completed.stderr or completed.stdout or "").strip())
+            if "not_found" in detail.lower() or "not found" in detail.lower():
+                raise FileNotFoundError(detail or "memory resource not found")
             raise MemoryUnavailable(f"OpenViking request failed: {detail or 'unknown error'}")
         raw = (completed.stdout or "").strip()
         if not raw:

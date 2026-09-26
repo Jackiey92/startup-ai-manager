@@ -34,7 +34,9 @@ def test_thread_index_omits_empty_and_promotion_requires_evidence(tmp_path):
         pass
     else:
         raise AssertionError("unverified promotion accepted")
-    manager.promote("acme", "t1", fact_key="x", fact={"status": "verified", "source_refs": [{"uri": "viking://e"}], "value": 1})
+    memory.put("viking://e", "evidence")
+    turn = ConversationStore(memory).append("acme", "t1", role="user", text="capital is one", turn_id="turn-1")
+    manager.promote("acme", "t1", fact_key="x", fact={"status": "verified", "source_refs": [{"uri": "viking://e"}], "derived_from_turn_ids": [turn["turn_id"]], "value": 1})
     assert memory.get_fact("acme", "x")["value"] == 1
 
 

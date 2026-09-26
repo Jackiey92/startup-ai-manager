@@ -6,7 +6,7 @@ import json
 from typing import Any, Iterable
 import uuid
 
-from .ports import MemoryProvider
+from .ports import MemoryProvider, MemoryUnavailable
 
 CONVERSATION_ROOT = "viking://user/default/memories/projects/10_startup_ai_manager/conversations"
 KEEP_FIRST = 2
@@ -67,6 +67,25 @@ def replay_turns(lines: Iterable[str], *, start: str | None = None, end: str | N
     return result
 
 
+def normalise_jsonl(text: str) -> str:
+    """Repair providers that trim the final newline between append writes."""
+    decoder, index, values = json.JSONDecoder(), 0, []
+    while index < len(text):
+        while index < len(text) and text[index].isspace():
+            index += 1
+        if index >= len(text):
+            break
+        value, end = decoder.raw_decode(text, index)
+        values.append(value)
+        index = end
+    return "\n".join(json.dumps(value, ensure_ascii=False, sort_keys=True) for value in values) + ("\n" if values else "")
+
+
+def deterministic_summary(turns: list[dict[str, Any]], limit: int = 800) -> str:
+    parts = [f"{item.get('role')}: {str(item.get('text', '')).strip()}" for item in turns if item.get("text")]
+    return "；".join(parts)[-limit:] if parts else "（暂无实质对话）"
+
+
 class ConversationStore:
     def __init__(self, memory: MemoryProvider, *, root: str = CONVERSATION_ROOT):
         self.memory, self.root = memory, root.rstrip("/")
@@ -86,6 +105,12 @@ class ConversationStore:
             old = self.memory.read(uri)
         except FileNotFoundError:
             old = ""
+        except MemoryUnavailable as exc:
+            if "not_found" in str(exc).lower() or "not found" in str(exc).lower():
+                old = ""
+            else:
+                raise
+        old = normalise_jsonl(old)
         self.memory.put(uri, old + json.dumps(turn, ensure_ascii=False, sort_keys=True) + "\n", metadata={"layer": "conversation", "level": "L2"})
         return turn
 
@@ -94,13 +119,24 @@ class ConversationStore:
             text = self.memory.read(self.turns_uri(company_id, thread_id))
         except FileNotFoundError:
             return []
-        return replay_turns(text.splitlines(), start=start, end=end)
+        except MemoryUnavailable as exc:
+            if "not_found" in str(exc).lower() or "not found" in str(exc).lower():
+                return []
+            raise
+        return replay_turns(normalise_jsonl(text).splitlines(), start=start, end=end)
 
     def fold_l1(self, company_id: str, thread_id: str, *, now: datetime | None = None, window_minutes: int = 15) -> dict[str, Any]:
         turns = self.read_range(company_id, thread_id)
         folded = partition_turns(turns, now=now, window_minutes=window_minutes)
-        body = json.dumps(folded, ensure_ascii=False, sort_keys=True)
-        uri = self.base(company_id, thread_id) + f"/L1/{(now or datetime.now(timezone.utc)).strftime('%Y%m%dT%H%M%SZ')}.md"
+        body = json.dumps({"time_from": folded["first"][0].get("server_at") if folded["first"] else None, "time_to": folded["last"][-1].get("server_at") if folded["last"] else None, "summary": deterministic_summary(turns), "l2_from": turns[0].get("turn_id") if turns else None, "l2_to": turns[-1].get("turn_id") if turns else None, "folded": folded["pointers"]}, ensure_ascii=False, sort_keys=True)
+        anchor = turns[-1].get("server_at", "empty") if turns else "empty"
+        try:
+            stamp = datetime.fromisoformat(str(anchor).replace("Z", "+00:00"))
+            stamp = stamp.replace(minute=(stamp.minute // 15) * 15, second=0, microsecond=0)
+            window_id = stamp.strftime("%Y%m%dT%H%MZ")
+        except ValueError:
+            window_id = "empty"
+        uri = self.base(company_id, thread_id) + f"/L1/{window_id}.md"
         self.memory.put(uri, body, metadata={"layer": "conversation", "level": "L1"})
         return folded
 

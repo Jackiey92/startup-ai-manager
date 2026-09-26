@@ -22,9 +22,10 @@ from app.guidance import ImportGuideService, ModelUnavailable
 from app.harness.staging import StagingStore
 from app.memory import ExtractionMemoryService
 from app.memory_map import MapBuilder, MemoryMapTools
-from app.conversation_store import ConversationStore
+from app.conversation_store import ConversationStore, deterministic_summary
 from app.context_assembler import ContextAssembler
 from app.thread_manager import ConversationTools
+from app.config_sync import sync_agent_config, CONFIG_FILES
 from app.ports import MemoryUnavailable
 from app.providers import memory_provider, model_provider, runtime_provider
 from app.runtime_config import RuntimeConfig
@@ -141,11 +142,17 @@ def api_chat():
     try:
         conversations.append(company_id, thread_id, role="user", text=question)
         conversations.fold_l1(company_id, thread_id)
-        conversations.fold_l0(company_id, thread_id, summary="本线程 L0 摘要由最近对话窗口重算；原文仅在 L2 turns.jsonl。")
+        conversations.fold_l0(company_id, thread_id, summary=deterministic_summary(conversations.read_range(company_id, thread_id)))
     except Exception:
         map_data["degraded"] = True
     try:
-        assembled = ContextAssembler(memory, company_id=company_id, thread_id=thread_id, agent_config="").assemble(question)
+        agent_config = ""
+        try:
+            sync_agent_config(memory, RUNTIME_CONFIG.harness_root)
+            agent_config = "\n\n".join((RUNTIME_CONFIG.harness_root / name).read_text(encoding="utf-8") for name in CONFIG_FILES)
+        except Exception:
+            map_data["degraded"] = True
+        assembled = ContextAssembler(memory, company_id=company_id, thread_id=thread_id, agent_config=agent_config).assemble(question)
         context_text = assembled["prompt"] + "\n\n可用公司范围工具：memory_read(uri)、memory_search(query)、file_get(file_hash)、conversation_read(start,end)、thread_list()、thread_open(thread_id)、promote(...)。工具只读当前 company/thread scope，promote 仅显式授权时调用。"
         context_stats = assembled["stats"]
     except Exception:
