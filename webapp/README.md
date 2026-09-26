@@ -17,16 +17,16 @@ python -m venv .venv
 - `/api/chat`：原型对话入口。
 - `/`、`/files/<id>`：已导入文件列表与结构化详情。
 
-## AI 导入引导（Token Plan）
+## AI 导入引导（OpenClaw 主 Agent）
 
-导入弹窗通过 `/api/import-guide` 调用阿里云百炼 Token Plan。默认使用：
+`/api/upload` 与 `/api/import-guide` 的导入建议统一通过 OpenClaw 的
+`sam-guide` 主 Agent 编排；Python 网页层不再直连模型端点。主 Agent 会读取
+当前公司作用域内的解析证据与 L2 URI，并以结构化 JSON 返回引导结果。模型端点、
+模型名和密钥由 `sam-manifest.yaml`/profile 与运行环境注入，密钥不得写入仓库、
+`.coze` 或日志。
 
-- Base URL：`https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`
-- 模型：`auto`（由 Token Plan 自动选择可用模型）
-
-仅在运行环境注入 `SAM_GUIDE_MODEL_API_KEY` 后才会调用模型；密钥不得写入
-仓库、`.coze` 或日志。可选环境变量 `SAM_GUIDE_MODEL_BASE_URL` 与
-`SAM_GUIDE_MODEL` 用于已授权的兼容端点/模型切换。
+开发期如需 Token Plan 验收，由 OpenClaw 运行环境注入
+`SAM_GUIDE_MODEL_API_KEY` 并显式放行模型网络；网页应用本身不读取该密钥。
 
 默认 bwrap 运行使用 `--unshare-net`。只有经明确授权的模型调用验收才使用：
 
@@ -34,8 +34,6 @@ python -m venv .venv
 SAM_GUIDE_MODEL_API_KEY="$(< ~/.bl_tokenplan_key)" \
   ./tools/run-sam-isolated.sh --allow-model-network
 ```
-
-该链路只使用上述 Token Plan 端点与默认模型，避免误走按量付费通道。
 
 ## 文件
 

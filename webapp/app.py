@@ -27,7 +27,7 @@ from app.context_assembler import ContextAssembler
 from app.thread_manager import ConversationTools
 from app.config_sync import sync_agent_config, CONFIG_FILES
 from app.ports import MemoryUnavailable
-from app.providers import memory_provider, model_provider, runtime_provider
+from app.providers import memory_provider, runtime_provider
 from app.runtime_config import RuntimeConfig
 from app.runtime_memory import RuntimeWorkingMemory
 from markdown_render import render_markdown
@@ -96,11 +96,13 @@ def detect_format(filename: str) -> str:
 
 
 def import_guide(*, event: str, uploaded_file_hash: str | None = None) -> dict:
-    """Return a real model guide, never a browser-side fallback template."""
+    """Ask the configured OpenClaw main Agent for an import guide."""
+    staging = StagingStore(db_path=MAIN_DB)
     service = ImportGuideService(
         store=SourceFileStore(objects_path=OBJECTS_DIR, db_path=MAIN_DB),
         db_path=MAIN_DB,
-        model_provider=model_provider(RUNTIME_CONFIG),
+        runtime_provider=runtime_provider(RUNTIME_CONFIG, staging),
+        company_id=os.environ.get("SAM_COMPANY_ID", "default"),
     )
     return service.generate(event=event, uploaded_file_hash=uploaded_file_hash)
 
