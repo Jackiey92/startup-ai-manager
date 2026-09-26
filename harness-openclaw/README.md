@@ -11,6 +11,12 @@
 - `plugins/sam-memory/`：`registerTool` 薄壳；Python bridge 通过 `SAM_TOOL_BRIDGE_PYTHON`/`SAM_PROJECT_ROOT` 注入，作用域由 `SAM_COMPANY_ID`、`SAM_THREAD_ID` 注入。
 - `cache/`、`state/` 下的运行时数据不入库。
 
+解析边界：`OpenClawAdapter.run_parse` 对 `document-ingest` 直接调用
+`skills/document-ingest/scripts/bridge`，这是本地确定性步骤，不要求主 Agent
+拥有 exec 或路径读写权限；解析完成后才由 `sam-guide` 基于 L2 证据生成指引。
+每次启动 Agent 前，适配器会把 `SAM_SKILL_ROOT` 注入 OpenClaw 的
+`skills.load.extraDirs`，确保仓库自有 Skill 被发现。
+
 ## 可移植配置
 
 运行时路径不再要求 Windows 绝对路径。可通过环境变量切换本机、WSL 或隔离环境：

@@ -4,6 +4,8 @@ from pathlib import Path
 
 from app.harness.runtime.openclaw_adapter import OpenClawAdapter
 from app.harness.staging import StagingStore
+from app.db.database import init_db
+from app.storage import SourceFileStore
 from app.runtime_config import RuntimeConfig
 
 
@@ -19,6 +21,8 @@ def test_agent_context_is_optional_and_deterministically_injected(tmp_path: Path
     adapter = OpenClawAdapter(StagingStore(db_path=tmp_path / "missing.db"), config=config, runner=runner)
     adapter.run_agent_message("裸问题")
     assert calls[-1][calls[-1].index("--message") + 1] == "裸问题"
+    mounted = json.loads(config.config_path.read_text(encoding="utf-8"))
+    assert str(config.skill_root) in mounted["skills"]["load"]["extraDirs"]
     adapter.run_agent_message("问题", context_text="地图：viking://map/acme")
     prompt = calls[-1][calls[-1].index("--message") + 1]
     assert prompt == "地图：viking://map/acme\n\n用户问题：问题"
@@ -39,3 +43,40 @@ def test_agent_scope_is_injected_outside_prompt(tmp_path: Path):
     assert env["SAM_THREAD_ID"] == "t1"
     assert env["SAM_ALLOW_PROMOTE"] == "0"
     assert "acme" not in calls[-1][0][calls[-1][0].index("--message") + 1]
+
+
+def test_document_ingest_runs_deterministic_bridge_without_agent(tmp_path: Path):
+    db_path = tmp_path / "app.db"
+    objects = tmp_path / "objects"
+    init_db(db_path)
+    stored = SourceFileStore(objects_path=objects, db_path=db_path).put_bytes(
+        b"xlsx", original_name="report.xlsx"
+    )
+    calls = []
+
+    def runner(command, **kwargs):
+        calls.append((command, kwargs))
+        payload = {
+            "source_id": stored.file_hash,
+            "file_hash": stored.file_hash,
+            "filename": "report.xlsx",
+            "format": "xlsx",
+            "pages": [{"page_no": 1, "text_items": [], "tables": []}],
+            "images": [],
+            "parse_summary": {
+                "status": "parsed", "raw_bytes_external": False,
+                "full_text_external": False,
+            },
+        }
+        return subprocess.CompletedProcess(command, 0, json.dumps(payload), "")
+
+    config = RuntimeConfig.from_env(project_root=Path(__file__).parents[1], env={"SAM_PROFILE": "local"})
+    adapter = OpenClawAdapter(
+        StagingStore(db_path=db_path), config=config, objects_dir=objects,
+        db_path=db_path, runner=runner,
+    )
+    staging_id = adapter.run_parse(stored.file_hash, "xlsx")
+    staged = StagingStore(db_path=db_path).get(staging_id)
+    assert staged["payload"]["parse_summary"]["status"] == "parsed"
+    assert "document-ingest/scripts/bridge" in calls[0][0][1]
+    assert "--message" not in calls[0][0]

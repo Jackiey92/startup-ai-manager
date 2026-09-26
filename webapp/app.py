@@ -261,11 +261,13 @@ def api_upload():
                 memory_status = parse_status
         except MemoryUnavailable:
             memory_status = "unavailable"
+            app.logger.exception("document parser memory backend unavailable")
         except (RuntimeError, OSError, subprocess.SubprocessError):
             # The immutable original is still stored. A failed optional parser
             # must not turn a completed upload into a false client-side failure.
             parse_status = "pending_runtime"
             memory_status = "pending_runtime"
+            app.logger.exception("document parser runtime failed")
 
     response = {
         "file_hash": file_hash,

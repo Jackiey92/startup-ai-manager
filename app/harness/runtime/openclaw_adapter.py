@@ -38,6 +38,9 @@ class OpenClawAdapter(RuntimeProvider):
             raise KeyError(f"no OpenClaw skill for format: {format}")
 
         task_path = self._write_task(file_hash, format)
+        skill_name = self.config.skill_for_format[format]
+        if skill_name == "document-ingest":
+            return self._run_document_ingest(task_path, timeout=timeout)
         message = f'Use the {self.config.skill_for_format[format]} skill with task file "{task_path}".'
         out_path = self.root / "outbox" / f"{file_hash}.json"
         if out_path.exists():
@@ -55,6 +58,35 @@ class OpenClawAdapter(RuntimeProvider):
             return self.staging.save_manifest(payload)
         result = _result_from_dict(payload)
         return self.staging.save_parse(result)
+
+    def _run_document_ingest(self, task_path: Path, *, timeout: int) -> int:
+        """Run the deterministic local parser; do not ask the Agent to execute it."""
+        bridge = self.config.skill_root / "document-ingest" / "scripts" / "bridge"
+        if not bridge.is_file():
+            raise RuntimeError(f"document-ingest bridge is missing: {bridge}")
+        env = os.environ.copy()
+        env["SAM_PROJECT_ROOT"] = str(self.config.project_root)
+        env["SAM_L2_IMAGE_ROOT"] = str(self.config.data_root / "l2-images")
+        proc = self._runner(
+            [str(self.config.tool_bridge_python), str(bridge), str(task_path)],
+            cwd=self.config.project_root,
+            env=env,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+        )
+        if proc.returncode != 0:
+            detail = (proc.stderr or proc.stdout or "").strip()[-1000:]
+            raise RuntimeError(f"document-ingest bridge failed ({proc.returncode}): {detail}")
+        try:
+            payload = json.loads(proc.stdout)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("document-ingest bridge returned invalid JSON") from exc
+        if not isinstance(payload, dict) or not isinstance(payload.get("parse_summary"), dict):
+            raise RuntimeError("document-ingest bridge returned an invalid manifest")
+        return self.staging.save_manifest(payload)
 
     def run_agent_message(self, message: str, *, context_text: str | None = None,
                           company_id: str | None = None, thread_id: str | None = None,
@@ -95,8 +127,10 @@ class OpenClawAdapter(RuntimeProvider):
         state_dir.mkdir(parents=True, exist_ok=True)
         env["OPENCLAW_STATE_DIR"] = str(state_dir)
         env["OPENCLAW_CONFIG_PATH"] = str(self.config.config_path)
+        self._ensure_skill_mount()
         env["SAM_PROJECT_ROOT"] = str(self.config.project_root)
         env["SAM_HARNESS_ROOT"] = str(self.config.harness_root)
+        env["SAM_SKILL_ROOT"] = str(self.config.skill_root)
         env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(self.config.project_root), env.get("PYTHONPATH", "")]))
         env["SAM_TOOL_PLUGIN_DIR"] = str(self.config.tool_plugin_dir)
         env["SAM_TOOL_BRIDGE_PYTHON"] = str(self.config.tool_bridge_python)
@@ -123,6 +157,37 @@ class OpenClawAdapter(RuntimeProvider):
                 f"openclaw agent failed ({proc.returncode}): {proc.stderr.strip() or proc.stdout.strip()}"
             )
         return proc.stdout
+
+    def _ensure_skill_mount(self) -> None:
+        """Ensure the configured first-party skill root is visible to OpenClaw."""
+        template = self.config.harness_root / "state" / "openclaw.example.json"
+        path = self.config.config_path
+        config: dict = {}
+        if path.exists():
+            try:
+                loaded = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    config = loaded
+            except (OSError, json.JSONDecodeError):
+                config = {}
+        if not config and template.exists():
+            try:
+                loaded = json.loads(template.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    config = loaded
+            except (OSError, json.JSONDecodeError) as exc:
+                raise RuntimeError("OpenClaw configuration template is invalid") from exc
+        skills = config.setdefault("skills", {})
+        loader = skills.setdefault("load", {})
+        dirs = loader.setdefault("extraDirs", [])
+        if not isinstance(dirs, list):
+            dirs = []
+            loader["extraDirs"] = dirs
+        skill_root = str(self.config.skill_root)
+        if skill_root not in dirs:
+            dirs.append(skill_root)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def _result_from_dict(d: dict) -> ParseResult:
