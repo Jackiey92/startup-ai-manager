@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","required":["turn_id","role","server_at","text"],"properties":{"turn_id":{"type":"string"},"role":{"enum":["user","assistant","tool","system"]},"server_at":{"type":"string","format":"date-time"},"text":{"type":"string"},"tool_results":{"type":"array"}}}

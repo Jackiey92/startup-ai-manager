@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","required":["company_id","thread_id","title","status"],"properties":{"company_id":{"type":"string"},"thread_id":{"type":"string"},"title":{"type":"string"},"summary":{"type":"string"},"status":{"enum":["open","archived"]},"last_opened_at":{"type":"string"}}}

@@ -22,6 +22,8 @@ from app.guidance import ImportGuideService, ModelUnavailable
 from app.harness.staging import StagingStore
 from app.memory import ExtractionMemoryService
 from app.memory_map import MapBuilder, MemoryMapTools
+from app.conversation_store import ConversationStore
+from app.context_assembler import ContextAssembler
 from app.ports import MemoryUnavailable
 from app.providers import memory_provider, model_provider, runtime_provider
 from app.runtime_config import RuntimeConfig
@@ -122,6 +124,7 @@ def api_chat():
     company_id = str(payload.get("company_id") or os.environ.get("SAM_COMPANY_ID", "default"))
     memory = app.extensions["sam_memory_provider"]
     source_store = SourceFileStore(objects_path=OBJECTS_DIR, db_path=MAIN_DB)
+    thread_id = str(payload.get("thread_id") or session_id)
     map_result = MapBuilder(memory).load_or_rebuild(company_id)
     map_data = map_result.map
     source_ids = tuple(
@@ -133,11 +136,18 @@ def api_chat():
     # inserted into the resident prompt; the agent is told to drill down via
     # the three scoped tools when needed.
     map_json = json.dumps(map_data, ensure_ascii=False, sort_keys=True)
-    context_text = (
-        "公司记忆地图（仅导航，不含事实正文）：\n" + map_json[:12000] +
-        "\n\n可用公司范围工具：memory_read(uri)、memory_search(query)、file_get(file_hash)。"
-        "工具只允许访问当前 company_id 的 viking URI；回答前按需下钻，并保留读取过的 URI。"
-    )
+    conversations = ConversationStore(memory)
+    try:
+        conversations.append(company_id, thread_id, role="user", text=question)
+    except Exception:
+        map_data["degraded"] = True
+    try:
+        assembled = ContextAssembler(memory, company_id=company_id, thread_id=thread_id, agent_config="").assemble(question)
+        context_text = assembled["prompt"] + "\n\n可用公司范围工具：memory_read(uri)、memory_search(query)、file_get(file_hash)。"
+        context_stats = assembled["stats"]
+    except Exception:
+        context_text = "公司记忆地图（仅导航，不含事实正文）：\n" + map_json[:12000] + "\n\n当前上下文 degraded。"
+        context_stats = {"tokens": max(1, len(context_text) // 4), "branch_count": len(map_data.get("branches", [])), "folded_blocks": 0, "tool_calls": 0}
     tools = MemoryMapTools(memory, source_store, company_id, source_ids=source_ids)
     runtime = RuntimeWorkingMemory(memory)
     try:
@@ -170,13 +180,15 @@ def api_chat():
             "map_uri": MapBuilder(memory).map_uri(company_id),
             "navigation": refs[:50], "answer_summary": answer[:1000],
         })
+        conversations.append(company_id, thread_id, role="assistant", text=answer, tool_results=[{"navigation": refs[:50]}])
     except Exception:
         map_data["degraded"] = True
     return {
         "message": answer,
         "model": os.environ.get(RUNTIME_CONFIG.model_name_env, RUNTIME_CONFIG.model_default),
         "session_id": session_id,
-        "context": {"map_uri": MapBuilder(memory).map_uri(company_id), "degraded": bool(map_data.get("degraded")), "navigation_count": len(tools.navigation)},
+        "thread_id": thread_id,
+        "context": {"map_uri": MapBuilder(memory).map_uri(company_id), "degraded": bool(map_data.get("degraded")), "navigation_count": len(tools.navigation), **context_stats},
     }
 
 
