@@ -69,3 +69,12 @@ def test_openviking_list_facts_reads_known_key_when_ls_lags():
     facts = provider.list_facts("acme")
     assert facts[0]["fact_key"] == "runway"
     assert facts[0]["value"] == 8
+
+
+def test_openviking_result_envelope_lists_items_and_ignores_scalar_result():
+    runner = fake_runner_factory([
+        (0, json.dumps({"ok": True, "result": [{"uri": "viking://a"}, {"uri": "viking://b"}]}), ""),
+    ])
+    provider = OpenVikingMemoryProvider(runner=runner)
+    assert [row["uri"] for row in provider.query(prefix="viking://root")] == ["viking://a", "viking://b"]
+    assert OpenVikingMemoryProvider._items({"ok": True, "result": "body"}) == []

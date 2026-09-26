@@ -242,7 +242,10 @@ class OpenVikingMemoryProvider:
         if isinstance(payload, list):
             return [item for item in payload if isinstance(item, dict)]
         if isinstance(payload, dict):
-            for key in ("results", "items", "nodes", "data"):
+            # OV compact envelopes use ``result`` for both scalar reads and
+            # list commands.  Only a list is an item collection; a string is
+            # intentionally left to read(), which handles the body envelope.
+            for key in ("result", "results", "items", "nodes", "data"):
                 value = payload.get(key)
                 if isinstance(value, list):
                     return [item for item in value if isinstance(item, dict)]

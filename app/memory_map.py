@@ -74,7 +74,7 @@ class MapBuilder:
         discovered: set[str] = set()
         for item in sorted(items, key=lambda v: str(v.get("uri", ""))):
             uri = _uri(item.get("uri"))
-            if not uri or not (uri.endswith("/L0") or uri.endswith("/L1") or uri.endswith("/manifest.json") or uri.endswith("/L2")):
+            if not uri or not (uri.endswith("/L0") or uri.endswith("/L1") or uri.endswith("/manifest.json") or uri.endswith("/abstract.md") or uri.endswith("/L2")):
                 continue
             source_id = uri.split(f"/2a_extraction/{company}/", 1)[-1].split("/", 1)[0]
             discovered.add(source_id)
