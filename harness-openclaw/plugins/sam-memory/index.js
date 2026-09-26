@@ -8,13 +8,15 @@ const { spawn } = require("node:child_process");
 
 const TOOL_NAMES = [
   "sam_memory_read", "sam_memory_search", "sam_file_get",
-  "sam_conversation_read", "sam_thread_list", "sam_thread_open", "sam_promote",
+  "sam_memory_map", "sam_conversation_read", "sam_thread_list",
+  "sam_thread_open", "sam_promote",
 ];
 
 const schemas = {
   sam_memory_read: { type: "object", additionalProperties: false, required: ["uri"], properties: { uri: { type: "string", pattern: "^viking://" } } },
   sam_memory_search: { type: "object", additionalProperties: false, required: ["query"], properties: { query: { type: "string", minLength: 1 } } },
   sam_file_get: { type: "object", additionalProperties: false, required: ["file_hash"], properties: { file_hash: { type: "string", pattern: "^[0-9a-f]{64}$" } } },
+  sam_memory_map: { type: "object", additionalProperties: false, properties: {} },
   sam_conversation_read: { type: "object", additionalProperties: false, properties: { start: { type: "string" }, end: { type: "string" } } },
   sam_thread_list: { type: "object", additionalProperties: false, properties: {} },
   sam_thread_open: { type: "object", additionalProperties: false, properties: {} },
@@ -25,6 +27,17 @@ function redactedError(error) {
   const text = error && error.message ? String(error.message) : "tool unavailable";
   if (/api[_-]?key|bearer|token|authorization|https?:\/\//i.test(text)) return "tool unavailable";
   return text.slice(0, 160) || "tool unavailable";
+}
+
+function errorForModel(error) {
+  const code = error && error.code ? String(error.code) : "unavailable";
+  const advice = {
+    bad_request: "bad_request: check the tool arguments",
+    denied: "denied: stay within the injected company/thread scope",
+    not_found: "not_found: use sam_memory_map or sam_memory_search to discover a URI",
+    unavailable: "unavailable: retry later or report the memory backend is unavailable",
+  };
+  return advice[code] || `unavailable: ${redactedError(error)}`;
 }
 
 function validate(name, input) {
@@ -55,12 +68,33 @@ function bridgeCall(name, input) {
       if (code !== 0 && !output) return reject(new Error(redactedError(new Error(errorOutput))));
       try {
         const response = JSON.parse(output.trim().split("\n").filter(Boolean).pop() || "{}");
-        if (!response.ok) return reject(new Error(redactedError(new Error(response.error && response.error.message))));
-        resolve(response.result);
+        if (!response.ok) {
+          const error = new Error(errorForModel(response.error || {}));
+          error.code = response.error && response.error.code ? response.error.code : "unavailable";
+          return reject(error);
+        }
+        resolve(toToolResult(response.result));
       } catch (error) { reject(new Error(redactedError(error))); }
     });
     child.stdin.end(JSON.stringify({ id: 1, method: name, params: input }) + "\n");
   });
+}
+
+function toToolResult(value) {
+  const text = typeof value === "string" ? value : JSON.stringify(value);
+  return { content: [{ type: "text", text }], details: value };
+}
+
+const KNOWN_PARAM_KEYS = new Set(["uri", "query", "file_hash", "start", "end", "fact_key", "fact"]);
+
+function extractParams(handlerArgs) {
+  let firstObject = null;
+  for (const value of handlerArgs) {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) continue;
+    if (!firstObject) firstObject = value;
+    if (Object.keys(value).some(key => KNOWN_PARAM_KEYS.has(key))) return value;
+  }
+  return firstObject || {};
 }
 
 function registerTool(api, spec) {
@@ -77,16 +111,9 @@ function register(api) {
       parameters: schemas[name],
       inputSchema: schemas[name],
       optional: name === "sam_promote",
-      execute: async (input) => {
-        // Releases differ only in whether the handler receives params or a
-        // tool-call envelope.  Neither form can override the injected scope.
-        const params = input && input.params && typeof input.params === "object"
-          ? input.params
-          : (input && input.arguments && typeof input.arguments === "object" ? input.arguments : (input || {}));
-        return bridgeCall(name, params);
-      },
+      execute: async (...handlerArgs) => bridgeCall(name, extractParams(handlerArgs)),
     });
   }
 }
 
-module.exports = { id: "sam-memory", name: "SAM memory tools", register, _private: { schemas, validate, bridgeCall } };
+module.exports = { id: "sam-memory", name: "SAM memory tools", register, _private: { schemas, validate, bridgeCall, extractParams, toToolResult, TOOL_NAMES } };

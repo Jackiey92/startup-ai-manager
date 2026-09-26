@@ -2,6 +2,7 @@
 runtime:
   node: 24.16.x
   openclaw: 2026.9.5
+  agent_id: sam-guide
 skills:
   root: skills
   map:

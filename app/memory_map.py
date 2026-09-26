@@ -212,13 +212,23 @@ class MemoryMapTools:
 
     def memory_search(self, query: str) -> list[str]:
         try:
-            rows = self.memory.search(query, prefix=f"{ROOT}/2a_extraction/{self.company_id}")
+            # Search both navigation metadata and extracted L2.  A map branch
+            # must be discoverable without guessing its URI.
+            rows = []
+            for prefix in (
+                f"{ROOT}/memory_maps/{self.company_id}",
+                f"{ROOT}/2a_extraction/{self.company_id}",
+            ):
+                rows.extend(self.memory.search(query, prefix=prefix))
         except Exception as exc:
             raise RuntimeError("memory search unavailable") from exc
         uris = []
         for row in rows:
             uri = row.get("uri") if isinstance(row, dict) else None
-            if isinstance(uri, str) and uri.startswith(self.company_prefixes[1]):
+            if isinstance(uri, str) and (
+                uri.startswith(self.company_prefixes[0])
+                or uri.startswith(self.company_prefixes[1])
+            ):
                 uris.append(uri)
         self.navigation.extend(uris)
         return sorted(set(uris))

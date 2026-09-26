@@ -12,7 +12,7 @@ import os
 import sys
 from typing import Any, Callable, TextIO
 
-from .memory_map import MemoryMapTools
+from .memory_map import MapBuilder, MemoryMapTools
 from .ports import MemoryUnavailable
 from .providers import memory_provider
 from .runtime_config import RuntimeConfig
@@ -62,6 +62,9 @@ class ToolBridge:
             return self.map_tools.memory_read(self._string(params, "uri"))
         if method == "sam_memory_search":
             return self.map_tools.memory_search(self._string(params, "query"))
+        if method == "sam_memory_map":
+            self._no_extra(params)
+            return MapBuilder(self.memory).load_or_rebuild(self.company_id).map
         if method == "sam_file_get":
             return self.map_tools.file_get(self._string(params, "file_hash"))
         if method == "sam_conversation_read":

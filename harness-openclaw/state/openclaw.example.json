@@ -2,8 +2,27 @@
   "agents": {
     "defaults": {
       "model": { "primary": "${SAM_GUIDE_MODEL}" },
-      "workspace": "<absolute path to harness-openclaw>"
-    }
+      "workspace": "${SAM_HARNESS_ROOT}"
+    },
+    "list": [
+      {
+        "id": "sam-guide",
+        "name": "SAM Guide",
+        "workspace": "${SAM_HARNESS_ROOT}",
+        "model": { "primary": "${SAM_GUIDE_MODEL}" },
+        "tools": {
+          "allow": [
+            "sam_memory_read",
+            "sam_memory_search",
+            "sam_file_get",
+            "sam_memory_map",
+            "sam_conversation_read",
+            "sam_thread_list",
+            "sam_thread_open"
+          ]
+        }
+      }
+    ]
   },
   "gateway": { "mode": "local", "bind": "loopback", "auth": { "mode": "token" } },
   "skills": {
@@ -13,9 +32,6 @@
     }
   },
   "plugins": {
-    "load": {
-      "paths": ["${SAM_TOOL_PLUGIN_DIR}"]
-    },
     "entries": {
       "sam-memory": { "enabled": true }
     }
@@ -25,6 +41,7 @@
       "sam_memory_read",
       "sam_memory_search",
       "sam_file_get",
+      "sam_memory_map",
       "sam_conversation_read",
       "sam_thread_list",
       "sam_thread_open"

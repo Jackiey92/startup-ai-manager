@@ -30,6 +30,16 @@
 - `SAM_COMPANY_ID` / `SAM_THREAD_ID`：由服务端/会话注入的工具作用域，工具参数不得覆盖
 - `SAM_ALLOW_PROMOTE=1`：显式启用写入型 `sam_promote`；默认关闭
 
+9.6 及以上应把插件做成安装包而不是把裸目录放进 `plugins.load.paths`：
+
+```bash
+openclaw plugins build harness-openclaw/plugins/sam-memory
+openclaw plugins install <build-output>
+```
+
+安装后由 OpenClaw 维护安装台账；`openclaw.plugin.json` 的
+`contracts.tools` 必须与插件注册列表一致。仓库只提交包源文件，不提交运行时台账或密钥。
+
 仓库根目录的 `sam-manifest.yaml` 与 `profiles/local.yaml`、`profiles/cloud.yaml` 记录运行时、Skill、记忆底座和模型端点的声明；密钥只通过环境变量注入。通过 `SAM_PROFILE=local|cloud` 选择路径配置。
 
 ## 准备

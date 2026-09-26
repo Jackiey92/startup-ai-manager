@@ -106,6 +106,7 @@ class RuntimeConfig:
     memory_api_key_env: str
     tool_plugin_dir: Path
     tool_bridge_python: Path
+    agent_id: str
 
     @classmethod
     def from_env(cls, project_root: str | Path | None = None, env: dict[str, str] | None = None) -> "RuntimeConfig":
@@ -126,6 +127,7 @@ class RuntimeConfig:
         config_path = _path(configured_root, env.get("SAM_OPENCLAW_CONFIG", paths.get("config_path")), state / "openclaw.json")
         plugin_dir = _path(configured_root, env.get("SAM_TOOL_PLUGIN_DIR", paths.get("tool_plugin_dir")), harness / "plugins" / "sam-memory")
         bridge_python = _path(configured_root, env.get("SAM_TOOL_BRIDGE_PYTHON", paths.get("tool_bridge_python")), venv_bin / "python")
+        agent_id = str(env.get("SAM_OPENCLAW_AGENT", runtime.get("agent_id", "sam-guide")))
         mapping = dict(skills.get("map", {"*": "document-ingest"}))
         raw_mapping = env.get("SAM_SKILL_MAP")
         if raw_mapping:
@@ -152,4 +154,5 @@ class RuntimeConfig:
             str(memory.get("base_url_env", "SAM_OV_BASE_URL")),
             str(memory.get("api_key_env", "SAM_OV_API_KEY")),
             plugin_dir, bridge_python,
+            agent_id,
         )

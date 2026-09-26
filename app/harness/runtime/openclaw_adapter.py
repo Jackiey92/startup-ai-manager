@@ -96,6 +96,7 @@ class OpenClawAdapter(RuntimeProvider):
         env["OPENCLAW_STATE_DIR"] = str(state_dir)
         env["OPENCLAW_CONFIG_PATH"] = str(self.config.config_path)
         env["SAM_PROJECT_ROOT"] = str(self.config.project_root)
+        env["SAM_HARNESS_ROOT"] = str(self.config.harness_root)
         env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(self.config.project_root), env.get("PYTHONPATH", "")]))
         env["SAM_TOOL_PLUGIN_DIR"] = str(self.config.tool_plugin_dir)
         env["SAM_TOOL_BRIDGE_PYTHON"] = str(self.config.tool_bridge_python)
@@ -110,7 +111,7 @@ class OpenClawAdapter(RuntimeProvider):
         import uuid
         session_id = "oc-" + uuid.uuid4().hex
         cmd = [self.config.node_bin, str(self.config.openclaw_entry), "agent", "--local",
-               "--agent", "main", "--session-id", session_id, "--json",
+               "--agent", self.config.agent_id, "--session-id", session_id, "--json",
                "--message", message, "--timeout", str(timeout)]
         proc = self._runner(
             cmd, cwd=self.root, env=env, capture_output=True,

@@ -70,12 +70,26 @@ def test_promote_is_disabled_by_default_and_external_hash_is_rejected(tmp_path):
 
 def test_plugin_syntax_and_registration_shape():
     plugin = Path(__file__).parents[1] / "harness-openclaw" / "plugins" / "sam-memory" / "index.js"
+    manifest = json.loads((plugin.parent / "openclaw.plugin.json").read_text())
+    package = json.loads((plugin.parent / "package.json").read_text())
+    assert package["main"] == manifest["main"]
+    assert package["openclaw"]["extensions"] == ["./index.js"]
+    assert set(manifest["contracts"]["tools"]) == {
+        "sam_memory_read", "sam_memory_search", "sam_file_get", "sam_memory_map",
+        "sam_conversation_read", "sam_thread_list", "sam_thread_open", "sam_promote",
+    }
     checked = subprocess.run(["node", "--check", str(plugin)], capture_output=True, text=True)
     assert checked.returncode == 0, checked.stderr
     script = """
 const p = require(process.argv[1]); const names=[];
 p.register({registerTool(spec) { names.push(spec.name); if (spec.optional !== (spec.name === 'sam_promote')) process.exit(2); }});
-if (names.length !== 7 || !names.includes('sam_memory_search')) process.exit(3);
+if (names.length !== 8 || !names.includes('sam_memory_search') || !names.includes('sam_memory_map')) process.exit(3);
+const got = p._private.extractParams(['call-id', {query:'q'}, {ctxOnly:true}, () => {}]);
+if (got.query !== 'q') process.exit(4);
+const fallback = p._private.extractParams(['call-id', {ctxOnly:true}, () => {}]);
+if (!fallback.ctxOnly) process.exit(5);
+const result = p._private.toToolResult({value: 1});
+if (!Array.isArray(result.content) || result.content[0].type !== 'text' || result.details.value !== 1) process.exit(6);
 """
     ran = subprocess.run(["node", "-e", script, str(plugin)], capture_output=True, text=True)
     assert ran.returncode == 0, ran.stderr
