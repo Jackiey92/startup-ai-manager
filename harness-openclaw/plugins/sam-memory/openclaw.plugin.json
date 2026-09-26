@@ -1,0 +1,7 @@
+{
+  "id": "sam-memory",
+  "name": "SAM memory tools",
+  "description": "Scoped SAM memory and conversation tools",
+  "main": "index.js",
+  "configSchema": { "type": "object", "additionalProperties": false }
+}

@@ -56,11 +56,14 @@ class OpenClawAdapter(RuntimeProvider):
         result = _result_from_dict(payload)
         return self.staging.save_parse(result)
 
-    def run_agent_message(self, message: str, *, context_text: str | None = None, timeout: int = 600) -> str:
+    def run_agent_message(self, message: str, *, context_text: str | None = None,
+                          company_id: str | None = None, thread_id: str | None = None,
+                          allow_promote: bool = False, timeout: int = 600) -> str:
         prompt = message
         if context_text:
             prompt = context_text.rstrip() + "\n\n用户问题：" + message
-        return self._invoke_agent(prompt, timeout=timeout)
+        return self._invoke_agent(prompt, timeout=timeout, company_id=company_id,
+                                  thread_id=thread_id, allow_promote=allow_promote)
 
     def _write_task(self, file_hash: str, format: str) -> Path:
         inbox = self.root / "inbox"
@@ -84,13 +87,23 @@ class OpenClawAdapter(RuntimeProvider):
         )
         return task_path
 
-    def _invoke_agent(self, message: str, timeout: int) -> str:
+    def _invoke_agent(self, message: str, timeout: int, *, company_id: str | None = None,
+                      thread_id: str | None = None, allow_promote: bool = False) -> str:
         env = os.environ.copy()
         env["PATH"] = f"{self.config.venv_bin}:{env.get('PATH', '')}"
         state_dir = self.config.state_dir
         state_dir.mkdir(parents=True, exist_ok=True)
         env["OPENCLAW_STATE_DIR"] = str(state_dir)
         env["OPENCLAW_CONFIG_PATH"] = str(self.config.config_path)
+        env["SAM_PROJECT_ROOT"] = str(self.config.project_root)
+        env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(self.config.project_root), env.get("PYTHONPATH", "")]))
+        env["SAM_TOOL_PLUGIN_DIR"] = str(self.config.tool_plugin_dir)
+        env["SAM_TOOL_BRIDGE_PYTHON"] = str(self.config.tool_bridge_python)
+        if company_id is not None:
+            env["SAM_COMPANY_ID"] = str(company_id)
+        if thread_id is not None:
+            env["SAM_THREAD_ID"] = str(thread_id)
+        env["SAM_ALLOW_PROMOTE"] = "1" if allow_promote else "0"
         cache_dir = self.root / "cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
         env["XDG_CACHE_HOME"] = str(cache_dir)

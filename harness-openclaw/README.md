@@ -8,6 +8,7 @@
 - `outbox/`：技能产出的 `ParseResult` JSON，仅为 staging 数据（运行时生成，不入库）。
 - `../skills/document-ingest/`：统一文档导入技能，负责 MinerU/Docling 解析与 L2 staging 输出。
 - `state/openclaw.example.json`：OpenClaw 配置模板；复制为 `state/openclaw.json`，路径和模型端点由 profile/环境变量注入。
+- `plugins/sam-memory/`：`registerTool` 薄壳；Python bridge 通过 `SAM_TOOL_BRIDGE_PYTHON`/`SAM_PROJECT_ROOT` 注入，作用域由 `SAM_COMPANY_ID`、`SAM_THREAD_ID` 注入。
 - `cache/`、`state/` 下的运行时数据不入库。
 
 ## 可移植配置
@@ -23,6 +24,11 @@
 - `SAM_SKILL_MAP`：格式到 Skill 名称的 JSON 映射，默认由 `document-ingest` 接管。
 - `SAM_DATA_ROOT` / `SAM_OBJECTS_DIR` / `SAM_MAIN_DB` / `SAM_APP_DB`：数据、对象和 SQLite 路径
 - `SAM_MEMORY_ROOT`：local MemoryProvider 的持久化根目录
+- `SAM_TOOL_PLUGIN_DIR`：OpenClaw 插件目录（指向 `harness-openclaw/plugins/sam-memory`）
+- `SAM_TOOL_BRIDGE_PYTHON`：bridge 使用的 Python 可执行文件；未设置时使用 `SAM_VENV_PYTHON` 或 `python3`
+- `SAM_TOOL_BRIDGE_TIMEOUT_MS`：单次工具 bridge 超时，默认 15000ms
+- `SAM_COMPANY_ID` / `SAM_THREAD_ID`：由服务端/会话注入的工具作用域，工具参数不得覆盖
+- `SAM_ALLOW_PROMOTE=1`：显式启用写入型 `sam_promote`；默认关闭
 
 仓库根目录的 `sam-manifest.yaml` 与 `profiles/local.yaml`、`profiles/cloud.yaml` 记录运行时、Skill、记忆底座和模型端点的声明；密钥只通过环境变量注入。通过 `SAM_PROFILE=local|cloud` 选择路径配置。
 

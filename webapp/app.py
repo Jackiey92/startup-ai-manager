@@ -174,7 +174,10 @@ def api_chat():
         map_data["degraded"] = True
     adapter = runtime_provider(RUNTIME_CONFIG, StagingStore(db_path=MAIN_DB))
     try:
-        raw = adapter.run_agent_message(question, context_text=context_text, timeout=600)
+        raw = adapter.run_agent_message(
+            question, context_text=context_text, company_id=company_id,
+            thread_id=thread_id, allow_promote=False, timeout=600,
+        )
     except (RuntimeError, OSError, subprocess.SubprocessError):
         return {"error": "agent failed"}, 502
     data = json.loads(raw)

@@ -13,3 +13,5 @@ paths:
   main_db: data/app.db
   app_db: data/sales_app/app.db
   memory_root: .sam-memory
+  tool_plugin_dir: harness-openclaw/plugins/sam-memory
+  tool_bridge_python: .venv/bin/python
