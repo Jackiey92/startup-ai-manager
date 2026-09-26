@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
 
 from .conversation_store import ConversationStore, partition_turns
@@ -17,9 +18,10 @@ def estimate_tokens(text: str) -> int:
 
 
 class ContextAssembler:
-    def __init__(self, memory, *, company_id: str, thread_id: str, agent_config: str = "", budget: int = 6000):
+    def __init__(self, memory, *, company_id: str, thread_id: str, agent_config: str = "", budget: int | None = None):
         self.memory, self.company_id, self.thread_id = memory, company_id, thread_id
-        self.agent_config, self.budget = agent_config, budget
+        self.agent_config = agent_config
+        self.budget = budget if budget is not None else int(os.environ.get("SAM_CTX_RESIDENT_TOKEN_BUDGET", "6000"))
         self.maps = MapBuilder(memory)
         self.conversations = ConversationStore(memory)
 

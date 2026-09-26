@@ -86,3 +86,30 @@ class ThreadManager:
         if fact.get("status") != "verified" or not fact.get("source_refs"):
             raise ValueError("only verified facts with evidence may be promoted")
         self.memory.put_fact(_safe(company_id), _safe(fact_key), dict(fact))
+
+
+class ConversationTools:
+    """Scoped read/promote tools exposed to an agent, never a global browser API."""
+    def __init__(self, memory: MemoryProvider, company_id: str, thread_id: str):
+        self.memory, self.company_id, self.thread_id = memory, _safe(company_id), _safe(thread_id)
+        self.store = ConversationStore(memory)
+        self.manager = ThreadManager(memory)
+
+    def conversation_read(self, start: str | None = None, end: str | None = None) -> list[dict[str, Any]]:
+        return self.store.read_range(self.company_id, self.thread_id, start=start, end=end)
+
+    def thread_list(self) -> list[dict[str, Any]]:
+        return self.manager.list(self.company_id)
+
+    def thread_open(self, thread_id: str) -> str:
+        row = self.manager.open(self.company_id, thread_id)
+        uri = f"{self.manager.root}/{self.company_id}/{_safe(thread_id)}/L0/thread_summary.md"
+        try:
+            return self.memory.read(uri)
+        except FileNotFoundError:
+            return str(row.get("summary", ""))
+        except Exception as exc:
+            raise RuntimeError("thread summary unavailable") from exc
+
+    def promote(self, thread_id: str, *, fact_key: str, fact: dict[str, Any]) -> None:
+        self.manager.promote(self.company_id, thread_id, fact_key=fact_key, fact=fact)

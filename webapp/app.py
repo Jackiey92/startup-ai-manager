@@ -24,6 +24,7 @@ from app.memory import ExtractionMemoryService
 from app.memory_map import MapBuilder, MemoryMapTools
 from app.conversation_store import ConversationStore
 from app.context_assembler import ContextAssembler
+from app.thread_manager import ConversationTools
 from app.ports import MemoryUnavailable
 from app.providers import memory_provider, model_provider, runtime_provider
 from app.runtime_config import RuntimeConfig
@@ -139,16 +140,19 @@ def api_chat():
     conversations = ConversationStore(memory)
     try:
         conversations.append(company_id, thread_id, role="user", text=question)
+        conversations.fold_l1(company_id, thread_id)
+        conversations.fold_l0(company_id, thread_id, summary="本线程 L0 摘要由最近对话窗口重算；原文仅在 L2 turns.jsonl。")
     except Exception:
         map_data["degraded"] = True
     try:
         assembled = ContextAssembler(memory, company_id=company_id, thread_id=thread_id, agent_config="").assemble(question)
-        context_text = assembled["prompt"] + "\n\n可用公司范围工具：memory_read(uri)、memory_search(query)、file_get(file_hash)。"
+        context_text = assembled["prompt"] + "\n\n可用公司范围工具：memory_read(uri)、memory_search(query)、file_get(file_hash)、conversation_read(start,end)、thread_list()、thread_open(thread_id)、promote(...)。工具只读当前 company/thread scope，promote 仅显式授权时调用。"
         context_stats = assembled["stats"]
     except Exception:
         context_text = "公司记忆地图（仅导航，不含事实正文）：\n" + map_json[:12000] + "\n\n当前上下文 degraded。"
         context_stats = {"tokens": max(1, len(context_text) // 4), "branch_count": len(map_data.get("branches", [])), "folded_blocks": 0, "tool_calls": 0}
     tools = MemoryMapTools(memory, source_store, company_id, source_ids=source_ids)
+    conversation_tools = ConversationTools(memory, company_id, thread_id)
     runtime = RuntimeWorkingMemory(memory)
     try:
         try:
