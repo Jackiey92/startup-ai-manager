@@ -124,6 +124,11 @@ def api_chat():
     source_store = SourceFileStore(objects_path=OBJECTS_DIR, db_path=MAIN_DB)
     map_result = MapBuilder(memory).load_or_rebuild(company_id)
     map_data = map_result.map
+    source_ids = tuple(
+        str(item.get("uri", "")).split(f"/2a_extraction/{company_id}/", 1)[-1].split("/", 1)[0]
+        for item in map_data.get("branches", [])
+        if isinstance(item, dict) and item.get("kind") == "2a"
+    )
     # This is deliberately navigation-only.  No L2/L1 body or 2b value is
     # inserted into the resident prompt; the agent is told to drill down via
     # the three scoped tools when needed.
@@ -133,7 +138,7 @@ def api_chat():
         "\n\n可用公司范围工具：memory_read(uri)、memory_search(query)、file_get(file_hash)。"
         "工具只允许访问当前 company_id 的 viking URI；回答前按需下钻，并保留读取过的 URI。"
     )
-    tools = MemoryMapTools(memory, source_store, company_id)
+    tools = MemoryMapTools(memory, source_store, company_id, source_ids=source_ids)
     runtime = RuntimeWorkingMemory(memory)
     try:
         try:
@@ -212,6 +217,14 @@ def api_upload():
             if isinstance(payload, dict) and "parse_summary" in payload:
                 company_id = os.environ.get("SAM_COMPANY_ID", "default")
                 ExtractionMemoryService(app.extensions["sam_memory_provider"]).ingest(company_id, payload)
+                # ls --recursive is eventually consistent on OV.  The source
+                # ID is known here, so verify its L0 by exact read immediately.
+                try:
+                    MapBuilder(app.extensions["sam_memory_provider"]).rebuild_map(
+                        company_id, source_ids=(str(payload["source_id"]),)
+                    )
+                except Exception:
+                    app.logger.info("memory map update deferred after upload")
                 memory_status = "stored_2a"
             else:
                 memory_status = "awaiting_l2_manifest"

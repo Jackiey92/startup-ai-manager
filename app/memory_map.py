@@ -60,7 +60,7 @@ class MapBuilder:
     def markdown_uri(self, company_id: str) -> str:
         return f"{self.root}/memory_maps/{_safe(company_id)}/map.md"
 
-    def rebuild_map(self, company_id: str) -> MemoryMapResult:
+    def rebuild_map(self, company_id: str, *, source_ids: tuple[str, ...] = (), fact_keys: tuple[str, ...] = ()) -> MemoryMapResult:
         company = _safe(company_id)
         degraded = False
         branches: list[dict[str, Any]] = []
@@ -71,11 +71,17 @@ class MapBuilder:
         except Exception:
             items = []
             degraded = True
+        discovered: set[str] = set()
         for item in sorted(items, key=lambda v: str(v.get("uri", ""))):
             uri = _uri(item.get("uri"))
             if not uri or not (uri.endswith("/L0") or uri.endswith("/L1") or uri.endswith("/manifest.json") or uri.endswith("/L2")):
                 continue
             source_id = uri.split(f"/2a_extraction/{company}/", 1)[-1].split("/", 1)[0]
+            discovered.add(source_id)
+        # The recursive listing is eventually consistent.  Explicit source
+        # IDs are read by deterministic URI and therefore win over its view.
+        candidates = sorted(discovered | {_safe(value) for value in source_ids})
+        for source_id in candidates:
             branch_uri = f"{self.root}/2a_extraction/{company}/{source_id}/L0/abstract.md"
             if branch_uri in known:
                 continue
@@ -89,7 +95,10 @@ class MapBuilder:
                 "dangling": not self._exists(branch_uri),
             })
         try:
-            facts = self.memory.list_facts(company)
+            try:
+                facts = self.memory.list_facts(company, fact_keys=fact_keys)
+            except TypeError:  # backwards-compatible third-party providers
+                facts = self.memory.list_facts(company)
         except Exception:
             facts = []
             degraded = True
@@ -119,18 +128,24 @@ class MapBuilder:
         self.memory.put(self.markdown_uri(company), overview, metadata={"layer": "map", "company_id": company})
         return MemoryMapResult(company, map_data, degraded)
 
-    def load_or_rebuild(self, company_id: str) -> MemoryMapResult:
+    def load_or_rebuild(self, company_id: str, *, source_ids: tuple[str, ...] = (), fact_keys: tuple[str, ...] = ()) -> MemoryMapResult:
+        cached_source_ids: set[str] = set()
         try:
             data = json.loads(self.memory.read(self.map_uri(company_id)))
             if isinstance(data, dict) and data.get("company_id") == _safe(company_id):
+                cached_source_ids = {
+                    str(item.get("uri", "")).split(f"/2a_extraction/{_safe(company_id)}/", 1)[-1].split("/", 1)[0]
+                    for item in data.get("branches", [])
+                    if isinstance(item, dict) and item.get("kind") == "2a"
+                }
                 # A deleted source/fact must not remain silently linked from a
                 # cached map. Rebuild when a previously live branch vanished.
-                if not any(item.get("dangling") for item in data.get("branches", [])):
+                if not any(item.get("dangling") for item in data.get("branches", [])) and set(source_ids) <= cached_source_ids:
                     return MemoryMapResult(_safe(company_id), data, bool(data.get("degraded")))
         except Exception:
             pass
         try:
-            return self.rebuild_map(company_id)
+            return self.rebuild_map(company_id, source_ids=tuple(sorted(cached_source_ids | set(source_ids))), fact_keys=fact_keys)
         except Exception:
             return MemoryMapResult(_safe(company_id), {"company_id": _safe(company_id), "branches": [], "degraded": True}, True)
 
@@ -152,7 +167,7 @@ class MapBuilder:
 class MemoryMapTools:
     """Tool-shaped facade with strict company URI and file-hash boundaries."""
 
-    def __init__(self, memory: MemoryProvider, files: SourceFileStore, company_id: str):
+    def __init__(self, memory: MemoryProvider, files: SourceFileStore, company_id: str, *, source_ids: tuple[str, ...] = ()):
         self.memory, self.files, self.company_id = memory, files, _safe(company_id)
         self.scope = f"{ROOT}/"
         self.company_prefixes = (
@@ -162,6 +177,14 @@ class MemoryMapTools:
         )
         self.navigation: list[str] = []
         self._file_hashes: set[str] = set()
+        for source_id in source_ids:
+            manifest_uri = f"{ROOT}/2a_extraction/{self.company_id}/{_safe(source_id)}/L2/manifest.json"
+            try:
+                document = json.loads(memory.read(manifest_uri))
+            except Exception:
+                document = None
+            if isinstance(document, dict) and isinstance(document.get("file_hash"), str):
+                self._file_hashes.add(document["file_hash"])
         try:
             for item in memory.query(prefix=f"{ROOT}/2a_extraction/{self.company_id}"):
                 content = item.get("content", "") if isinstance(item, dict) else ""

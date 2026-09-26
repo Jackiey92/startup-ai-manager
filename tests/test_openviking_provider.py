@@ -56,3 +56,16 @@ def test_openviking_provider_blocks_unverified_fact():
     provider = OpenVikingMemoryProvider(runner=lambda *a, **k: None)
     with pytest.raises(ValueError, match="verified"):
         provider.put_fact("acme", "cash", {"status": "claimed"})
+
+
+def test_openviking_list_facts_reads_known_key_when_ls_lags():
+    runner = fake_runner_factory([
+        (0, json.dumps({"ok": True}), ""),
+        (0, json.dumps({"result": json.dumps({"status": "verified", "value": 8})}), ""),
+        (0, json.dumps({"items": []}), ""),
+    ])
+    provider = OpenVikingMemoryProvider(runner=runner)
+    provider.put_fact("acme", "runway", {"status": "verified", "value": 8})
+    facts = provider.list_facts("acme")
+    assert facts[0]["fact_key"] == "runway"
+    assert facts[0]["value"] == 8

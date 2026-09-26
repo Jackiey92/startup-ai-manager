@@ -61,7 +61,7 @@ class MemoryProvider(Protocol):
     def delete(self, uri: str, *, recursive: bool = False) -> None:
         """Delete an explicitly scoped runtime-memory resource."""
 
-    def list_facts(self, company_id: str) -> list[dict[str, Any]]:
+    def list_facts(self, company_id: str, *, fact_keys: Sequence[str] = ()) -> list[dict[str, Any]]:
         """List verified 2b facts for one company."""
 
 
@@ -133,9 +133,20 @@ class LocalMemoryProvider:
         elif path.exists():
             path.unlink()
 
-    def list_facts(self, company_id: str) -> list[dict[str, Any]]:
+    def list_facts(self, company_id: str, *, fact_keys: Sequence[str] = ()) -> list[dict[str, Any]]:
         prefix = f"viking://user/default/memories/projects/10_startup_ai_manager/2b_facts/{company_id}"
         facts = []
+        seen: set[str] = set()
+        for key in fact_keys:
+            try:
+                fact = self.get_fact(company_id, str(key))
+            except Exception:
+                fact = None
+            if isinstance(fact, dict) and fact.get("status") == "verified":
+                fact.setdefault("fact_key", str(key))
+                fact.setdefault("uri", f"{prefix}/{key}.json")
+                facts.append(fact)
+                seen.add(str(key))
         for item in self.query(prefix=prefix):
             uri = item.get("uri", "")
             if not uri.endswith(".json"):
@@ -147,7 +158,9 @@ class LocalMemoryProvider:
             if isinstance(fact, dict) and fact.get("status") == "verified":
                 fact.setdefault("fact_key", uri.rsplit("/", 1)[-1][:-5])
                 fact.setdefault("uri", uri)
-                facts.append(fact)
+                if fact["fact_key"] not in seen:
+                    facts.append(fact)
+                    seen.add(fact["fact_key"])
         return sorted(facts, key=lambda value: str(value.get("fact_key", "")))
 
 
@@ -177,6 +190,7 @@ class OpenVikingMemoryProvider:
         self.api_key = api_key
         self.ov_bin = ov_bin
         self._runner = runner or subprocess.run
+        self._known_fact_keys: dict[str, set[str]] = {}
 
     def _env(self) -> dict[str, str]:
         env = os.environ.copy()
@@ -274,6 +288,7 @@ class OpenVikingMemoryProvider:
             json.dumps(fact, ensure_ascii=False, sort_keys=True),
             metadata={"layer": "2b", "company_id": company_id, "fact_key": fact_key},
         )
+        self._known_fact_keys.setdefault(company_id, set()).add(fact_key)
 
     def get_fact(self, company_id: str, fact_key: str) -> dict[str, Any] | None:
         uri = f"viking://user/default/memories/projects/10_startup_ai_manager/2b_facts/{company_id}/{fact_key}.json"
@@ -296,9 +311,21 @@ class OpenVikingMemoryProvider:
     def reindex(self, uri: str, *, recursive: bool = True) -> None:
         self._run(["reindex", uri, "--mode", "semantic_and_vectors", "--wait", "true", "--recursive", str(recursive).lower()])
 
-    def list_facts(self, company_id: str) -> list[dict[str, Any]]:
+    def list_facts(self, company_id: str, *, fact_keys: Sequence[str] = ()) -> list[dict[str, Any]]:
         prefix = f"viking://user/default/memories/projects/10_startup_ai_manager/2b_facts/{company_id}"
         facts: list[dict[str, Any]] = []
+        keys = list(dict.fromkeys([*self._known_fact_keys.get(company_id, set()), *map(str, fact_keys)]))
+        seen: set[str] = set()
+        for key in keys:
+            try:
+                fact = json.loads(self.read(f"{prefix}/{key}.json"))
+            except (MemoryUnavailable, json.JSONDecodeError, TypeError):
+                fact = None
+            if isinstance(fact, dict) and fact.get("status") == "verified":
+                fact.setdefault("fact_key", key)
+                fact.setdefault("uri", f"{prefix}/{key}.json")
+                facts.append(fact)
+                seen.add(key)
         for item in self._items(self._run(["ls", prefix, "--recursive"])):
             uri = item.get("uri") or item.get("path")
             if not isinstance(uri, str) or not uri.endswith(".json"):
@@ -312,5 +339,8 @@ class OpenVikingMemoryProvider:
             if isinstance(fact, dict) and fact.get("status") == "verified":
                 fact.setdefault("fact_key", uri.rsplit("/", 1)[-1][:-5])
                 fact.setdefault("uri", uri)
-                facts.append(fact)
+                key = str(fact.get("fact_key", ""))
+                if key not in seen:
+                    facts.append(fact)
+                    seen.add(key)
         return sorted(facts, key=lambda value: str(value.get("fact_key", "")))
