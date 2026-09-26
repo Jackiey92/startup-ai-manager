@@ -30,6 +30,7 @@ from app.ports import MemoryUnavailable
 from app.providers import memory_provider, runtime_provider
 from app.runtime_config import RuntimeConfig
 from app.runtime_memory import RuntimeWorkingMemory
+from app.upload_status import parse_result_status
 from markdown_render import render_markdown
 import markdown as md_lib
 
@@ -239,10 +240,10 @@ def api_upload():
     if adapter.supports(harness_format):
         try:
             staging_id = adapter.run_parse(file_hash, harness_format, timeout=600)
-            parse_status = "parsed"
             staged = staging.get(staging_id)
             payload = staged.get("payload", {})
-            if isinstance(payload, dict) and "parse_summary" in payload:
+            parse_status, memory_status = parse_result_status(payload)
+            if parse_status == "parsed":
                 company_id = os.environ.get("SAM_COMPANY_ID", "default")
                 ExtractionMemoryService(app.extensions["sam_memory_provider"]).ingest(company_id, payload)
                 # ls --recursive is eventually consistent on OV.  The source
@@ -255,7 +256,9 @@ def api_upload():
                     app.logger.info("memory map update deferred after upload")
                 memory_status = "stored_2a"
             else:
-                memory_status = "awaiting_l2_manifest"
+                # The original remains safely stored, but no empty/failed
+                # manifest is allowed into 2a.
+                memory_status = parse_status
         except MemoryUnavailable:
             memory_status = "unavailable"
         except (RuntimeError, OSError, subprocess.SubprocessError):

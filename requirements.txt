@@ -2,3 +2,4 @@ openpyxl
 pymupdf
 flask
 markdown
+docling-slim[convert-core,format-office,format-pdf,format-xlsx]==2.130.0
