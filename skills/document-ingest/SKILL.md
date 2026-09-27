@@ -36,7 +36,9 @@ verified 2b fact.
 
 The bridge selects `SAM_INGEST_ENGINE` (`auto`, `mineru`, or `docling`). The
 selected engine is behind the bridge and may be replaced without changing the
-application layer. `auto` prefers MinerU, then Docling. The local POC has
+application layer. `auto` prefers Docling for Office formats (no server
+required), and MinerU first for PDF/image layout, with the other local engine
+as a fallback when the preferred conversion fails. The local POC has
 verified MinerU 4.0.7 on CPU with a basic ONNX tier for PDF, DOCX, XLSX and
 PPTX, and Docling slim 2.130.0 for Office. Docling PDF requires its optional
 Torch/OCR stack and is reported as `parse_failed` when that stack is absent;

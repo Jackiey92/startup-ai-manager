@@ -106,16 +106,30 @@ def _which(command: str) -> bool:
     return False
 
 
-def _select_engine() -> tuple[str, list[str]]:
+def _select_engines(fmt: str) -> tuple[list[str], list[str]]:
+    """Return available engines in a format-aware fallback order."""
     requested = os.environ.get("SAM_INGEST_ENGINE", "auto").lower()
     if requested not in {"auto", "mineru", "docling"}:
         raise ValueError("SAM_INGEST_ENGINE must be auto, mineru, or docling")
     if requested != "auto":
-        return requested, [] if _engine_available(requested) else [f"{requested} is not installed"]
-    for candidate in ("mineru", "docling"):
-        if _engine_available(candidate):
-            return candidate, []
-    return "none", ["neither MinerU nor Docling is installed"]
+        return ([requested], []) if _engine_available(requested) else ([], [f"{requested} is not installed"])
+    # Office conversion is deterministic and does not need a running MinerU
+    # server.  PDF/image layout benefits from MinerU first, with Docling as a
+    # local fallback when its optional stack is available.
+    if fmt in {"docx", "xlsx", "pptx", "doc", "xls", "ppt"}:
+        order = ("docling", "mineru")
+    else:
+        order = ("mineru", "docling")
+    candidates = [name for name in order if _engine_available(name)]
+    if candidates:
+        return candidates, []
+    return [], ["neither MinerU nor Docling is installed"]
+
+
+def _select_engine(fmt: str = "unknown") -> tuple[str, list[str]]:
+    """Backward-compatible single-engine view for callers outside the bridge."""
+    candidates, warnings = _select_engines(fmt)
+    return (candidates[0], []) if candidates else ("none", warnings)
 
 
 class _TableParser(HTMLParser):
@@ -418,32 +432,35 @@ def _extract_embedded_images(source: Path, file_hash: str, fmt: str) -> tuple[li
 
 
 def _manifest(task: dict[str, Any], source: Path) -> dict[str, Any]:
-    engine, warnings = _select_engine()
     file_hash = str(task.get("file_hash") or _sha256(source))
     filename = str(task.get("filename") or task.get("original_name") or source.name)
     fmt = _format(source, task)
+    engines, selection_warnings = _select_engines(fmt)
     pages: list[dict[str, Any]] = []
     images, image_warnings = _extract_embedded_images(source, file_hash, fmt)
-    if engine == "mineru" and not warnings:
+    failure_warnings: list[str] = []
+    summary: dict[str, Any]
+    for engine in engines:
         try:
-            pages, summary = _run_mineru(source, file_hash, fmt, filename)
+            if engine == "mineru":
+                pages, summary = _run_mineru(source, file_hash, fmt, filename)
+            else:
+                pages, summary = _run_docling(source, file_hash, fmt, filename)
+            if failure_warnings:
+                summary.setdefault("warnings", []).extend(failure_warnings)
+            break
         except Exception as exc:
-            summary = {"status": "parse_failed", "engine": "mineru", "text_item_count": 0, "table_count": 0, "table_row_count": 0, "warnings": [str(exc)], "raw_bytes_external": False, "full_text_external": False}
-    elif engine == "docling" and not warnings:
-        try:
-            pages, summary = _run_docling(source, file_hash, fmt, filename)
-        except Exception as exc:
-            summary = {"status": "parse_failed", "engine": "docling", "text_item_count": 0, "table_count": 0, "table_row_count": 0, "warnings": [str(exc)], "raw_bytes_external": False, "full_text_external": False}
+            failure_warnings.append(f"{engine} failed ({type(exc).__name__}): {str(exc)[:300]}")
     else:
-        status = "engine_unavailable" if engine == "none" or warnings else "adapter_pending"
+        status = "engine_unavailable" if not engines else "parse_failed"
         summary = {
-        "status": status,
-        "engine": engine,
-        "text_item_count": 0,
-        "table_count": 0,
-        "table_row_count": 0,
-        "warnings": warnings or [f"{engine} adapter is not enabled in this contract-only bridge"],
-        "raw_bytes_external": False,
+            "status": status,
+            "engine": engines[0] if engines else "none",
+            "text_item_count": 0,
+            "table_count": 0,
+            "table_row_count": 0,
+            "warnings": selection_warnings + failure_warnings,
+            "raw_bytes_external": False,
             "full_text_external": False,
         }
     if image_warnings:

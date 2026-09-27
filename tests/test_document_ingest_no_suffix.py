@@ -78,3 +78,30 @@ def test_image_extraction_failure_is_non_fatal(tmp_path: Path) -> None:
     images, warnings = bridge._extract_embedded_images(source, "b" * 64, "xlsx")
     assert images == []
     assert warnings and "BadZipFile" in warnings[0]
+
+
+def test_auto_office_prefers_docling_and_falls_back(monkeypatch, tmp_path: Path) -> None:
+    bridge = _bridge_module()
+    source = tmp_path / ("c" * 64)
+    source.write_bytes(b"office bytes")
+    calls: list[str] = []
+
+    monkeypatch.setenv("SAM_INGEST_ENGINE", "auto")
+    monkeypatch.setattr(bridge, "_engine_available", lambda name: True)
+    monkeypatch.setattr(bridge, "_extract_embedded_images", lambda *args: ([], []))
+
+    def fail_docling(*args):
+        calls.append("docling")
+        raise RuntimeError("simulated local conversion failure")
+
+    def parse_mineru(*args):
+        calls.append("mineru")
+        return [], {"status": "parsed", "engine": "mineru", "warnings": []}
+
+    monkeypatch.setattr(bridge, "_run_docling", fail_docling)
+    monkeypatch.setattr(bridge, "_run_mineru", parse_mineru)
+    result = bridge._manifest({"format": "xlsx", "filename": "report.xlsx"}, source)
+    assert result["parse_summary"]["status"] == "parsed"
+    assert result["parse_summary"]["engine"] == "mineru"
+    assert calls == ["docling", "mineru"]
+    assert "docling failed" in result["parse_summary"]["warnings"][0]
