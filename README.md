@@ -12,7 +12,7 @@
 
 Startup AI Manager 不是在传统 ERP 上加一个聊天框，也不是又一个通用问答助手。它的核心是：
 
-- **Agent 是主要执行者**：通过对话、文件、邮件驱动，创始人几乎不填表单，只在关键节点「拍板」；
+- **Agent 是当前原型的主要执行者**：通过对话与文件驱动，创始人只在关键节点「拍板」；邮件等外部连接器仍属后续范围；
 - **围绕一个持久、可查询、跨域的「公司模型」运转**，而不是一问一答、聊完即走；
 - **每一个出现在界面上的数字都可溯源到源文件**，并区分「事实 / 口述 / 推断」；
 - **外部数据与内部数据分区隔离、单向清关**，防止外部内容污染公司账本。
@@ -47,14 +47,20 @@ Startup AI Manager 不是在传统 ERP 上加一个聊天框，也不是又一�
 
 八条工程纪律：**原文不可变 · 事实只追加 · 写入走闸门 · 读取带滤镜 · 外部先检疫 · 引用必回源 · 动作人签字 · 正确性靠评测。**
 
-## 技术底座（暂定）
+## 当前阶段
 
-- **Agent 运行时**：[OpenClaw](https://github.com/openclaw/openclaw) —— 成熟、多渠道、模型可换。
-- **记忆底座**：[OpenViking](https://github.com/volcengine/OpenViking) —— 开源、可自托管的 Agent 上下文数据库，作为**独立服务**通过 API 调用。
-- **公司事实信用层**：自研，置于记忆底座之上，仅依赖 `MemoryProvider` 抽象接缝，可在 OV 与本地实现间切换。
-- 备选 / 参考：DeepSeek Harness（未来迁移目标）、Hermes Agent（记忆子系统设计参考）。
+这是一个**开发期的单主 Agent 原型**，不是只有架构图的空仓库：上传、确定性解析、证据暂存/2a 落库、OpenClaw 主 Agent 引导和受限记忆工具已接通，并已在本地真实 OpenClaw + Token Plan 环境完成端到端验收。
 
-> 选型理由、实时数据对比与许可证边界见 [技术选型文档](./docs/architecture/04-runtime-and-memory-choice.md)。
+仍在规划或尚未向产品流开放的内容包括：更完整的第三层认知编排、长期生产部署/多用户治理、以及把候选事实主动晋升为 verified 事实的正向写入流程（`promote` 不作为当前已交付能力宣传）。
+
+## 技术底座
+
+- **Agent 运行时**：[OpenClaw](https://github.com/openclaw/openclaw) —— 已实际接入，`sam-guide` 是当前唯一的主 Agent；其插件工具提供受公司/线程范围约束的记忆与对话查询。
+- **模型路由**：开发期默认经 Token Plan 的 OpenAI-compatible 路由使用 `deepseek-v4.1-flash`；模型名、端点与密钥均由环境变量/manifest 注入，可替换，仓库不保存密钥。
+- **记忆底座**：默认使用本地隔离实现；业务层仅依赖 `MemoryProvider`，可切换到 [OpenViking](https://github.com/volcengine/OpenViking) 适配器。当前原型不把一台外部 OV 服务描述为默认正在运行的依赖。
+- **公司事实层**：自研的事实/来源约束与派生结构，保持与记忆实现解耦。
+
+> 选型理由与许可证边界见 [技术选型文档](./docs/architecture/04-runtime-and-memory-choice.md)。
 
 ## 目录结构
 
@@ -62,21 +68,56 @@ Startup AI Manager 不是在传统 ERP 上加一个聊天框，也不是又一�
 .
 ├── README.md
 ├── LICENSE                     # MIT
-├── docs/
-│   ├── product/                # 产品整体思路、形态论
-│   ├── architecture/           # 架构、记忆系统、信任边界
-│   └── research/               # 竞品与市场调研
-├── prototype/                  # 可交互原型（纯前端单文件，数据已匿名）
-├── schemas/                    # 公司模型 / 事实凭证的 Schema
-├── src/
-│   ├── harness/                # Harness 运行空间（规划中）
-│   ├── memory/                 # 结构化记忆系统（规划中）
-│   └── connectors/             # 外部工具连接器（规划中）
-├── examples/                   # 示例：合成公司与黄金评测集（规划中）
-└── tests/                      # 正确性回归测试（规划中）
+├── app/                        # 后端主包
+│   ├── guidance/               # 导入引导与后台单飞任务
+│   ├── facts/                  # 2b schema、派生与 cap-table replay
+│   ├── memory/                 # 2a 提取记忆服务
+│   ├── storage/                # 内容寻址原件存储
+│   ├── harness/runtime/        # OpenClawAdapter 与运行时接缝
+│   ├── classifier/、db/        # 归类与 SQLite 基础设施
+│   └── runtime_config.py       # manifest/profile/环境注入
+├── webapp/                     # Flask 服务（app.py、templates、markdown_render）
+├── skills/document-ingest/     # 文档解析 Skill 与本地 bridge
+├── harness-openclaw/           # Agent workspace、插件与 OpenClaw 配置模板
+├── scripts/                    # prepare-openclaw-runtime.py 等启动/维护脚本
+├── profiles/                   # local/cloud 配置覆盖
+├── sam-manifest.yaml           # 运行时、技能、模型与记忆的声明
+├── schemas/                    # 事实、对话与凭证 Schema
+├── tests/                      # 18 个以上 Python 回归测试文件（非占位）
+├── docs/                       # 产品、架构与调研文档
+├── prototype/                  # 静态可交互前端原型
+├── src/                        # 早期架构占位/说明，未进入当前主运行链路
+└── examples/                   # 合成样本/黄金评测的预留目录
 ```
 
-> 说明：当前仓库处于 **架构与原型阶段**。`src/`、`examples/`、`tests/` 为占位目录，后续迭代填充；可交互原型见 [`prototype/`](./prototype)。
+## 已验收的原型能力
+
+- 上传资料后走**确定性本地解析**：Office 优先 Docling，PDF/图像优先 MinerU；首选引擎不可用时自动回退，并记录 warning。
+- 解析状态如实返回：成功解析并写入原始记忆层为 `parsed` / `stored_2a`；引擎不可用或损坏文件为 `parse_failed`，不会把空 manifest 伪装成成功。
+- `sam-guide` 主 Agent 异步基于已解析的正文片段和 L2 URI 生成导入建议；同一公司的并发请求单飞合并，未完成时返回可轮询的 `202 generating`。
+- 引导保留证据中的原始数值字面量与出处，不由模型自行换算单位；对同名、数值冲突的资料会提示口径待核。
+- 文档解析只产出带 locator 的 L2 证据。候选事实自动晋升/正向写入 verified 2b 仍是待完成事项。
+
+## 本地运行（开发原型）
+
+依赖 Python 3.14+、本地 OpenClaw 运行时，以及你自己的 Token Plan/OpenAI-compatible 模型 API key。不要把密钥写入仓库或日志。
+
+```bash
+cd startup-ai-manager
+python3 -m venv .sam-isolated/venv
+.sam-isolated/venv/bin/pip install -r requirements.txt
+
+export SAM_GUIDE_MODEL_API_KEY='从你的安全环境注入'
+export SAM_GUIDE_MODEL=deepseek-v4.1-flash
+export SAM_VENV_BIN="$PWD/.sam-isolated/venv/bin"
+export SAM_TOOL_BRIDGE_PYTHON="$PWD/.sam-isolated/venv/bin/python"
+# 按本机 OpenClaw 安装位置设置 SAM_NODE_BIN 与 SAM_OPENCLAW_ENTRY。
+
+"$SAM_TOOL_BRIDGE_PYTHON" scripts/prepare-openclaw-runtime.py
+(cd webapp && "$SAM_TOOL_BRIDGE_PYTHON" app.py)
+```
+
+`prepare-openclaw-runtime.py` 会准备 state、技能与插件发现目录；随后由 `webapp/app.py` 启动 Flask。仅查看静态界面可打开 [`prototype/`](./prototype) 或在线体验链接；上传/Agent 功能需要本地运行时和模型密钥。
 
 ## 文档
 
@@ -91,5 +132,6 @@ Startup AI Manager 不是在传统 ERP 上加一个聊天框，也不是又一�
 ## 开源与边界
 
 - 采用 [MIT License](./LICENSE)。
-- 总账 / 税务 / 成熟 ERP 模块倾向 **外挂**（记账与执行器官），本项目聚焦自研「公司模型」与跨域编排（大脑）。- 本项目自身代码为 MIT；记忆底座 **OpenViking 为 AGPL-3.0**，仅作独立服务经 API 调用，**不拷贝 / 不修改其源码**，FactVoucher 事实层独立自研，避免许可证传染（详见技术选型文档第六节）。
+- 总账 / 税务 / 成熟 ERP 模块倾向 **外挂**（记账与执行器官），本项目聚焦自研「公司模型」与跨域编排（大脑）。
+- 本项目自身代码为 MIT；若部署 OpenViking 适配器，**OpenViking 为 AGPL-3.0**，按独立服务/API 边界接入，不拷贝或修改其源码；上线商业服务前仍应按实际部署方式完成许可证合规审查。当前默认本地 `MemoryProvider` 实现不改变这一边界。
 - AI 定位为辅助分析、风险提示与资料齐备度检查，不替代律师 / 会计师 / 税务师的专业意见；高风险动作默认「Agent 起草 + 人来拍板」。
