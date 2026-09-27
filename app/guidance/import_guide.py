@@ -190,6 +190,8 @@ class ImportGuideService:
             + "\n\n这是当前公司已解析证据快照（不是文件名推断）：\n"
             + evidence
             + "\n请先按需调用 sam_memory_map/sam_memory_search/sam_memory_read 读取证据 URI，"
+              "调用规则严格如下：sam_memory_map 必须传 {}；sam_memory_search 只能传 {query}，"
+              "不得传 limit/project/scope/company_id/thread_id；sam_memory_read 只能传 {uri}。"
               "读取完成后停止工具调用，并在最终回复仅返回上述单个 JSON。不要调用 sam_promote。"
             + literal_rule
         )

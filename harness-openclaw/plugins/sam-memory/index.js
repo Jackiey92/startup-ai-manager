@@ -13,14 +13,25 @@ const TOOL_NAMES = [
 ];
 
 const schemas = {
-  sam_memory_read: { type: "object", additionalProperties: false, required: ["uri"], properties: { uri: { type: "string", pattern: "^viking://" } } },
-  sam_memory_search: { type: "object", additionalProperties: false, required: ["query"], properties: { query: { type: "string", minLength: 1 } } },
-  sam_file_get: { type: "object", additionalProperties: false, required: ["file_hash"], properties: { file_hash: { type: "string", pattern: "^[0-9a-f]{64}$" } } },
-  sam_memory_map: { type: "object", additionalProperties: false, properties: {} },
+  sam_memory_read: { type: "object", description: "Exactly one argument: uri. Scope is injected; never send company_id, thread_id, project, or scope.", additionalProperties: false, required: ["uri"], properties: { uri: { type: "string", pattern: "^viking://", description: "A viking:// URI returned by sam_memory_map or sam_memory_search." } } },
+  sam_memory_search: { type: "object", description: "Exactly one argument: query. Do not send limit, project, scope, company_id, or thread_id.", additionalProperties: false, required: ["query"], properties: { query: { type: "string", minLength: 1, description: "Search words only; result count and company scope are fixed by SAM." } } },
+  sam_file_get: { type: "object", description: "Exactly one argument: file_hash. Scope is injected; do not send project or scope.", additionalProperties: false, required: ["file_hash"], properties: { file_hash: { type: "string", pattern: "^[0-9a-f]{64}$" } } },
+  sam_memory_map: { type: "object", description: "Call with an empty object {}. It accepts no uri, project, scope, company_id, or thread_id; the current company map is injected by SAM.", additionalProperties: false, properties: {} },
   sam_conversation_read: { type: "object", additionalProperties: false, properties: { start: { type: "string" }, end: { type: "string" } } },
   sam_thread_list: { type: "object", additionalProperties: false, properties: {} },
   sam_thread_open: { type: "object", additionalProperties: false, properties: {} },
   sam_promote: { type: "object", additionalProperties: false, required: ["fact_key", "fact"], properties: { fact_key: { type: "string", minLength: 1 }, fact: { type: "object" } } },
+};
+
+const TOOL_DESCRIPTIONS = {
+  sam_memory_read: "Read one discovered viking URI. Input must be exactly {uri}; scope is injected.",
+  sam_memory_search: "Search current-company memory. Input must be exactly {query}; never pass limit/project/scope.",
+  sam_file_get: "Read metadata for one manifest-discovered file. Input must be exactly {file_hash}.",
+  sam_memory_map: "Read the current-company navigation map. Call exactly sam_memory_map({}); no arguments are accepted.",
+  sam_conversation_read: "Read current-thread conversation range. Optional input only {start,end}; scope is injected.",
+  sam_thread_list: "List visible threads. Call exactly sam_thread_list({}).",
+  sam_thread_open: "Read current injected thread summary. Call exactly sam_thread_open({}).",
+  sam_promote: "Optional verified-fact promotion. Input exactly {fact_key,fact}; evidence must already exist in the current thread.",
 };
 
 function redactedError(error) {
@@ -107,7 +118,7 @@ function register(api) {
   for (const name of TOOL_NAMES) {
     registerTool(api, {
       name,
-      description: `SAM scoped ${name.replace(/^sam_/, "")} tool`,
+      description: TOOL_DESCRIPTIONS[name],
       parameters: schemas[name],
       inputSchema: schemas[name],
       optional: name === "sam_promote",
