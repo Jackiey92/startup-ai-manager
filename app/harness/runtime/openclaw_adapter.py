@@ -215,7 +215,10 @@ class OpenClawAdapter(RuntimeProvider):
         proc = self._runner(
             cmd, cwd=self.root, env=env, capture_output=True,
             text=True, encoding="utf-8", errors="replace",
-            timeout=timeout + 30,
+            # Gateway requests must obey the caller's bounded deadline. A
+            # short grace lets subprocess cleanup finish without reviving the
+            # old --local path's 30-second tail per retry.
+            timeout=timeout + (2 if self.config.openclaw_mode == "gateway" else 30),
         )
         if proc.returncode != 0:
             raise RuntimeError(

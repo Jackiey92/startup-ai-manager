@@ -2,7 +2,7 @@ import json
 import sqlite3
 from types import SimpleNamespace
 
-from app.guidance.import_guide import ImportGuideService
+from app.guidance.import_guide import ImportGuideService, _GuideError, _decode_agent_json
 
 
 class FakeStore:
@@ -77,4 +77,38 @@ def test_import_guide_retries_rate_limit_and_returns_classified_invalid_json(tmp
         env={"SAM_GUIDE_RETRIES": "2", "SAM_GUIDE_RETRY_BACKOFF": "0"}, sleep=lambda _: None,
     )
     assert service.generate(event="refresh")["message"] == "重试后成功"
+    assert len(runtime.calls) == 2
+
+
+def test_import_guide_decodes_gateway_jsonl_final_envelope():
+    guide = {
+        "message": "基于已解析内容生成",
+        "next_action": "补主体材料",
+        "completeness": {"percent": 25, "received": ["财务"], "missing": ["主体"]},
+    }
+    raw = "\n".join([
+        json.dumps({"type": "tool", "payload": {"text": "tool frame"}}, ensure_ascii=False),
+        json.dumps({"meta": {"finalAssistantVisibleText": json.dumps(guide, ensure_ascii=False)}}, ensure_ascii=False),
+    ])
+    assert _decode_agent_json(raw) == guide
+
+
+def test_import_guide_invalid_json_keeps_bounded_raw_envelope():
+    raw = '{"type":"tool"}\nnot-json'
+    try:
+        _decode_agent_json(raw)
+    except _GuideError as exc:
+        assert exc.reason == "invalid_json"
+        assert exc.raw_response == raw
+    else:  # pragma: no cover - documents the expected rejection path
+        raise AssertionError("invalid Gateway output must not be accepted")
+
+
+def test_import_guide_retries_invalid_gateway_envelope(tmp_path):
+    runtime = FakeRuntime(['{"type":"tool"}\ntruncated', _guide("重试后有效")])
+    service = ImportGuideService(
+        store=FakeStore(), db_path=_db(tmp_path, "收入 A"), runtime_provider=runtime,
+        env={"SAM_GUIDE_RETRIES": "2", "SAM_GUIDE_RETRY_BACKOFF": "0"}, sleep=lambda _: None,
+    )
+    assert service.generate(event="refresh")["message"] == "重试后有效"
     assert len(runtime.calls) == 2

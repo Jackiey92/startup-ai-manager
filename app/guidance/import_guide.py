@@ -182,37 +182,50 @@ class ImportGuideService:
             + "\n\n这是当前公司已解析证据快照（不是文件名推断）：\n"
             + evidence
             + "\n请先按需调用 sam_memory_map/sam_memory_search/sam_memory_read 读取证据 URI，"
-              "再仅返回上述 JSON。不要调用 sam_promote。"
+              "读取完成后停止工具调用，并在最终回复仅返回上述单个 JSON。不要调用 sam_promote。"
         )
-        attempts = max(1, int(self.env.get("SAM_GUIDE_RETRIES", "3")))
+        attempts = max(1, int(self.env.get("SAM_GUIDE_RETRIES", "2")))
         backoff = max(0.0, float(self.env.get("SAM_GUIDE_RETRY_BACKOFF", "0.25")))
+        total_timeout = max(1.0, float(self.env.get("SAM_GUIDE_TOTAL_TIMEOUT", "30")))
+        per_attempt_timeout = max(1, int(self.env.get("SAM_GUIDE_TIMEOUT", "20")))
+        deadline = time.monotonic() + total_timeout
         last_error: ModelUnavailable | None = None
         for attempt in range(attempts):
             try:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError("import guide total timeout")
                 raw = self.runtime_provider.run_agent_message(
                     "根据已解析资料生成本轮导入指引。只输出要求的 JSON。",
                     context_text=context,
                     company_id=self.company_id,
                     thread_id="import-guide",
                     allow_promote=False,
-                    timeout=int(self.env.get("SAM_GUIDE_TIMEOUT", "90")),
+                    # Gateway subprocesses reserve a small termination grace;
+                    # keep the total guide budget bounded even after a retry.
+                    timeout=max(1, min(per_attempt_timeout, int(max(1.0, remaining - 2.0)))),
                 )
                 return _validate_guide(_decode_agent_json(raw))
             except Exception as exc:
                 last_error = _guide_error(exc)
                 if last_error.reason in {"auth", "invalid_request"} or attempt + 1 >= attempts:
                     raise last_error from exc
-                self._sleep(backoff * (2 ** attempt))
+                delay = min(backoff * (2 ** attempt), max(0.0, deadline - time.monotonic()))
+                if delay:
+                    self._sleep(delay)
         raise last_error or ModelUnavailable("AI import guide unavailable")
 
 
 class _GuideError(ModelUnavailable):
-    def __init__(self, message: str, *, reason: str):
+    def __init__(self, message: str, *, reason: str, raw_response: str | None = None):
         super().__init__(message)
         self.reason = reason
+        self.raw_response = raw_response
 
 
 def _guide_error(exc: Exception) -> _GuideError:
+    if isinstance(exc, _GuideError):
+        return exc
     text = str(exc).lower()
     if isinstance(exc, json.JSONDecodeError) or "invalid json" in text or "non-object" in text or "missing required" in text or "invalid completeness" in text:
         return _GuideError("AI import guide returned invalid JSON", reason="invalid_json")
@@ -229,19 +242,10 @@ def _decode_agent_json(raw: str) -> dict[str, Any]:
     if not isinstance(raw, str):
         raise _GuideError("AI import guide returned invalid JSON", reason="invalid_json")
     candidates = [raw]
-    try:
-        envelope = json.loads(raw)
-    except json.JSONDecodeError:
-        envelope = None
-    if isinstance(envelope, dict):
-        if "message" in envelope and "completeness" in envelope:
+    for envelope in _decode_envelopes(raw):
+        if isinstance(envelope, dict) and {"message", "next_action", "completeness"}.issubset(envelope):
             return envelope
-        meta = envelope.get("meta") or {}
-        if isinstance(meta.get("finalAssistantVisibleText"), str):
-            candidates.append(meta["finalAssistantVisibleText"])
-        for payload in envelope.get("payloads", []):
-            if isinstance(payload, dict) and isinstance(payload.get("text"), str):
-                candidates.append(payload["text"])
+        candidates.extend(_envelope_texts(envelope))
     for candidate in candidates:
         text = re.sub(r"^```(?:json)?\s*|\s*```$", "", candidate.strip(), flags=re.I)
         try:
@@ -258,7 +262,51 @@ def _decode_agent_json(raw: str) -> dict[str, Any]:
                 continue
         if isinstance(value, dict) and {"message", "next_action", "completeness"}.issubset(value):
             return value
-    raise _GuideError("AI import guide returned invalid JSON", reason="invalid_json")
+    raise _GuideError(
+        "AI import guide returned invalid JSON", reason="invalid_json",
+        raw_response=raw[:32768],
+    )
+
+
+def _decode_envelopes(raw: str) -> list[Any]:
+    """Accept a plain JSON envelope, JSONL frames, or SSE ``data:`` frames."""
+    objects: list[Any] = []
+    try:
+        objects.append(json.loads(raw))
+        return objects
+    except json.JSONDecodeError:
+        pass
+    for line in raw.splitlines():
+        line = line.strip()
+        if line.startswith("data:"):
+            line = line[5:].strip()
+        if not line or line == "[DONE]":
+            continue
+        try:
+            objects.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return objects
+
+
+def _envelope_texts(value: Any) -> list[str]:
+    """Extract model final text from known and forward-compatible frames."""
+    found: list[str] = []
+    if isinstance(value, dict):
+        meta = value.get("meta")
+        if isinstance(meta, dict) and isinstance(meta.get("finalAssistantVisibleText"), str):
+            found.append(meta["finalAssistantVisibleText"])
+        for key in ("text", "content", "message", "result", "output"):
+            item = value.get(key)
+            if isinstance(item, str):
+                found.append(item)
+        for item in value.values():
+            if isinstance(item, (dict, list)):
+                found.extend(_envelope_texts(item))
+    elif isinstance(value, list):
+        for item in value:
+            found.extend(_envelope_texts(item))
+    return found
 
 
 def _format_from_name(name: str) -> str:

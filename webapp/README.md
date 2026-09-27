@@ -34,7 +34,10 @@ python -m venv .venv
 `token-plan/${SAM_GUIDE_MODEL}` 主模型补入缺少它们的旧 OpenClaw 状态文件。
 
 上传接口只等待本地解析和 2a 落库，成功后返回 `guide_status=queued`；导入指引在
-后台 Agent 任务中生成，或通过 `/api/import-guide` 单独获取，避免冷启动 Agent 阻塞上传。
+每公司单飞后台任务中生成。`/api/import-guide` 会复用正在生成的结果：完成时返回
+`guide_status=ready`，等待超时返回可轮询的 `guide_status=generating`（HTTP 202），
+避免上传或并发刷新互相启动多个 Agent。Gateway 输出不是单一 JSON 信封时，失败原始
+信封仅保存在本地 `data/guide-diagnostics/`（权限 0600，凭证会脱敏），不会返回浏览器。
 
 默认 bwrap 运行使用 `--unshare-net`。只有经明确授权的模型调用验收才使用：
 

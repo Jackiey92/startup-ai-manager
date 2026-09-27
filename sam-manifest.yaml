@@ -1,7 +1,7 @@
 # SAM portable contract. Secret values are never stored here.
 runtime:
   node: 24.16.x
-  openclaw: 2026.9.5
+  openclaw: 2026.9.6
   agent_id: sam-guide
   gateway_mode: gateway
   gateway_port: 18789

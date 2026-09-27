@@ -6,10 +6,10 @@ import os
 import sqlite3
 import subprocess
 import uuid
-from concurrent.futures import Future, ThreadPoolExecutor
-from threading import Lock
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
+import re
 
 from flask import Flask, abort, render_template, request, send_file
 
@@ -20,7 +20,7 @@ _sys.path.insert(0, str(_PROJECT_ROOT))
 
 from app.storage import SourceFileStore
 from app.db.database import init_db as init_core_db
-from app.guidance import ImportGuideService, ModelUnavailable
+from app.guidance import GuideJobCoordinator, ImportGuideService, ModelUnavailable
 from app.harness.staging import StagingStore
 from app.memory import ExtractionMemoryService
 from app.memory_map import MapBuilder, MemoryMapTools
@@ -54,8 +54,9 @@ app.extensions["sam_memory_provider"] = memory_provider(RUNTIME_CONFIG)
 # returns after its actual parse status is known.  Model guidance is a
 # separate bounded worker and never holds Flask's request thread open.
 _GUIDE_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="sam-guide")
-_GUIDE_LOCK = Lock()
-_GUIDE_JOBS: dict[str, Future] = {}
+_GUIDE_COORDINATOR = GuideJobCoordinator(
+    _GUIDE_EXECUTOR, debounce_seconds=float(os.environ.get("SAM_GUIDE_DEBOUNCE", "3"))
+)
 
 
 @app.after_request
@@ -105,36 +106,64 @@ def detect_format(filename: str) -> str:
     return "unknown"
 
 
-def import_guide(*, event: str, uploaded_file_hash: str | None = None) -> dict:
+def import_guide(*, event: str, uploaded_file_hash: str | None = None,
+                 company_id: str | None = None) -> dict:
     """Ask the configured OpenClaw main Agent for an import guide."""
     staging = StagingStore(db_path=MAIN_DB)
     service = ImportGuideService(
         store=SourceFileStore(objects_path=OBJECTS_DIR, db_path=MAIN_DB),
         db_path=MAIN_DB,
         runtime_provider=runtime_provider(RUNTIME_CONFIG, staging),
-        company_id=os.environ.get("SAM_COMPANY_ID", "default"),
+        company_id=company_id or os.environ.get("SAM_COMPANY_ID", "default"),
     )
     return service.generate(event=event, uploaded_file_hash=uploaded_file_hash)
 
 
-def queue_import_guide(uploaded_file_hash: str) -> None:
-    """Queue guidance without making the upload request wait for the Agent."""
-    with _GUIDE_LOCK:
-        previous = _GUIDE_JOBS.get(uploaded_file_hash)
-        if previous is not None and not previous.done():
-            return
-        future = _GUIDE_EXECUTOR.submit(
-            import_guide, event="upload", uploaded_file_hash=uploaded_file_hash
-        )
-        _GUIDE_JOBS[uploaded_file_hash] = future
+def _guide_key(company_id: str) -> str:
+    return f"{company_id}:import-guide"
 
-    def report_failure(done: Future) -> None:
-        try:
-            done.result()
-        except Exception as exc:  # pragma: no cover - scheduling is runtime-only
-            app.logger.info("background import guide unavailable: %s", type(exc).__name__)
 
-    future.add_done_callback(report_failure)
+def _redact_guide_diagnostic(raw: str) -> str:
+    """Keep debugging local while ensuring accidental credentials never persist."""
+    raw = re.sub(r"(?i)(bearer\s+)[^\s\"']+", r"\1[REDACTED]", raw)
+    return re.sub(r"\bsk-[A-Za-z0-9_-]{12,}\b", "sk-[REDACTED]", raw)
+
+
+def _record_guide_diagnostic(company_id: str, exc: Exception) -> None:
+    raw = getattr(exc, "raw_response", None)
+    if not isinstance(raw, str) or not raw:
+        return
+    diagnostic_dir = DATA_ROOT / "guide-diagnostics"
+    diagnostic_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')}-{uuid.uuid4().hex}.json"
+    path = diagnostic_dir / filename
+    path.write_text(json.dumps({
+        "created_at": now(), "company_id": company_id,
+        "reason": getattr(exc, "reason", "invalid_json"),
+        "raw_envelope": _redact_guide_diagnostic(raw[:32768]),
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    try:
+        path.chmod(0o600)
+    except OSError:
+        pass
+    app.logger.warning("import guide invalid envelope captured locally: %s", path.name)
+
+
+def _run_import_guide(*, event: str, uploaded_file_hash: str | None, company_id: str) -> dict:
+    try:
+        return import_guide(event=event, uploaded_file_hash=uploaded_file_hash, company_id=company_id)
+    except ModelUnavailable as exc:
+        _record_guide_diagnostic(company_id, exc)
+        raise
+
+
+def queue_import_guide(uploaded_file_hash: str, *, company_id: str | None = None):
+    """Queue/revise one company guide without holding the upload request."""
+    company = company_id or os.environ.get("SAM_COMPANY_ID", "default")
+    return _GUIDE_COORDINATOR.queue(
+        _guide_key(company),
+        lambda: _run_import_guide(event="upload", uploaded_file_hash=uploaded_file_hash, company_id=company),
+    )
 
 
 @app.route("/")
@@ -260,6 +289,7 @@ def api_upload():
         origin_zone="internal",
     )
     file_hash = stored.file_hash
+    company_id = os.environ.get("SAM_COMPANY_ID", "default")
 
     harness_format = "xlsx" if file_format == "excel" else file_format
     staging = StagingStore(db_path=MAIN_DB)
@@ -273,7 +303,6 @@ def api_upload():
             payload = staged.get("payload", {})
             parse_status, memory_status = parse_result_status(payload)
             if parse_status == "parsed":
-                company_id = os.environ.get("SAM_COMPANY_ID", "default")
                 ExtractionMemoryService(app.extensions["sam_memory_provider"]).ingest(company_id, payload)
                 # ls --recursive is eventually consistent on OV.  The source
                 # ID is known here, so verify its L0 by exact read immediately.
@@ -308,7 +337,7 @@ def api_upload():
     }
     # Do not synchronously start a cold OpenClaw process here. Clients can use
     # /api/import-guide with this hash to request/read guidance separately.
-    queue_import_guide(file_hash)
+    queue_import_guide(file_hash, company_id=company_id)
     response["guide_status"] = "queued"
     return response
 
@@ -324,11 +353,24 @@ def api_import_guide():
     uploaded_file_hash = payload.get("uploaded_file_hash")
     if uploaded_file_hash is not None and not isinstance(uploaded_file_hash, str):
         return {"error": "invalid uploaded_file_hash"}, 400
+    company_id = str(payload.get("company_id") or os.environ.get("SAM_COMPANY_ID", "default"))
+    job = _GUIDE_COORDINATOR.get_or_start(
+        _guide_key(company_id),
+        lambda: _run_import_guide(event=event, uploaded_file_hash=uploaded_file_hash, company_id=company_id),
+    )
     try:
-        return {"guide": import_guide(event=event, uploaded_file_hash=uploaded_file_hash)}
+        guide = _GUIDE_COORDINATOR.wait(
+            job, timeout=float(os.environ.get("SAM_GUIDE_REFRESH_WAIT", "30"))
+        )
     except ModelUnavailable as exc:
-        app.logger.info("import guide unavailable: %s", exc)
-        return {"error": "import guide unavailable"}, 503
+        app.logger.info("import guide unavailable: %s", getattr(exc, "reason", type(exc).__name__))
+        return {"error": "import guide unavailable", "guide_status": "failed"}, 503
+    except Exception as exc:
+        app.logger.info("import guide background failed: %s", type(exc).__name__)
+        return {"error": "import guide unavailable", "guide_status": "failed"}, 503
+    if guide is None:
+        return {"guide_status": "generating", "retry_after_ms": 1000}, 202
+    return {"guide": guide, "guide_status": "ready"}
 
 
 @app.route("/files/<int:file_id>")
