@@ -29,15 +29,18 @@ python -m venv .venv
 `SAM_GUIDE_MODEL_API_KEY` 并显式放行模型网络；网页应用本身不读取该密钥。
 
 `scripts/run.sh` 和 `tools/run-sam-isolated.sh` 会注入非敏感的 Token Plan
-默认路由（`SAM_GUIDE_MODEL_BASE_URL`、`SAM_GUIDE_MODEL=qwen3.8-max`）；密钥仍必须
+默认路由（`SAM_GUIDE_MODEL_BASE_URL`、`SAM_GUIDE_MODEL=deepseek-v4.1-flash`）；密钥仍必须
 由启动环境提供。运行时会把 `models.providers.token-plan` 和
 `token-plan/${SAM_GUIDE_MODEL}` 主模型补入缺少它们的旧 OpenClaw 状态文件。
 
 上传接口只等待本地解析和 2a 落库，成功后返回 `guide_status=queued`；导入指引在
 每公司单飞后台任务中生成。`/api/import-guide` 会复用正在生成的结果：完成时返回
 `guide_status=ready`，等待超时返回可轮询的 `guide_status=generating`（HTTP 202），
-避免上传或并发刷新互相启动多个 Agent。Gateway 输出不是单一 JSON 信封时，失败原始
-信封仅保存在本地 `data/guide-diagnostics/`（权限 0600，凭证会脱敏），不会返回浏览器。
+避免上传或并发刷新互相启动多个 Agent；随后可读
+`GET /api/import-guide/status?company_id=...`，直到终态 `ready` 或带脱敏 `reason` 的
+`failed`。后台生成预算默认 180 秒（下限 150 秒），不以缩短超时伪造性能。Gateway 输出
+不是单一 JSON 信封、超时或鉴权失败时，诊断仅保存在本地
+`data/guide-diagnostics/`（权限 0600，凭证会脱敏），不会返回浏览器。
 
 默认 bwrap 运行使用 `--unshare-net`。只有经明确授权的模型调用验收才使用：
 

@@ -8,8 +8,10 @@ OpenClaw itself, so the runtime can be swapped later.
 from __future__ import annotations
 
 import atexit
+import hashlib
 import json
 import os
+import signal
 import socket
 import subprocess
 import time
@@ -183,8 +185,6 @@ class OpenClawAdapter(RuntimeProvider):
         env["OPENCLAW_STATE_DIR"] = str(state_dir)
         env["OPENCLAW_CONFIG_PATH"] = str(self.config.config_path)
         self._ensure_skill_mount()
-        if self.config.openclaw_mode == "gateway":
-            self._ensure_gateway(env, timeout=timeout)
         env["SAM_PROJECT_ROOT"] = str(self.config.project_root)
         env["SAM_HARNESS_ROOT"] = str(self.config.harness_root)
         env["SAM_SKILL_ROOT"] = str(self.config.skill_root)
@@ -197,6 +197,10 @@ class OpenClawAdapter(RuntimeProvider):
         if self.config.model_base_url:
             env.setdefault(self.config.model_base_url_env, self.config.model_base_url)
         env.setdefault(self.config.model_name_env, self.config.model_default)
+        if self.config.openclaw_mode == "gateway":
+            # The Gateway ownership fingerprint includes the effective model
+            # configuration, so prepare the child environment first.
+            self._ensure_gateway(env, timeout=timeout)
         if company_id is not None:
             env["SAM_COMPANY_ID"] = str(company_id)
         if thread_id is not None:
@@ -295,7 +299,15 @@ class OpenClawAdapter(RuntimeProvider):
             raise RuntimeError("unable to mount SAM memory plugin") from exc
 
     def _ensure_gateway(self, env: dict[str, str], *, timeout: int) -> None:
-        """Start one loopback Gateway per state directory and reuse it."""
+        """Start one owned loopback Gateway per state directory and reuse it.
+
+        A TCP listener alone is not proof that it belongs to this Flask
+        process.  After an unclean restart an old Gateway can retain the port
+        and silently keep the previous model/configuration.  We persist a
+        non-secret owner record with a configuration fingerprint and reclaim
+        only a process we can prove is our own; an unknown listener fails
+        closed instead of serving requests through the wrong runtime.
+        """
         # Unit tests inject a runner and must not launch a real daemon. The
         # production composition root uses subprocess.run and takes this path.
         if self._runner is not subprocess.run:
@@ -314,6 +326,7 @@ class OpenClawAdapter(RuntimeProvider):
                         current[1].close()
                     except AttributeError:
                         pass
+                self._reclaim_or_reject_gateway_port()
                 log_path = self.config.state_dir / "gateway.log"
                 log_path.parent.mkdir(parents=True, exist_ok=True)
                 stream = log_path.open("a", encoding="utf-8")
@@ -330,11 +343,114 @@ class OpenClawAdapter(RuntimeProvider):
                 raise RuntimeError("OpenClaw Gateway exited during startup")
             try:
                 with socket.create_connection(("127.0.0.1", self.config.gateway_port), timeout=0.2):
+                    self._write_gateway_owner(process, env)
                     return
             except OSError:
                 time.sleep(0.1)
         _discard_gateway(key, process)
         raise TimeoutError("OpenClaw Gateway startup timed out")
+
+    @property
+    def _gateway_owner_path(self) -> Path:
+        return self.config.state_dir / "gateway.owner.json"
+
+    def _gateway_fingerprint(self, env: dict[str, str] | None = None) -> str:
+        """Fingerprint effective non-secret Gateway identity/configuration."""
+        try:
+            config_digest = hashlib.sha256(self.config.config_path.read_bytes()).hexdigest()
+        except OSError:
+            config_digest = "missing"
+        effective_env = env or os.environ
+        material = {
+            "config_digest": config_digest,
+            "entry": str(self.config.openclaw_entry),
+            "model": effective_env.get(self.config.model_name_env, self.config.model_default),
+            "model_base_url": effective_env.get(self.config.model_base_url_env, self.config.model_base_url),
+            "port": self.config.gateway_port,
+            "state_dir": str(self.config.state_dir),
+        }
+        encoded = json.dumps(material, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+    def _read_gateway_owner(self) -> dict[str, object] | None:
+        try:
+            payload = json.loads(self._gateway_owner_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        return payload if isinstance(payload, dict) else None
+
+    def _write_gateway_owner(self, process: subprocess.Popen, env: dict[str, str]) -> None:
+        pid = getattr(process, "pid", None)
+        if not isinstance(pid, int) or pid <= 0:
+            # Test doubles need no filesystem ownership record.
+            return
+        payload = {
+            "fingerprint": self._gateway_fingerprint(env),
+            "pid": pid,
+            "port": self.config.gateway_port,
+            "state_dir": str(self.config.state_dir),
+        }
+        self._gateway_owner_path.parent.mkdir(parents=True, exist_ok=True)
+        self._gateway_owner_path.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+        try:
+            self._gateway_owner_path.chmod(0o600)
+        except OSError:
+            pass
+
+    def _gateway_port_open(self) -> bool:
+        try:
+            with socket.create_connection(("127.0.0.1", self.config.gateway_port), timeout=0.2):
+                return True
+        except OSError:
+            return False
+
+    def _owner_is_sam_gateway(self, owner: dict[str, object]) -> bool:
+        try:
+            pid = int(owner.get("pid", 0))
+            port = int(owner.get("port", -1))
+        except (TypeError, ValueError):
+            return False
+        if pid <= 0 or port != self.config.gateway_port or owner.get("state_dir") != str(self.config.state_dir):
+            return False
+        try:
+            os.kill(pid, 0)
+            cmdline = Path(f"/proc/{pid}/cmdline").read_bytes().decode("utf-8", "replace")
+        except OSError:
+            return False
+        return "gateway" in cmdline and str(self.config.openclaw_entry) in cmdline
+
+    def _stop_owned_orphan(self, owner: dict[str, object]) -> None:
+        pid = int(owner["pid"])
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            return
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline:
+            if not self._gateway_port_open():
+                return
+            time.sleep(0.1)
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+
+    def _reclaim_or_reject_gateway_port(self) -> None:
+        if not self._gateway_port_open():
+            return
+        owner = self._read_gateway_owner()
+        if owner is None or not self._owner_is_sam_gateway(owner):
+            raise RuntimeError("OpenClaw Gateway port is occupied by an unverified process")
+        # A verified old process may still use a different model/configuration.
+        # Always restart it when this Flask process does not own it, ensuring
+        # the new state has an effective, matching fingerprint.
+        self._stop_owned_orphan(owner)
+        if self._gateway_port_open():
+            raise RuntimeError("unable to reclaim stale OpenClaw Gateway")
+        try:
+            self._gateway_owner_path.unlink()
+        except OSError:
+            pass
 
 
 def _merge_missing(defaults: dict, existing: dict) -> None:

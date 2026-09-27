@@ -74,6 +74,24 @@ class GuideJobCoordinator:
                 return "failed"
             return "ready"
 
+    def snapshot(self, key: str) -> dict[str, Any]:
+        """Expose a non-blocking, read-only terminal/pending job view."""
+        with self._lock:
+            job = self._jobs.get(key)
+            if job is None or job.future is None:
+                return {"guide_status": "missing"}
+            if not job.future.done():
+                return {"guide_status": "generating", "retry_after_ms": 1000}
+            if job.future.cancelled():
+                return {"guide_status": "failed", "reason": "cancelled"}
+            try:
+                failure = job.future.exception()
+            except CancelledError:
+                return {"guide_status": "failed", "reason": "cancelled"}
+            if failure is not None:
+                return {"guide_status": "failed", "reason": str(getattr(failure, "reason", "unavailable"))}
+            return {"guide_status": "ready", "guide": job.future.result()}
+
     def _start_locked(self, key: str, worker: Callable[[], dict[str, Any]]) -> GuideJob:
         job = GuideJob(key=key)
         self._jobs[key] = job

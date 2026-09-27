@@ -35,4 +35,4 @@ model:
   base_url_env: SAM_GUIDE_MODEL_BASE_URL
   model_env: SAM_GUIDE_MODEL
   api_key_env: SAM_GUIDE_MODEL_API_KEY
-  default_model: qwen3.8-max
+  default_model: deepseek-v4.1-flash

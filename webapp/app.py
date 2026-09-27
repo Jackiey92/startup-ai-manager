@@ -131,8 +131,6 @@ def _redact_guide_diagnostic(raw: str) -> str:
 
 def _record_guide_diagnostic(company_id: str, exc: Exception) -> None:
     raw = getattr(exc, "raw_response", None)
-    if not isinstance(raw, str) or not raw:
-        return
     diagnostic_dir = DATA_ROOT / "guide-diagnostics"
     diagnostic_dir.mkdir(parents=True, exist_ok=True)
     filename = f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')}-{uuid.uuid4().hex}.json"
@@ -140,7 +138,7 @@ def _record_guide_diagnostic(company_id: str, exc: Exception) -> None:
     path.write_text(json.dumps({
         "created_at": now(), "company_id": company_id,
         "reason": getattr(exc, "reason", "invalid_json"),
-        "raw_envelope": _redact_guide_diagnostic(raw[:32768]),
+        "raw_envelope": _redact_guide_diagnostic(raw[:32768]) if isinstance(raw, str) else None,
     }, ensure_ascii=False, indent=2), encoding="utf-8")
     try:
         path.chmod(0o600)
@@ -360,17 +358,27 @@ def api_import_guide():
     )
     try:
         guide = _GUIDE_COORDINATOR.wait(
-            job, timeout=float(os.environ.get("SAM_GUIDE_REFRESH_WAIT", "30"))
+            # A guide may legitimately use most of the 150s worker budget.
+            # The HTTP refresh path is only a short poll; clients continue via
+            # the read-only status endpoint until ready/failed.
+            job, timeout=float(os.environ.get("SAM_GUIDE_REFRESH_WAIT", "5"))
         )
     except ModelUnavailable as exc:
         app.logger.info("import guide unavailable: %s", getattr(exc, "reason", type(exc).__name__))
-        return {"error": "import guide unavailable", "guide_status": "failed"}, 503
+        return {"error": "import guide unavailable", "guide_status": "failed", "reason": getattr(exc, "reason", "unavailable")}, 503
     except Exception as exc:
         app.logger.info("import guide background failed: %s", type(exc).__name__)
-        return {"error": "import guide unavailable", "guide_status": "failed"}, 503
+        return {"error": "import guide unavailable", "guide_status": "failed", "reason": "unavailable"}, 503
     if guide is None:
         return {"guide_status": "generating", "retry_after_ms": 1000}, 202
     return {"guide": guide, "guide_status": "ready"}
+
+
+@app.route("/api/import-guide/status", methods=["GET"])
+def api_import_guide_status():
+    """Read-only polling endpoint for a company guide's terminal state."""
+    company_id = str(request.args.get("company_id") or os.environ.get("SAM_COMPANY_ID", "default"))
+    return _GUIDE_COORDINATOR.snapshot(_guide_key(company_id))
 
 
 @app.route("/files/<int:file_id>")

@@ -93,7 +93,7 @@ class ImportGuideService:
             if not exists:
                 return {"parsed_files": 0, "pending_parse_records": 0}
             row = conn.execute(
-                "SELECT COUNT(DISTINCT file_hash), COUNT(*) FROM parse_staging"
+                "SELECT COUNT(DISTINCT file_hash), COUNT(*) FROM parse_staging WHERE status='parsed'"
             ).fetchone()
         return {"parsed_files": row[0], "pending_parse_records": row[1]}
 
@@ -104,7 +104,7 @@ class ImportGuideService:
         try:
             with sqlite3.connect(self.db_path) as conn:
                 rows = conn.execute(
-                    "SELECT payload FROM parse_staging ORDER BY id DESC LIMIT ?",
+                    "SELECT payload FROM parse_staging WHERE status='parsed' ORDER BY id DESC LIMIT ?",
                     (max_items,),
                 ).fetchall()
         except sqlite3.Error:
@@ -177,17 +177,29 @@ class ImportGuideService:
 
     def _call_model(self, payload: dict[str, Any]) -> dict[str, Any]:
         evidence = json.dumps(payload["evidence_snapshot"], ensure_ascii=False, sort_keys=True)
+        required_literals = _evidence_numeric_literals(payload["evidence_snapshot"])
+        literal_rule = ""
+        if required_literals:
+            literal_rule = (
+                "\n数值保真要求：本次证据中的下列原始数值必须在 message 中逐字保留，"
+                "不得换算、拼接单位、四舍五入或只保留百分比："
+                + "、".join(required_literals)
+            )
         context = (
             SYSTEM_PROMPT
             + "\n\n这是当前公司已解析证据快照（不是文件名推断）：\n"
             + evidence
             + "\n请先按需调用 sam_memory_map/sam_memory_search/sam_memory_read 读取证据 URI，"
               "读取完成后停止工具调用，并在最终回复仅返回上述单个 JSON。不要调用 sam_promote。"
+            + literal_rule
         )
         attempts = max(1, int(self.env.get("SAM_GUIDE_RETRIES", "2")))
         backoff = max(0.0, float(self.env.get("SAM_GUIDE_RETRY_BACKOFF", "0.25")))
-        total_timeout = max(1.0, float(self.env.get("SAM_GUIDE_TOTAL_TIMEOUT", "30")))
-        per_attempt_timeout = max(1, int(self.env.get("SAM_GUIDE_TIMEOUT", "20")))
+        # Real evidence-grounded tool calls take roughly a minute. The
+        # synchronous refresh window is separately bounded by the web route;
+        # do not manufacture speed by terminating the background worker.
+        total_timeout = max(150.0, float(self.env.get("SAM_GUIDE_TOTAL_TIMEOUT", "180")))
+        per_attempt_timeout = max(1, int(self.env.get("SAM_GUIDE_TIMEOUT", "120")))
         deadline = time.monotonic() + total_timeout
         last_error: ModelUnavailable | None = None
         for attempt in range(attempts):
@@ -205,7 +217,7 @@ class ImportGuideService:
                     # keep the total guide budget bounded even after a retry.
                     timeout=max(1, min(per_attempt_timeout, int(max(1.0, remaining - 2.0)))),
                 )
-                return _validate_guide(_decode_agent_json(raw))
+                return _validate_guide(_decode_agent_json(raw), required_literals=required_literals)
             except Exception as exc:
                 last_error = _guide_error(exc)
                 if last_error.reason in {"auth", "invalid_request"} or attempt + 1 >= attempts:
@@ -314,7 +326,28 @@ def _format_from_name(name: str) -> str:
     return {"xlsx": "excel", "xls": "excel", "xlsm": "excel"}.get(suffix, suffix)
 
 
-def _validate_guide(value: Any) -> dict[str, Any]:
+def _evidence_numeric_literals(snapshot: dict[str, Any], *, max_literals: int = 12) -> list[str]:
+    """Extract decimal/percentage evidence verbatim for lossless guidance.
+
+    This intentionally excludes whole numbers (page, row and year counters)
+    and only constrains numbers that commonly represent financial quantities,
+    ratios or percentages. The model still chooses the recommendation; SAM
+    merely prevents a presentation-layer unit conversion from corrupting the
+    source values it reports.
+    """
+    encoded = json.dumps(snapshot.get("parsed_evidence", []), ensure_ascii=False)
+    pattern = re.compile(r"(?<![\d.])(?:\d{1,3}(?:,\d{3})+|\d+)\.\d+%?|(?<![\d.])\d+(?:\.\d+)?%")
+    result: list[str] = []
+    for match in pattern.finditer(encoded):
+        literal = match.group(0)
+        if literal not in result:
+            result.append(literal)
+        if len(result) >= max_literals:
+            break
+    return result
+
+
+def _validate_guide(value: Any, *, required_literals: list[str] | None = None) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ModelUnavailable("AI import guide returned a non-object response")
     message = value.get("message")
@@ -331,6 +364,12 @@ def _validate_guide(value: Any) -> dict[str, Any]:
         raise ModelUnavailable("AI import guide returned invalid received items")
     if not isinstance(missing, list) or not all(isinstance(item, str) for item in missing):
         raise ModelUnavailable("AI import guide returned invalid missing items")
+    absent = [literal for literal in (required_literals or []) if literal not in message]
+    if absent:
+        raise _GuideError(
+            "AI import guide did not preserve source numeric literals",
+            reason="numeric_fidelity",
+        )
     return {
         "message": message,
         "next_action": next_action,

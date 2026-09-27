@@ -88,6 +88,8 @@ def test_gateway_mode_starts_one_daemon_and_reuses_it(tmp_path: Path, monkeypatc
     gateway_calls = []
 
     class FakeProcess:
+        pid = 43210
+
         def poll(self):
             return None
 
@@ -117,7 +119,16 @@ def test_gateway_mode_starts_one_daemon_and_reuses_it(tmp_path: Path, monkeypatc
 
     monkeypatch.setattr(adapter_module.subprocess, "run", fake_run)
     monkeypatch.setattr(adapter_module.subprocess, "Popen", fake_popen)
-    monkeypatch.setattr(adapter_module.socket, "create_connection", lambda *args, **kwargs: ReadySocket())
+    calls_to_socket = {"count": 0}
+
+    def socket_connection(*args, **kwargs):
+        calls_to_socket["count"] += 1
+        # The first probe is the pre-spawn ownership check: no listener yet.
+        if calls_to_socket["count"] == 1:
+            raise OSError("not listening")
+        return ReadySocket()
+
+    monkeypatch.setattr(adapter_module.socket, "create_connection", socket_connection)
 
     config = RuntimeConfig.from_env(project_root=Path(__file__).parents[1], env={"SAM_PROFILE": "local"})
     config = replace(config, state_dir=tmp_path / "state", config_path=tmp_path / "state" / "openclaw.json")
@@ -127,6 +138,39 @@ def test_gateway_mode_starts_one_daemon_and_reuses_it(tmp_path: Path, monkeypatc
     assert len(gateway_calls) == 1
     assert all("--local" not in command for command in agent_calls)
     adapter_module._stop_gateways()
+
+
+def test_gateway_rejects_unknown_listener_instead_of_reusing_wrong_config(tmp_path: Path, monkeypatch):
+    import app.harness.runtime.openclaw_adapter as adapter_module
+
+    class ReadySocket:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    monkeypatch.setattr(adapter_module.socket, "create_connection", lambda *args, **kwargs: ReadySocket())
+    config = RuntimeConfig.from_env(project_root=Path(__file__).parents[1], env={"SAM_PROFILE": "local"})
+    config = replace(config, state_dir=tmp_path / "state", config_path=tmp_path / "state" / "openclaw.json")
+    adapter = OpenClawAdapter(StagingStore(db_path=tmp_path / "missing.db"), config=config)
+    try:
+        adapter._ensure_gateway({}, timeout=1)
+    except RuntimeError as exc:
+        assert "unverified process" in str(exc)
+    else:  # pragma: no cover - must never reuse an unknown listener
+        raise AssertionError("unknown Gateway listener was reused")
+
+
+def test_gateway_fingerprint_binds_state_port_and_effective_model(tmp_path: Path):
+    config = RuntimeConfig.from_env(project_root=Path(__file__).parents[1], env={"SAM_PROFILE": "local"})
+    config = replace(config, state_dir=tmp_path / "state", config_path=tmp_path / "state" / "openclaw.json")
+    config.state_dir.mkdir(parents=True)
+    config.config_path.write_text("{}", encoding="utf-8")
+    adapter = OpenClawAdapter(StagingStore(db_path=tmp_path / "missing.db"), config=config)
+    first = adapter._gateway_fingerprint({"SAM_GUIDE_MODEL": "deepseek-v4.1-flash"})
+    second = adapter._gateway_fingerprint({"SAM_GUIDE_MODEL": "another-model"})
+    assert first != second
 
 
 def test_document_ingest_runs_deterministic_bridge_without_agent(tmp_path: Path):

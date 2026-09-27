@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 
 from app.guidance.jobs import GuideJobCoordinator
+from app.guidance.import_guide import _GuideError
 
 
 def test_upload_during_generation_reruns_one_shared_job_with_latest_snapshot():
@@ -44,3 +45,24 @@ def test_refresh_reuses_inflight_job_and_reports_generating_on_deadline():
         release.set()
         assert coordinator.wait(job, timeout=1) == {"message": "ready"}
         assert coordinator.status("acme:import-guide") == "ready"
+        assert coordinator.snapshot("acme:import-guide") == {
+            "guide_status": "ready", "guide": {"message": "ready"}
+        }
+
+
+def test_polling_snapshot_reaches_a_reasoned_terminal_failure():
+    def worker():
+        raise _GuideError("slow upstream", reason="timeout")
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        coordinator = GuideJobCoordinator(executor)
+        job = coordinator.queue("acme:import-guide", worker)
+        try:
+            coordinator.wait(job, timeout=1)
+        except _GuideError:
+            pass
+        else:  # pragma: no cover - documents future must retain failure
+            raise AssertionError("failed guide unexpectedly returned a value")
+        assert coordinator.snapshot("acme:import-guide") == {
+            "guide_status": "failed", "reason": "timeout"
+        }

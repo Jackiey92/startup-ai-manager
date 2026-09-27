@@ -30,6 +30,8 @@ class StagingStore:
 
     def save_manifest(self, manifest: dict) -> int:
         """Store an engine-neutral L2 manifest without interpreting it."""
+        summary = manifest.get("parse_summary")
+        parse_status = str(summary.get("status") or "parse_failed") if isinstance(summary, dict) else "parse_failed"
         with self._conn() as conn:
             conn.execute(
                 "CREATE TABLE IF NOT EXISTS parse_staging ("
@@ -47,7 +49,7 @@ class StagingStore:
                     manifest["file_hash"],
                     manifest["format"],
                     json.dumps(manifest, ensure_ascii=False),
-                    "pending",
+                    parse_status,
                     _now(),
                 ),
             )

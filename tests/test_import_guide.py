@@ -32,7 +32,7 @@ def _db(tmp_path, text):
     path = tmp_path / "app.db"
     with sqlite3.connect(path) as conn:
         conn.execute("CREATE TABLE parse_staging (id INTEGER PRIMARY KEY, file_hash TEXT, format TEXT, payload TEXT, status TEXT)")
-        conn.execute("INSERT INTO parse_staging VALUES (1, ?, 'xlsx', ?, 'pending')", ("a" * 64, json.dumps({
+        conn.execute("INSERT INTO parse_staging VALUES (1, ?, 'xlsx', ?, 'parsed')", ("a" * 64, json.dumps({
             "source_id": "source-a",
             "file_hash": "a" * 64,
             "filename": "财务报告.xlsx",
@@ -112,3 +112,24 @@ def test_import_guide_retries_invalid_gateway_envelope(tmp_path):
     )
     assert service.generate(event="refresh")["message"] == "重试后有效"
     assert len(runtime.calls) == 2
+
+
+def test_import_guide_excludes_failed_manifest_and_requires_decimal_verbatim(tmp_path):
+    db_path = _db(tmp_path, "营业收入 98765.43，毛利率 8.2%")
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("INSERT INTO parse_staging VALUES (2, ?, 'xlsx', ?, 'parse_failed')", ("b" * 64, json.dumps({
+            "source_id": "bad-source", "file_hash": "b" * 64, "filename": "坏文件.xlsx",
+            "format": "xlsx", "pages": [{"page_no": 1, "text": "不应进入证据 12345.67"}],
+            "parse_summary": {"status": "parse_failed"},
+        }, ensure_ascii=False)))
+        conn.commit()
+    runtime = FakeRuntime([_guide("原始值 98765.43，比例 8.2%")])
+    service = ImportGuideService(
+        store=FakeStore(), db_path=db_path, runtime_provider=runtime, company_id="acme",
+        env={"SAM_GUIDE_RETRIES": "1"}, sleep=lambda _: None,
+    )
+    assert service.generate(event="refresh")["message"].startswith("原始值")
+    context = runtime.calls[0][1]["context_text"]
+    assert "坏文件.xlsx" not in context
+    assert "12345.67" not in context
+    assert "98765.43" in context
