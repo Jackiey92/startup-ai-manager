@@ -1,7 +1,7 @@
 {
   "agents": {
     "defaults": {
-      "model": { "primary": "${SAM_GUIDE_MODEL}" },
+      "model": { "primary": "token-plan/${SAM_GUIDE_MODEL}" },
       "workspace": "${SAM_HARNESS_ROOT}"
     },
     "list": [
@@ -9,7 +9,7 @@
         "id": "sam-guide",
         "name": "SAM Guide",
         "workspace": "${SAM_HARNESS_ROOT}",
-        "model": { "primary": "${SAM_GUIDE_MODEL}" },
+        "model": { "primary": "token-plan/${SAM_GUIDE_MODEL}" },
         "tools": {
           "allow": [
             "sam_memory_read",

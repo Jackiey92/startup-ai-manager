@@ -1,5 +1,6 @@
 import json
 import subprocess
+from dataclasses import replace
 from pathlib import Path
 
 from app.harness.runtime.openclaw_adapter import OpenClawAdapter
@@ -43,6 +44,34 @@ def test_agent_scope_is_injected_outside_prompt(tmp_path: Path):
     assert env["SAM_THREAD_ID"] == "t1"
     assert env["SAM_ALLOW_PROMOTE"] == "0"
     assert "acme" not in calls[-1][0][calls[-1][0].index("--message") + 1]
+
+
+def test_runtime_injects_token_plan_provider_into_existing_config(tmp_path: Path):
+    calls = []
+
+    def runner(command, **kwargs):
+        calls.append((command, kwargs))
+        return subprocess.CompletedProcess(command, 0, json.dumps({"meta": {"finalAssistantVisibleText": "ok"}}), "")
+
+    config = RuntimeConfig.from_env(
+        project_root=Path(__file__).parents[1],
+        env={"SAM_PROFILE": "local", "SAM_GUIDE_MODEL": "qwen3.8-max"},
+    )
+    config_path = tmp_path / "e2e-state" / "openclaw.json"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(json.dumps({"agents": {"list": [{"id": "sam-guide"}]}}), encoding="utf-8")
+    config = replace(config, config_path=config_path)
+    adapter = OpenClawAdapter(StagingStore(db_path=tmp_path / "missing.db"), config=config, runner=runner)
+    adapter.run_agent_message("问题")
+    generated = json.loads(config_path.read_text(encoding="utf-8"))
+    provider = generated["models"]["providers"]["token-plan"]
+    assert provider["api"] == "openai-completions"
+    assert provider["baseUrl"] == "${SAM_GUIDE_MODEL_BASE_URL}"
+    assert provider["apiKey"] == "${SAM_GUIDE_MODEL_API_KEY}"
+    assert generated["agents"]["list"][0]["model"]["primary"] == "token-plan/${SAM_GUIDE_MODEL}"
+    env = calls[-1][1]["env"]
+    assert env["SAM_GUIDE_MODEL_BASE_URL"].endswith("/compatible-mode/v1")
+    assert env["SAM_GUIDE_MODEL"] == "qwen3.8-max"
 
 
 def test_document_ingest_runs_deterministic_bridge_without_agent(tmp_path: Path):

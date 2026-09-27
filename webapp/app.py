@@ -6,6 +6,8 @@ import os
 import sqlite3
 import subprocess
 import uuid
+from concurrent.futures import Future, ThreadPoolExecutor
+from threading import Lock
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -47,6 +49,13 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 app = Flask(__name__)
 app.extensions["sam_runtime_config"] = RUNTIME_CONFIG
 app.extensions["sam_memory_provider"] = memory_provider(RUNTIME_CONFIG)
+
+# The parser/storage path remains synchronous so the upload response only
+# returns after its actual parse status is known.  Model guidance is a
+# separate bounded worker and never holds Flask's request thread open.
+_GUIDE_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="sam-guide")
+_GUIDE_LOCK = Lock()
+_GUIDE_JOBS: dict[str, Future] = {}
 
 
 @app.after_request
@@ -106,6 +115,26 @@ def import_guide(*, event: str, uploaded_file_hash: str | None = None) -> dict:
         company_id=os.environ.get("SAM_COMPANY_ID", "default"),
     )
     return service.generate(event=event, uploaded_file_hash=uploaded_file_hash)
+
+
+def queue_import_guide(uploaded_file_hash: str) -> None:
+    """Queue guidance without making the upload request wait for the Agent."""
+    with _GUIDE_LOCK:
+        previous = _GUIDE_JOBS.get(uploaded_file_hash)
+        if previous is not None and not previous.done():
+            return
+        future = _GUIDE_EXECUTOR.submit(
+            import_guide, event="upload", uploaded_file_hash=uploaded_file_hash
+        )
+        _GUIDE_JOBS[uploaded_file_hash] = future
+
+    def report_failure(done: Future) -> None:
+        try:
+            done.result()
+        except Exception as exc:  # pragma: no cover - scheduling is runtime-only
+            app.logger.info("background import guide unavailable: %s", type(exc).__name__)
+
+    future.add_done_callback(report_failure)
 
 
 @app.route("/")
@@ -277,11 +306,10 @@ def api_upload():
         "parse_status": parse_status,
         "memory_status": memory_status,
     }
-    try:
-        response["guide"] = import_guide(event="upload", uploaded_file_hash=file_hash)
-    except ModelUnavailable as exc:
-        response["guide_error"] = "AI import guide is temporarily unavailable."
-        app.logger.info("import guide unavailable after upload: %s", exc)
+    # Do not synchronously start a cold OpenClaw process here. Clients can use
+    # /api/import-guide with this hash to request/read guidance separately.
+    queue_import_guide(file_hash)
+    response["guide_status"] = "queued"
     return response
 
 

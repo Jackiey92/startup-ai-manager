@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+from copy import deepcopy
 from pathlib import Path
 from collections.abc import Callable
 
@@ -134,6 +135,12 @@ class OpenClawAdapter(RuntimeProvider):
         env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(self.config.project_root), env.get("PYTHONPATH", "")]))
         env["SAM_TOOL_PLUGIN_DIR"] = str(self.config.tool_plugin_dir)
         env["SAM_TOOL_BRIDGE_PYTHON"] = str(self.config.tool_bridge_python)
+        # Keep the provider/model contract in the child environment. Values
+        # already supplied by the caller (including the secret key) win; only
+        # non-secret manifest defaults are filled when absent.
+        if self.config.model_base_url:
+            env.setdefault(self.config.model_base_url_env, self.config.model_base_url)
+        env.setdefault(self.config.model_name_env, self.config.model_default)
         if company_id is not None:
             env["SAM_COMPANY_ID"] = str(company_id)
         if thread_id is not None:
@@ -163,20 +170,22 @@ class OpenClawAdapter(RuntimeProvider):
         template = self.config.harness_root / "state" / "openclaw.example.json"
         path = self.config.config_path
         config: dict = {}
+        if template.exists():
+            try:
+                loaded = json.loads(template.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    config = deepcopy(loaded)
+            except (OSError, json.JSONDecodeError) as exc:
+                raise RuntimeError("OpenClaw configuration template is invalid") from exc
         if path.exists():
             try:
                 loaded = json.loads(path.read_text(encoding="utf-8"))
                 if isinstance(loaded, dict):
-                    config = loaded
+                    _merge_missing(config, loaded)
             except (OSError, json.JSONDecodeError):
-                config = {}
-        if not config and template.exists():
-            try:
-                loaded = json.loads(template.read_text(encoding="utf-8"))
-                if isinstance(loaded, dict):
-                    config = loaded
-            except (OSError, json.JSONDecodeError) as exc:
-                raise RuntimeError("OpenClaw configuration template is invalid") from exc
+                # A corrupt runtime config must not erase the known-good
+                # template; continue with template defaults and rewrite it.
+                pass
         skills = config.setdefault("skills", {})
         loader = skills.setdefault("load", {})
         dirs = loader.setdefault("extraDirs", [])
@@ -186,8 +195,44 @@ class OpenClawAdapter(RuntimeProvider):
         skill_root = str(self.config.skill_root)
         if skill_root not in dirs:
             dirs.append(skill_root)
+        _ensure_agent_model_defaults(config)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _merge_missing(defaults: dict, existing: dict) -> None:
+    """Overlay runtime-specific values while retaining newly added defaults."""
+    for key, value in existing.items():
+        if isinstance(value, dict) and isinstance(defaults.get(key), dict):
+            _merge_missing(defaults[key], value)
+        else:
+            defaults[key] = value
+
+
+def _ensure_agent_model_defaults(config: dict) -> None:
+    """Keep an older runtime config from dropping the configured provider."""
+    agents = config.get("agents")
+    if not isinstance(agents, dict):
+        return
+    defaults = agents.get("defaults")
+    if isinstance(defaults, dict):
+        model = defaults.setdefault("model", {})
+        if isinstance(model, dict):
+            model.setdefault("primary", "token-plan/${SAM_GUIDE_MODEL}")
+    entries = agents.get("list")
+    if isinstance(entries, list):
+        for entry in entries:
+            if isinstance(entry, dict):
+                model = entry.setdefault("model", {})
+                if isinstance(model, dict):
+                    model.setdefault("primary", "token-plan/${SAM_GUIDE_MODEL}")
+    entries_map = agents.get("entries")
+    if isinstance(entries_map, dict):
+        for entry in entries_map.values():
+            if isinstance(entry, dict):
+                model = entry.setdefault("model", {})
+                if isinstance(model, dict):
+                    model.setdefault("primary", "token-plan/${SAM_GUIDE_MODEL}")
 
 
 def _result_from_dict(d: dict) -> ParseResult:

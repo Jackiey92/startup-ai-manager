@@ -71,11 +71,19 @@ def _read_config(root: Path, env: dict[str, str]) -> dict[str, Any]:
     return _merge(manifest, profile)
 
 
-def _path(root: Path, value: str | None, default: Path) -> Path:
+def _path(root: Path, value: str | None, default: Path, *, follow_symlinks: bool = True) -> Path:
     if not value:
-        return default.resolve()
-    candidate = Path(value)
-    return (candidate if candidate.is_absolute() else root / candidate).resolve()
+        candidate = default
+    else:
+        candidate = Path(value).expanduser()
+        if not candidate.is_absolute():
+            candidate = root / candidate
+    # Executable paths must retain virtual-environment symlinks. Calling
+    # resolve() on .venv/bin/python turns it into /usr/bin/python3 and loses
+    # the venv's sys.prefix and installed packages.
+    if follow_symlinks:
+        return candidate.resolve()
+    return Path(os.path.abspath(candidate))
 
 
 @dataclass(frozen=True)
@@ -121,12 +129,12 @@ class RuntimeConfig:
         memory = config.get("memory", {})
         harness = _path(configured_root, env.get("SAM_HARNESS_ROOT", paths.get("harness_root")), configured_root / "harness-openclaw")
         node_bin = env.get("SAM_NODE_BIN", runtime.get("node_bin", "node"))
-        entry = _path(configured_root, env.get("SAM_OPENCLAW_ENTRY", paths.get("openclaw_entry")), configured_root / ".oc-runtime/node_modules/openclaw/openclaw.mjs")
-        venv_bin = _path(configured_root, env.get("SAM_VENV_BIN", paths.get("venv_bin")), configured_root / ".venv/bin")
+        entry = _path(configured_root, env.get("SAM_OPENCLAW_ENTRY", paths.get("openclaw_entry")), configured_root / ".oc-runtime/node_modules/openclaw/openclaw.mjs", follow_symlinks=False)
+        venv_bin = _path(configured_root, env.get("SAM_VENV_BIN", paths.get("venv_bin")), configured_root / ".venv/bin", follow_symlinks=False)
         state = _path(configured_root, env.get("SAM_OPENCLAW_STATE_DIR", paths.get("state_dir")), harness / "state")
         config_path = _path(configured_root, env.get("SAM_OPENCLAW_CONFIG", paths.get("config_path")), state / "openclaw.json")
         plugin_dir = _path(configured_root, env.get("SAM_TOOL_PLUGIN_DIR", paths.get("tool_plugin_dir")), harness / "plugins" / "sam-memory")
-        bridge_python = _path(configured_root, env.get("SAM_TOOL_BRIDGE_PYTHON", paths.get("tool_bridge_python")), venv_bin / "python")
+        bridge_python = _path(configured_root, env.get("SAM_TOOL_BRIDGE_PYTHON", paths.get("tool_bridge_python")), venv_bin / "python", follow_symlinks=False)
         agent_id = str(env.get("SAM_OPENCLAW_AGENT", runtime.get("agent_id", "sam-guide")))
         mapping = dict(skills.get("map", {"*": "document-ingest"}))
         raw_mapping = env.get("SAM_SKILL_MAP")

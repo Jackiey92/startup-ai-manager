@@ -1947,6 +1947,11 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
     document.getElementById('importNextAction').textContent='资料已安全保存在后台，待 AI 服务恢复后会基于实际资料生成建议。';
     document.getElementById('importFootHint').textContent='未使用浏览器内置步骤或模板替代 AI 引导';
   }
+  function showGuidePending(){
+    document.getElementById('importGuideText').textContent='资料已解析，AI 正在根据真实内容生成引导…';
+    document.getElementById('importNextAction').textContent='稍后点击刷新获取基于解析证据的建议。';
+    document.getElementById('importFootHint').textContent='解析与 AI 引导已解耦，上传不会等待模型冷启动';
+  }
   function refreshGuide(){
     document.getElementById('importGuideText').textContent='正在向 AI 获取资料状态…';
     return fetch(GUIDE_API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event:'open'})})
@@ -1964,7 +1969,7 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
     var entry={name:file.name,ok:false,error:'上传中…'};uploadedFiles.push(entry);renderImportFiles();
     return fetch(HARNESS_API,{method:'POST',body:fd}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(res){
       entry.ok=true;entry.error='';prependFile({n:res.original_name,s:fmtSize(res.size),d:nowMMDD(),src:'本地上传',f:false});
-      if(res.guide)renderGuide(res.guide);else showGuideError();
+      if(res.guide)renderGuide(res.guide);else if(res.guide_status==='queued')showGuidePending();else showGuideError();
     }).catch(function(err){entry.error=err.message||'上传失败';}).finally(renderImportFiles);
   }
   function handleImportFiles(files){if(!files||!files.length)return;Promise.all(Array.prototype.slice.call(files).map(uploadImportFile));importInput.value='';}
