@@ -12,4 +12,5 @@ export SAM_DATA_ROOT="${SAM_DATA_ROOT:-/tmp/sam-data}"
 # must already be present in the process environment.
 export SAM_GUIDE_MODEL_BASE_URL="${SAM_GUIDE_MODEL_BASE_URL:-https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1}"
 export SAM_GUIDE_MODEL="${SAM_GUIDE_MODEL:-qwen3.8-max}"
+python3 scripts/prepare-openclaw-runtime.py
 exec python3 webapp/app.py

@@ -60,3 +60,12 @@ openclaw plugins install <build-output>
 - 技能输出只进 `outbox/`（staging-only），不直接写事实。
 - 事实写入经事务网关与 FactVoucher 校验，区分 verified / claimed / inferred。
 - 密钥由环境变量/网关代持，模型与工作区不接触真实凭证。
+## Runtime startup
+
+`scripts/run.sh` and `tools/run-sam-isolated.sh` prepare a clean OpenClaw
+state before serving: the repository `sam-memory` plugin is mounted into
+`$OPENCLAW_STATE_DIR/extensions/sam-memory`, and the generated config enables
+the seven read-only `sam_*` tools. This removes the need for a manual symlink
+in a fresh state. Gateway mode is the default; the Flask-owned adapter starts
+one loopback Gateway on the first Agent call and reuses it for later calls.
+Set `SAM_OPENCLAW_MODE=local` only for a one-shot diagnostic run.

@@ -51,6 +51,7 @@ BWRAP_ARGS=(
   --setenv HOME /opt/sam/home \
   --setenv SAM_ISOLATED_ROOT /opt/sam \
   --setenv SAM_VENV_BIN /opt/sam/venv/bin \
+  --setenv SAM_TOOL_BRIDGE_PYTHON /opt/sam/venv/bin/python \
   --setenv PATH /opt/sam/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
 )
 
@@ -61,6 +62,7 @@ fi
 if [[ "${1:-}" == "--check" ]]; then
   exec bwrap "${BWRAP_ARGS[@]}" /bin/bash -c '
     set -e
+    /opt/sam/venv/bin/python scripts/prepare-openclaw-runtime.py
     /opt/sam/venv/bin/python webapp/app.py >/opt/sam/logs/flask-check.log 2>&1 &
     pid=$!
     trap "kill $pid 2>/dev/null || true" EXIT
@@ -81,4 +83,8 @@ fi
 if [[ "$ALLOW_MODEL_NETWORK" == 1 ]]; then
   echo "Warning: model network explicitly enabled for this isolated process." >&2
 fi
-exec bwrap "${BWRAP_ARGS[@]}" /opt/sam/venv/bin/python webapp/app.py
+exec bwrap "${BWRAP_ARGS[@]}" /bin/bash -c '
+  set -e
+  /opt/sam/venv/bin/python scripts/prepare-openclaw-runtime.py
+  exec /opt/sam/venv/bin/python webapp/app.py
+'

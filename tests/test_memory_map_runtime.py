@@ -19,6 +19,7 @@ def test_agent_context_is_optional_and_deterministically_injected(tmp_path: Path
         return subprocess.CompletedProcess(command, 0, json.dumps(payload), "")
 
     config = RuntimeConfig.from_env(project_root=Path(__file__).parents[1], env={"SAM_PROFILE": "local"})
+    config = replace(config, state_dir=tmp_path / "state", config_path=tmp_path / "state" / "openclaw.json")
     adapter = OpenClawAdapter(StagingStore(db_path=tmp_path / "missing.db"), config=config, runner=runner)
     adapter.run_agent_message("裸问题")
     assert calls[-1][calls[-1].index("--message") + 1] == "裸问题"
@@ -27,6 +28,10 @@ def test_agent_context_is_optional_and_deterministically_injected(tmp_path: Path
     adapter.run_agent_message("问题", context_text="地图：viking://map/acme")
     prompt = calls[-1][calls[-1].index("--message") + 1]
     assert prompt == "地图：viking://map/acme\n\n用户问题：问题"
+    assert (config.state_dir / "extensions" / "sam-memory").is_symlink()
+    assert "sam_memory_map" in mounted["tools"]["allow"]
+    assert "sam_promote" not in mounted["tools"]["allow"]
+    assert "--local" not in calls[-1]
 
 
 def test_agent_scope_is_injected_outside_prompt(tmp_path: Path):
@@ -37,6 +42,7 @@ def test_agent_scope_is_injected_outside_prompt(tmp_path: Path):
         return subprocess.CompletedProcess(command, 0, json.dumps({"meta": {"finalAssistantVisibleText": "ok"}}), "")
 
     config = RuntimeConfig.from_env(project_root=Path(__file__).parents[1], env={"SAM_PROFILE": "local"})
+    config = replace(config, state_dir=tmp_path / "state", config_path=tmp_path / "state" / "openclaw.json")
     adapter = OpenClawAdapter(StagingStore(db_path=tmp_path / "missing.db"), config=config, runner=runner)
     adapter.run_agent_message("问题", company_id="acme", thread_id="t1")
     env = calls[-1][1]["env"]
@@ -60,7 +66,7 @@ def test_runtime_injects_token_plan_provider_into_existing_config(tmp_path: Path
     config_path = tmp_path / "e2e-state" / "openclaw.json"
     config_path.parent.mkdir(parents=True)
     config_path.write_text(json.dumps({"agents": {"list": [{"id": "sam-guide"}]}}), encoding="utf-8")
-    config = replace(config, config_path=config_path)
+    config = replace(config, state_dir=tmp_path / "state", config_path=config_path)
     adapter = OpenClawAdapter(StagingStore(db_path=tmp_path / "missing.db"), config=config, runner=runner)
     adapter.run_agent_message("问题")
     generated = json.loads(config_path.read_text(encoding="utf-8"))
@@ -68,10 +74,59 @@ def test_runtime_injects_token_plan_provider_into_existing_config(tmp_path: Path
     assert provider["api"] == "openai-completions"
     assert provider["baseUrl"] == "${SAM_GUIDE_MODEL_BASE_URL}"
     assert provider["apiKey"] == "${SAM_GUIDE_MODEL_API_KEY}"
-    assert generated["agents"]["list"][0]["model"]["primary"] == "token-plan/${SAM_GUIDE_MODEL}"
+    assert generated["agents"]["entries"]["sam-guide"]["model"]["primary"] == "token-plan/${SAM_GUIDE_MODEL}"
+    assert "list" not in generated["agents"]
     env = calls[-1][1]["env"]
     assert env["SAM_GUIDE_MODEL_BASE_URL"].endswith("/compatible-mode/v1")
     assert env["SAM_GUIDE_MODEL"] == "qwen3.8-max"
+
+
+def test_gateway_mode_starts_one_daemon_and_reuses_it(tmp_path: Path, monkeypatch):
+    import app.harness.runtime.openclaw_adapter as adapter_module
+
+    agent_calls = []
+    gateway_calls = []
+
+    class FakeProcess:
+        def poll(self):
+            return None
+
+        def terminate(self):
+            return None
+
+        def wait(self, timeout=None):
+            return 0
+
+        def kill(self):
+            return None
+
+    def fake_run(command, **kwargs):
+        agent_calls.append(command)
+        return subprocess.CompletedProcess(command, 0, json.dumps({"meta": {"finalAssistantVisibleText": "ok"}}), "")
+
+    def fake_popen(command, **kwargs):
+        gateway_calls.append(command)
+        return FakeProcess()
+
+    class ReadySocket:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    monkeypatch.setattr(adapter_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(adapter_module.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(adapter_module.socket, "create_connection", lambda *args, **kwargs: ReadySocket())
+
+    config = RuntimeConfig.from_env(project_root=Path(__file__).parents[1], env={"SAM_PROFILE": "local"})
+    config = replace(config, state_dir=tmp_path / "state", config_path=tmp_path / "state" / "openclaw.json")
+    adapter = OpenClawAdapter(StagingStore(db_path=tmp_path / "missing.db"), config=config)
+    adapter.run_agent_message("第一问")
+    adapter.run_agent_message("第二问")
+    assert len(gateway_calls) == 1
+    assert all("--local" not in command for command in agent_calls)
+    adapter_module._stop_gateways()
 
 
 def test_document_ingest_runs_deterministic_bridge_without_agent(tmp_path: Path):

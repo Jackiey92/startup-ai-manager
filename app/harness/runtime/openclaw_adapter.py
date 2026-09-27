@@ -7,17 +7,71 @@ OpenClaw itself, so the runtime can be swapped later.
 """
 from __future__ import annotations
 
+import atexit
 import json
 import os
+import socket
 import subprocess
+import time
 from copy import deepcopy
 from pathlib import Path
+from threading import Lock
 from collections.abc import Callable
 
 from ..contracts import ParseResult, TextSpan, TableRow, SourceLoc, ClassificationHint
 from ..staging import StagingStore
 from ...ports import RuntimeProvider
 from ...runtime_config import RuntimeConfig
+
+
+_READONLY_TOOLS = [
+    "sam_memory_read", "sam_memory_search", "sam_file_get", "sam_memory_map",
+    "sam_conversation_read", "sam_thread_list", "sam_thread_open",
+]
+_GATEWAY_LOCK = Lock()
+_GATEWAY_PROCESSES: dict[str, tuple[subprocess.Popen, object]] = {}
+
+
+def _stop_gateways() -> None:
+    with _GATEWAY_LOCK:
+        processes = list(_GATEWAY_PROCESSES.values())
+        _GATEWAY_PROCESSES.clear()
+    for process, stream in processes:
+        try:
+            process.terminate()
+            process.wait(timeout=3)
+        except (OSError, subprocess.TimeoutExpired):
+            try:
+                process.kill()
+            except OSError:
+                pass
+        try:
+            stream.close()
+        except AttributeError:
+            pass
+
+
+def _discard_gateway(key: str, process: subprocess.Popen) -> None:
+    with _GATEWAY_LOCK:
+        current = _GATEWAY_PROCESSES.get(key)
+        if current is None or current[0] is not process:
+            return
+        _GATEWAY_PROCESSES.pop(key, None)
+    try:
+        process.terminate()
+        process.wait(timeout=2)
+    except (OSError, subprocess.TimeoutExpired):
+        try:
+            process.kill()
+        except OSError:
+            pass
+    try:
+        current[1].close()
+    except AttributeError:
+        pass
+
+
+atexit.register(_stop_gateways)
 
 
 class OpenClawAdapter(RuntimeProvider):
@@ -129,6 +183,8 @@ class OpenClawAdapter(RuntimeProvider):
         env["OPENCLAW_STATE_DIR"] = str(state_dir)
         env["OPENCLAW_CONFIG_PATH"] = str(self.config.config_path)
         self._ensure_skill_mount()
+        if self.config.openclaw_mode == "gateway":
+            self._ensure_gateway(env, timeout=timeout)
         env["SAM_PROJECT_ROOT"] = str(self.config.project_root)
         env["SAM_HARNESS_ROOT"] = str(self.config.harness_root)
         env["SAM_SKILL_ROOT"] = str(self.config.skill_root)
@@ -151,9 +207,11 @@ class OpenClawAdapter(RuntimeProvider):
         env["XDG_CACHE_HOME"] = str(cache_dir)
         import uuid
         session_id = "oc-" + uuid.uuid4().hex
-        cmd = [self.config.node_bin, str(self.config.openclaw_entry), "agent", "--local",
+        cmd = [self.config.node_bin, str(self.config.openclaw_entry), "agent",
                "--agent", self.config.agent_id, "--session-id", session_id, "--json",
                "--message", message, "--timeout", str(timeout)]
+        if self.config.openclaw_mode != "gateway":
+            cmd.insert(3, "--local")
         proc = self._runner(
             cmd, cwd=self.root, env=env, capture_output=True,
             text=True, encoding="utf-8", errors="replace",
@@ -195,9 +253,85 @@ class OpenClawAdapter(RuntimeProvider):
         skill_root = str(self.config.skill_root)
         if skill_root not in dirs:
             dirs.append(skill_root)
+        self._ensure_plugin_mount()
+        _ensure_plugin_defaults(config)
+        _normalize_agent_entries(config)
         _ensure_agent_model_defaults(config)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    def prepare_runtime(self) -> None:
+        """Prepare a fresh state directory before OpenClaw is started.
+
+        This deliberately does not start Gateway: the daemon must live as a
+        child of the long-running Flask process so its lifecycle and atexit
+        cleanup are owned by one process.  The first agent call then pays at
+        most one bounded Gateway startup cost and all later calls reuse it.
+        """
+        self.config.state_dir.mkdir(parents=True, exist_ok=True)
+        self._ensure_skill_mount()
+
+    def _ensure_plugin_mount(self) -> None:
+        """Expose the repository plugin through OpenClaw's state discovery dir."""
+        source = self.config.tool_plugin_dir
+        if not source.is_dir():
+            raise RuntimeError("SAM memory plugin directory is missing")
+        target = self.config.state_dir / "extensions" / source.name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if target.is_symlink():
+            if target.resolve() == source.resolve():
+                return
+            target.unlink()
+        if target.exists():
+            # Do not overwrite an administrator-managed installed copy. The
+            # OpenClaw install ledger may already own this exact discovery dir.
+            return
+        try:
+            target.symlink_to(source, target_is_directory=True)
+        except OSError as exc:
+            raise RuntimeError("unable to mount SAM memory plugin") from exc
+
+    def _ensure_gateway(self, env: dict[str, str], *, timeout: int) -> None:
+        """Start one loopback Gateway per state directory and reuse it."""
+        # Unit tests inject a runner and must not launch a real daemon. The
+        # production composition root uses subprocess.run and takes this path.
+        if self._runner is not subprocess.run:
+            return
+        key = str(self.config.state_dir)
+        with _GATEWAY_LOCK:
+            current = _GATEWAY_PROCESSES.get(key)
+            if current is not None and current[0].poll() is None:
+                # Another request may have started it while this request was
+                # waiting for the lock. Reuse that process and wait for its
+                # socket instead of launching a second daemon on the port.
+                process = current[0]
+            else:
+                if current is not None:
+                    try:
+                        current[1].close()
+                    except AttributeError:
+                        pass
+                log_path = self.config.state_dir / "gateway.log"
+                log_path.parent.mkdir(parents=True, exist_ok=True)
+                stream = log_path.open("a", encoding="utf-8")
+                command = [self.config.node_bin, str(self.config.openclaw_entry), "gateway", "run", "--port", str(self.config.gateway_port)]
+                process = subprocess.Popen(
+                    command, cwd=self.root, env=env, stdout=stream, stderr=stream,
+                    text=True,
+                )
+                _GATEWAY_PROCESSES[key] = (process, stream)
+        deadline = time.monotonic() + min(max(timeout, 1), 15)
+        while time.monotonic() < deadline:
+            if process.poll() is not None:
+                _discard_gateway(key, process)
+                raise RuntimeError("OpenClaw Gateway exited during startup")
+            try:
+                with socket.create_connection(("127.0.0.1", self.config.gateway_port), timeout=0.2):
+                    return
+            except OSError:
+                time.sleep(0.1)
+        _discard_gateway(key, process)
+        raise TimeoutError("OpenClaw Gateway startup timed out")
 
 
 def _merge_missing(defaults: dict, existing: dict) -> None:
@@ -233,6 +367,65 @@ def _ensure_agent_model_defaults(config: dict) -> None:
                 model = entry.setdefault("model", {})
                 if isinstance(model, dict):
                     model.setdefault("primary", "token-plan/${SAM_GUIDE_MODEL}")
+
+
+def _normalize_agent_entries(config: dict) -> None:
+    """Emit the 2026.9+ agents.entries shape without legacy id fields."""
+    agents = config.get("agents")
+    if not isinstance(agents, dict):
+        return
+    legacy = agents.pop("list", None)
+    if not isinstance(legacy, list):
+        return
+    entries = agents.get("entries")
+    if not isinstance(entries, dict):
+        entries = {}
+        agents["entries"] = entries
+    for raw in legacy:
+        if not isinstance(raw, dict):
+            continue
+        entry = dict(raw)
+        agent_id = str(entry.pop("id", "") or "").strip()
+        if not agent_id:
+            name = str(entry.get("name", "agent")).strip().lower().replace(" ", "-")
+            agent_id = name or "agent"
+        entries.setdefault(agent_id, entry)
+def _ensure_plugin_defaults(config: dict) -> None:
+    plugins = config.setdefault("plugins", {})
+    entries = plugins.setdefault("entries", {})
+    if isinstance(entries, dict):
+        entry = entries.setdefault("sam-memory", {})
+        if isinstance(entry, dict):
+            entry["enabled"] = True
+    tools = config.setdefault("tools", {})
+    if isinstance(tools, dict):
+        current = tools.get("allow")
+        if not isinstance(current, list):
+            current = []
+        tools["allow"] = _merge_tool_allowlist(current)
+    agents = config.get("agents")
+    if not isinstance(agents, dict):
+        return
+    entries_list = agents.get("list")
+    if isinstance(entries_list, list):
+        for agent in entries_list:
+            if isinstance(agent, dict) and isinstance(agent.get("tools"), dict):
+                current = agent["tools"].get("allow")
+                agent["tools"]["allow"] = _merge_tool_allowlist(current if isinstance(current, list) else [])
+    entries_map = agents.get("entries")
+    if isinstance(entries_map, dict):
+        for agent in entries_map.values():
+            if isinstance(agent, dict) and isinstance(agent.get("tools"), dict):
+                current = agent["tools"].get("allow")
+                agent["tools"]["allow"] = _merge_tool_allowlist(current if isinstance(current, list) else [])
+
+
+def _merge_tool_allowlist(current: list) -> list[str]:
+    result = [str(item) for item in current if str(item) != "sam_promote"]
+    for name in _READONLY_TOOLS:
+        if name not in result:
+            result.append(name)
+    return result
 
 
 def _result_from_dict(d: dict) -> ParseResult:

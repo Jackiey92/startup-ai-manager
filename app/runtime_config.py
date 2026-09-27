@@ -115,6 +115,8 @@ class RuntimeConfig:
     tool_plugin_dir: Path
     tool_bridge_python: Path
     agent_id: str
+    openclaw_mode: str
+    gateway_port: int
 
     @classmethod
     def from_env(cls, project_root: str | Path | None = None, env: dict[str, str] | None = None) -> "RuntimeConfig":
@@ -146,6 +148,8 @@ class RuntimeConfig:
         base_url_env = str(env.get("SAM_MODEL_BASE_URL_ENV", model.get("base_url_env", "SAM_GUIDE_MODEL_BASE_URL")))
         name_env = str(env.get("SAM_MODEL_NAME_ENV", model.get("model_env", "SAM_GUIDE_MODEL")))
         key_env = str(env.get("SAM_MODEL_API_KEY_ENV", model.get("api_key_env", "SAM_GUIDE_MODEL_API_KEY")))
+        gateway_mode = str(env.get("SAM_OPENCLAW_MODE", runtime.get("gateway_mode", "gateway")))
+        gateway_port = int(env.get("SAM_OPENCLAW_GATEWAY_PORT", runtime.get("gateway_port", 18789)))
         return cls(
             configured_root, harness, node_bin, entry, venv_bin, state, config_path,
             _path(configured_root, env.get("SAM_DATA_ROOT", paths.get("data_root")), configured_root / "data"),
@@ -163,4 +167,6 @@ class RuntimeConfig:
             str(memory.get("api_key_env", "SAM_OV_API_KEY")),
             plugin_dir, bridge_python,
             agent_id,
+            gateway_mode,
+            gateway_port,
         )

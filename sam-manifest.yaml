@@ -3,6 +3,8 @@ runtime:
   node: 24.16.x
   openclaw: 2026.9.5
   agent_id: sam-guide
+  gateway_mode: gateway
+  gateway_port: 18789
 skills:
   root: skills
   map:

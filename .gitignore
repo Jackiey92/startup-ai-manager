@@ -32,6 +32,8 @@ data/sales_app/
 # OpenClaw runtime
 .sam-isolated/
 harness-openclaw/state/openclaw.json
+harness-openclaw/state/extensions/
+harness-openclaw/state/gateway.log
 harness-openclaw/state/agents/
 harness-openclaw/state/state/
 harness-openclaw/state/tmp/

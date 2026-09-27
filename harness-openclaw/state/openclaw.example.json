@@ -4,9 +4,8 @@
       "model": { "primary": "token-plan/${SAM_GUIDE_MODEL}" },
       "workspace": "${SAM_HARNESS_ROOT}"
     },
-    "list": [
-      {
-        "id": "sam-guide",
+    "entries": {
+      "sam-guide": {
         "name": "SAM Guide",
         "workspace": "${SAM_HARNESS_ROOT}",
         "model": { "primary": "token-plan/${SAM_GUIDE_MODEL}" },
@@ -22,7 +21,7 @@
           ]
         }
       }
-    ]
+    }
   },
   "gateway": { "mode": "local", "bind": "loopback", "auth": { "mode": "token" } },
   "skills": {
