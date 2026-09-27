@@ -11,9 +11,11 @@ import argparse
 import hashlib
 from html.parser import HTMLParser
 import importlib.util
+import io
 import json
 import mimetypes
 import os
+from contextlib import contextmanager
 import zipfile
 import subprocess
 import sys
@@ -39,6 +41,45 @@ def _now() -> str:
 
 def _format(path: Path, task: dict[str, Any]) -> str:
     return str(task.get("format") or FORMATS.get(path.suffix.lower(), "unknown"))
+
+
+_FORMAT_SUFFIXES = {
+    "pdf": ".pdf",
+    "docx": ".docx",
+    "xlsx": ".xlsx",
+    "pptx": ".pptx",
+    "doc": ".doc",
+    "xls": ".xls",
+    "ppt": ".ppt",
+    "image": ".png",
+}
+
+
+@contextmanager
+def _engine_source(source: Path, fmt: str, filename: str):
+    """Yield a path whose suffix agrees with the declared document format.
+
+    SourceFileStore is content-addressed and deliberately stores objects
+    without an extension.  Several third-party parsers use the suffix before
+    inspecting the bytes, so only the engine-facing temporary copy gets a
+    suffix; the original object remains untouched.
+    """
+    suffix = Path(filename).suffix.lower() or _FORMAT_SUFFIXES.get(fmt, "")
+    if suffix and source.suffix.lower() == suffix:
+        yield source
+        return
+    if not suffix:
+        yield source
+        return
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(prefix="sam-ingest-", suffix=suffix, delete=False) as stream:
+            stream.write(source.read_bytes())
+            temporary = Path(stream.name)
+        yield temporary
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def _sha256(path: Path) -> str:
@@ -125,16 +166,17 @@ def _mineru_cache_json(file_hash: str, tier: str | None) -> Path | None:
     return candidates[0] if candidates else None
 
 
-def _run_mineru(source: Path, file_hash: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+def _run_mineru(source: Path, file_hash: str, fmt: str, filename: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Run only the local MinerU server and convert its local JSON cache."""
     tier = os.environ.get("SAM_MINERU_TIER", "basic")
     started = time.monotonic()
-    with tempfile.TemporaryDirectory(prefix="sam-mineru-") as temp:
-        mineru_bin = str(Path(sys.executable).with_name("mineru"))
-        command = [mineru_bin, "parse", str(source), "--json", "--force", "--wait", "300", "--output", str(Path(temp) / "parse.json")]
-        env = dict(os.environ)
-        env["MINERU_REMOTE"] = "0"
-        proc = subprocess.run(command, text=True, capture_output=True, env=env, timeout=360)
+    with _engine_source(source, fmt, filename) as engine_source:
+        with tempfile.TemporaryDirectory(prefix="sam-mineru-") as temp:
+            mineru_bin = str(Path(sys.executable).with_name("mineru"))
+            command = [mineru_bin, "parse", str(engine_source), "--json", "--force", "--wait", "300", "--output", str(Path(temp) / "parse.json")]
+            env = dict(os.environ)
+            env["MINERU_REMOTE"] = "0"
+            proc = subprocess.run(command, text=True, capture_output=True, env=env, timeout=360)
     if proc.returncode != 0:
         raise RuntimeError(f"local MinerU parse failed: {proc.stderr[-1000:]}")
     response: dict[str, Any] = {}
@@ -200,7 +242,7 @@ def _docling_provenance(item: Any, file_hash: str, fallback: str) -> dict[str, A
     }
 
 
-def _run_docling(source: Path, file_hash: str, fmt: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+def _run_docling(source: Path, file_hash: str, fmt: str, filename: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Convert a local file with Docling's Python API.
 
     ``docling-slim`` handles Office files without Torch.  PDF conversion may
@@ -210,7 +252,8 @@ def _run_docling(source: Path, file_hash: str, fmt: str) -> tuple[list[dict[str,
     started = time.monotonic()
     from docling.document_converter import DocumentConverter
 
-    document = DocumentConverter().convert(str(source)).document
+    with _engine_source(source, fmt, filename) as engine_source:
+        document = DocumentConverter().convert(str(engine_source)).document
     page_map: dict[int, dict[str, Any]] = {}
 
     def page(page_no: int) -> dict[str, Any]:
@@ -283,7 +326,7 @@ def _store_image(data: bytes, filename: str, file_hash: str, page_no: int | None
     }
 
 
-def _extract_embedded_images(source: Path, file_hash: str, fmt: str) -> list[dict[str, Any]]:
+def _extract_embedded_images(source: Path, file_hash: str, fmt: str) -> tuple[list[dict[str, Any]], list[str]]:
     """Extract embedded image bytes locally, independently of text parsing."""
     images: list[dict[str, Any]] = []
     if fmt == "pdf":
@@ -303,13 +346,17 @@ def _extract_embedded_images(source: Path, file_hash: str, fmt: str) -> list[dic
                     ext = str(payload.get("ext") or "bin")
                     images.append(_store_image(payload["image"], f"page-{page_index + 1}-image-{image_index}.{ext}", file_hash, page_index + 1, bbox, f"pdf:page/{page_index + 1}/image/{image_index}"))
             document.close()
-        except Exception:
-            return images
-        return images
+        except Exception as exc:
+            return [], [f"embedded image extraction skipped ({type(exc).__name__})"]
+        return images, []
     if fmt not in {"docx", "xlsx", "pptx"}:
-        return images
+        return images, []
     try:
-        with zipfile.ZipFile(source) as archive:
+        # OOXML containers and their helpers must receive bytes/file-like
+        # input here.  Passing a hash-only object path makes openpyxl and
+        # python-pptx reject it before looking at the ZIP contents.
+        raw = source.read_bytes()
+        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
             media = [name for name in archive.namelist() if "/media/" in name.lower()]
             mapped: set[str] = set()
             if fmt == "docx" and "word/document.xml" in archive.namelist():
@@ -332,7 +379,7 @@ def _extract_embedded_images(source: Path, file_hash: str, fmt: str) -> list[dic
             elif fmt == "pptx":
                 from pptx import Presentation
                 from pptx.enum.shapes import MSO_SHAPE_TYPE
-                presentation = Presentation(str(source))
+                presentation = Presentation(io.BytesIO(raw))
                 for slide_no, slide in enumerate(presentation.slides, start=1):
                     for shape in slide.shapes:
                         if shape.shape_type != MSO_SHAPE_TYPE.PICTURE:
@@ -344,7 +391,7 @@ def _extract_embedded_images(source: Path, file_hash: str, fmt: str) -> list[dic
                 mapped.update(media)
             elif fmt == "xlsx":
                 from openpyxl import load_workbook
-                workbook = load_workbook(source, read_only=False, data_only=False)
+                workbook = load_workbook(io.BytesIO(raw), read_only=False, data_only=False)
                 for worksheet in workbook.worksheets:
                     for image_index, image in enumerate(getattr(worksheet, "_images", [])):
                         anchor = getattr(image, "anchor", None)
@@ -365,26 +412,26 @@ def _extract_embedded_images(source: Path, file_hash: str, fmt: str) -> list[dic
             for name in media:
                 if name not in mapped:
                     images.append(_store_image(archive.read(name), Path(name).name, file_hash, None, None, f"ooxml:{name}"))
-    except (zipfile.BadZipFile, OSError):
-        pass
-    return images
+    except Exception as exc:
+        return [], [f"embedded image extraction skipped ({type(exc).__name__})"]
+    return images, []
 
 
 def _manifest(task: dict[str, Any], source: Path) -> dict[str, Any]:
     engine, warnings = _select_engine()
     file_hash = str(task.get("file_hash") or _sha256(source))
-    filename = str(task.get("filename") or source.name)
+    filename = str(task.get("filename") or task.get("original_name") or source.name)
     fmt = _format(source, task)
     pages: list[dict[str, Any]] = []
-    images: list[dict[str, Any]] = _extract_embedded_images(source, file_hash, fmt)
+    images, image_warnings = _extract_embedded_images(source, file_hash, fmt)
     if engine == "mineru" and not warnings:
         try:
-            pages, summary = _run_mineru(source, file_hash)
+            pages, summary = _run_mineru(source, file_hash, fmt, filename)
         except Exception as exc:
             summary = {"status": "parse_failed", "engine": "mineru", "text_item_count": 0, "table_count": 0, "table_row_count": 0, "warnings": [str(exc)], "raw_bytes_external": False, "full_text_external": False}
     elif engine == "docling" and not warnings:
         try:
-            pages, summary = _run_docling(source, file_hash, fmt)
+            pages, summary = _run_docling(source, file_hash, fmt, filename)
         except Exception as exc:
             summary = {"status": "parse_failed", "engine": "docling", "text_item_count": 0, "table_count": 0, "table_row_count": 0, "warnings": [str(exc)], "raw_bytes_external": False, "full_text_external": False}
     else:
@@ -397,8 +444,10 @@ def _manifest(task: dict[str, Any], source: Path) -> dict[str, Any]:
         "table_row_count": 0,
         "warnings": warnings or [f"{engine} adapter is not enabled in this contract-only bridge"],
         "raw_bytes_external": False,
-        "full_text_external": False,
+            "full_text_external": False,
         }
+    if image_warnings:
+        summary.setdefault("warnings", []).extend(image_warnings)
     return {
         "source_id": str(task.get("source_id") or file_hash),
         "filename": filename,
