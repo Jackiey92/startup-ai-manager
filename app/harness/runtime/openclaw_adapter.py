@@ -191,12 +191,15 @@ class OpenClawAdapter(RuntimeProvider):
         env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(self.config.project_root), env.get("PYTHONPATH", "")]))
         env["SAM_TOOL_PLUGIN_DIR"] = str(self.config.tool_plugin_dir)
         env["SAM_TOOL_BRIDGE_PYTHON"] = str(self.config.tool_bridge_python)
-        # Keep the provider/model contract in the child environment. Values
-        # already supplied by the caller (including the secret key) win; only
-        # non-secret manifest defaults are filled when absent.
+        # Keep the provider/model contract captured by RuntimeConfig in the
+        # child environment. RuntimeConfig already resolves environment wins;
+        # assigning these non-secret values here prevents an unrelated parent
+        # process environment from silently overriding an explicitly injected
+        # config (notably during isolated acceptance runs). The API key is
+        # intentionally never assigned or logged here.
         if self.config.model_base_url:
-            env.setdefault(self.config.model_base_url_env, self.config.model_base_url)
-        env.setdefault(self.config.model_name_env, self.config.model_default)
+            env[self.config.model_base_url_env] = self.config.model_base_url
+        env[self.config.model_name_env] = self.config.model_default
         if self.config.openclaw_mode == "gateway":
             # The Gateway ownership fingerprint includes the effective model
             # configuration, so prepare the child environment first.

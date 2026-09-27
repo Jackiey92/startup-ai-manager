@@ -18,6 +18,9 @@ def test_import_guide_is_queued_without_waiting_for_agent(monkeypatch) -> None:
         time.sleep(0.15)
         return {}
 
+    # The true acceptance harness sets a company scope. This unit test asserts
+    # the documented no-environment fallback, so isolate it from that parent.
+    monkeypatch.delenv("SAM_COMPANY_ID", raising=False)
     monkeypatch.setattr(webapp, "import_guide", slow_guide)
     monkeypatch.setattr(webapp._GUIDE_COORDINATOR, "_debounce_seconds", 0)
     begin = time.monotonic()
