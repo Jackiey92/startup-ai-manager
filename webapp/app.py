@@ -21,6 +21,7 @@ _sys.path.insert(0, str(_PROJECT_ROOT))
 from app.storage import SourceFileStore
 from app.db.database import init_db as init_core_db
 from app.classifier import ClassificationService
+from app.facts import ConsolidationService
 from app.guidance import GuideJobCoordinator, ImportGuideService, ModelUnavailable
 from app.harness.staging import StagingStore
 from app.memory import ExtractionMemoryService
@@ -81,6 +82,11 @@ def db() -> sqlite3.Connection:
 def classification_service() -> ClassificationService:
     """Return the company-scoped 2A navigation-label ledger."""
     return ClassificationService(MAIN_DB)
+
+
+def consolidation_service() -> ConsolidationService:
+    """2B document-consolidation path; deliberately unrelated to chat promote."""
+    return ConsolidationService(MAIN_DB)
 
 
 def init_db() -> None:
@@ -314,6 +320,13 @@ def api_upload():
                     file_hash=file_hash, company_id=company_id, manifest=payload,
                 )
                 ExtractionMemoryService(app.extensions["sam_memory_provider"]).ingest(company_id, payload)
+                # Document-derived operating facts take the only automatic
+                # route into 2B.  The consolidator writes ordinary, sourced
+                # metrics as verified or opens a todo for conflicts/critical
+                # items; it never calls the conversation promote path.
+                consolidation = consolidation_service().consolidate_manifest(
+                    payload, company_id=company_id,
+                )
                 # ls --recursive is eventually consistent on OV.  The source
                 # ID is known here, so verify its L0 by exact read immediately.
                 try:
@@ -357,11 +370,66 @@ def api_upload():
             key: classification.get(key)
             for key in ("module", "doc_type", "confidence", "status", "classified_by", "basis")
         }
+    if "consolidation" in locals():
+        response["consolidation"] = {
+            "verified_fact_ids": list(consolidation.verified_fact_ids),
+            "todo_ids": list(consolidation.todo_ids),
+            "duplicate_fact_ids": list(consolidation.duplicate_fact_ids),
+        }
     # Do not synchronously start a cold OpenClaw process here. Clients can use
     # /api/import-guide with this hash to request/read guidance separately.
     queue_import_guide(file_hash, company_id=company_id)
     response["guide_status"] = "queued"
     return response
+
+
+@app.route("/api/facts", methods=["GET"])
+def api_facts():
+    """Read current verified document facts; superseded values are excluded."""
+    company_id = str(request.args.get("company_id") or os.environ.get("SAM_COMPANY_ID", "default"))
+    file_hash = request.args.get("file_hash")
+    return {"facts": consolidation_service().list_facts(company_id=company_id, file_hash=file_hash)}
+
+
+@app.route("/api/todos", methods=["GET"])
+def api_todos():
+    company_id = str(request.args.get("company_id") or os.environ.get("SAM_COMPANY_ID", "default"))
+    status = request.args.get("status", "open")
+    if status not in {"open", "resolved", "dismissed", "all"}:
+        return {"error": "invalid todo status"}, 400
+    return {"todos": consolidation_service().list_todos(
+        company_id=company_id, status=None if status == "all" else status,
+    )}
+
+
+def _todo_action(todo_id: int, *, dismiss: bool = False):
+    payload = request.get_json(silent=True) or {}
+    try:
+        if dismiss:
+            result = consolidation_service().dismiss(todo_id)
+        else:
+            choose = payload.get("choose")
+            if not isinstance(choose, str) or not choose:
+                return {"error": "choose is required"}, 400
+            result = consolidation_service().resolve(todo_id, choose=choose)
+    except PermissionError:
+        # Reserved for an injected future authorization policy.
+        return {"error": "authorization failed"}, 403
+    except KeyError:
+        return {"error": "todo not found"}, 404
+    except ValueError as exc:
+        return {"error": str(exc)}, 409
+    return {"todo": result}
+
+
+@app.route("/api/todos/<int:todo_id>/resolve", methods=["POST"])
+def api_resolve_todo(todo_id: int):
+    return _todo_action(todo_id)
+
+
+@app.route("/api/todos/<int:todo_id>/dismiss", methods=["POST"])
+def api_dismiss_todo(todo_id: int):
+    return _todo_action(todo_id, dismiss=True)
 
 
 @app.route("/api/files/classifications", methods=["GET", "POST", "OPTIONS"])

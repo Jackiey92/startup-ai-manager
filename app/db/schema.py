@@ -61,8 +61,10 @@ CREATE TABLE IF NOT EXISTS file_tags (
 -- 事实台账（FactVoucher，append-only）
 CREATE TABLE IF NOT EXISTS facts (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id     TEXT NOT NULL DEFAULT 'default',
     entity         TEXT NOT NULL,
     attribute      TEXT NOT NULL,
+    period         TEXT NOT NULL DEFAULT 'unspecified',
     value          TEXT NOT NULL,
     value_type     TEXT NOT NULL DEFAULT 'string',
     unit           TEXT,
@@ -73,11 +75,38 @@ CREATE TABLE IF NOT EXISTS facts (
     valid_to       TEXT,
     confidence     REAL NOT NULL DEFAULT 1.0,
     status         TEXT NOT NULL DEFAULT 'verified', -- verified | claimed | inferred
+    confirm_mode   TEXT NOT NULL DEFAULT 'manual',   -- auto | manual
     superseded_by  INTEGER REFERENCES facts(id),
     created_at     TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_facts_entity ON facts(entity, attribute);
 CREATE INDEX IF NOT EXISTS idx_facts_valid ON facts(valid_to);
+CREATE INDEX IF NOT EXISTS idx_facts_coordinate
+    ON facts(company_id, attribute, period, superseded_by);
+
+-- 需要人工决策的候选事实。候选从不覆盖当前 facts；处理结果留在此表。
+CREATE TABLE IF NOT EXISTS todos (
+    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id           TEXT NOT NULL,
+    metric               TEXT NOT NULL,
+    period               TEXT NOT NULL,
+    candidate_value      TEXT NOT NULL,
+    candidate_value_type TEXT NOT NULL DEFAULT 'string',
+    candidate_unit       TEXT,
+    existing_value       TEXT,
+    reason               TEXT NOT NULL, -- conflict | critical_review | anomaly | uncertain
+    suggestion           TEXT NOT NULL,
+    status               TEXT NOT NULL DEFAULT 'open', -- open | resolved | dismissed
+    related_fact_id      INTEGER REFERENCES facts(id),
+    source_file          TEXT NOT NULL REFERENCES source_files(file_hash),
+    source_page          INTEGER,
+    source_span          TEXT,
+    created_at           TEXT NOT NULL,
+    resolved_at          TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_todos_company_status ON todos(company_id, status, id);
+CREATE INDEX IF NOT EXISTS idx_todos_coordinate ON todos(company_id, metric, period, status);
+
 """
 
 MODULES = [

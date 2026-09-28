@@ -25,6 +25,7 @@ def init_db(db_path: Path = DEFAULT_DB_PATH) -> None:
         # fields absent from that old table.
         if _classification_needs_rebuild(conn):
             _migrate_file_classifications(conn)
+        _migrate_facts(conn)
         conn.executescript(SCHEMA)
         conn.executemany(
             "INSERT OR IGNORE INTO modules(code,name,sort_order) VALUES (?,?,?)",
@@ -103,6 +104,24 @@ def _classification_needs_rebuild(conn: sqlite3.Connection) -> bool:
     module_column = columns.get("module")
     module_not_null = bool(module_column["notnull"]) if module_column is not None else False
     return module_not_null or not {"company_id", "basis"}.issubset(columns)
+
+
+def _migrate_facts(conn: sqlite3.Connection) -> None:
+    """Add 2B consolidation coordinates to the pre-existing M1 facts table."""
+    columns = {
+        str(row["name"])
+        for row in conn.execute("PRAGMA table_info(facts)").fetchall()
+    }
+    if not columns:
+        return
+    # SQLite permits ADD COLUMN with a literal default, preserving all historic
+    # M1 rows under their explicit legacy/default coordinate.
+    if "company_id" not in columns:
+        conn.execute("ALTER TABLE facts ADD COLUMN company_id TEXT NOT NULL DEFAULT 'default'")
+    if "period" not in columns:
+        conn.execute("ALTER TABLE facts ADD COLUMN period TEXT NOT NULL DEFAULT 'unspecified'")
+    if "confirm_mode" not in columns:
+        conn.execute("ALTER TABLE facts ADD COLUMN confirm_mode TEXT NOT NULL DEFAULT 'manual'")
 
 
 if __name__ == "__main__":
