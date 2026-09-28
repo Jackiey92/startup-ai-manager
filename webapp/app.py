@@ -176,12 +176,63 @@ def queue_import_guide(uploaded_file_hash: str, *, company_id: str | None = None
     )
 
 
+MODULE_LABELS = {"sales": "销售", "marketing": "市场", "hr": "人员", "finance": "财务"}
+
+
+def _company_id() -> str:
+    return str(request.args.get("company_id") or os.environ.get("SAM_COMPANY_ID", "default"))
+
+
+def _page_context(*, company_id: str) -> dict:
+    facts = consolidation_service().list_facts(company_id=company_id)
+    todos = consolidation_service().list_todos(company_id=company_id, status="open")
+    files = classification_service().list_current(company_id=company_id)
+    module_counts: dict[str, int] = {}
+    for item in files:
+        module = item.get("module")
+        if module:
+            module_counts[str(module)] = module_counts.get(str(module), 0) + 1
+    return {"company_id": company_id, "facts": facts, "todos": todos, "files": files,
+            "module_counts": module_counts, "module_labels": MODULE_LABELS}
+
+
 @app.route("/")
+def home_page():
+    """Real-data overview; unavailable prototype metrics are intentionally absent."""
+    context = _page_context(company_id=_company_id())
+    context["conflict_count"] = sum(t["reason"] == "conflict" for t in context["todos"])
+    context["critical_count"] = sum(t["reason"] == "critical_review" for t in context["todos"])
+    context["unclassified_count"] = sum(item.get("module") is None for item in context["files"])
+    return render_template("home.html", **context)
+
+
 @app.route("/prototype")
 def prototype_page():
-    """Serve the GitHub prototype as the single UI shell for every module."""
-    proto = BASE_DIR.parent / "prototype" / "startup-ai-manager.html"
-    return send_file(str(proto))
+    """Keep the historic static prototype available for visual comparison only."""
+    return send_file(str(BASE_DIR.parent / "prototype" / "startup-ai-manager.html"))
+
+
+@app.route("/todos")
+def todos_page():
+    context = _page_context(company_id=_company_id())
+    context["open_conflicts"] = [t for t in context["todos"] if t["reason"] == "conflict"]
+    context["open_critical"] = [t for t in context["todos"] if t["reason"] == "critical_review"]
+    return render_template("todos.html", **context)
+
+
+@app.route("/facts")
+def facts_page():
+    return render_template("facts.html", **_page_context(company_id=_company_id()))
+
+
+@app.route("/files")
+def files_page():
+    return render_template("files.html", **_page_context(company_id=_company_id()))
+
+
+@app.route("/chat")
+def chat_page():
+    return render_template("chat.html", **_page_context(company_id=_company_id()))
 
 
 @app.route("/api/chat", methods=["POST", "OPTIONS"])
@@ -538,7 +589,8 @@ def detail(file_id):
     markdown_text = structured.get("markdown") or render_markdown(structured)
     markdown_html = md_lib.markdown(markdown_text, extensions=["tables"])
     markdown_html = markdown_html.replace("<table>", "<div class=\"tbl-wrap\"><table>").replace("</table>", "</table></div>")
-    return render_template("detail.html", file=data, markdown_html=markdown_html)
+    context = _page_context(company_id=_company_id())
+    return render_template("detail.html", file=data, markdown_html=markdown_html, **context)
 
 
 if __name__ == "__main__":
