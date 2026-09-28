@@ -34,6 +34,32 @@ _GATEWAY_LOCK = Lock()
 _GATEWAY_PROCESSES: dict[str, tuple[subprocess.Popen, object]] = {}
 
 
+def _local_parser_env(base: dict[str, str] | None = None) -> dict[str, str]:
+    """Return a proxy-free environment for the deterministic parser child.
+
+    The parent Flask/OpenClaw process may require its proxy for model traffic.
+    This is intentionally applied only to the document-ingest bridge child;
+    it never mutates ``os.environ`` or the Agent/GPT process environment.
+    """
+    env = dict(base if base is not None else os.environ)
+    for name in tuple(env):
+        lowered = name.lower()
+        if lowered in {"http_proxy", "https_proxy", "all_proxy"} or (
+            lowered.endswith("_proxy") and lowered != "no_proxy"
+        ):
+            env.pop(name, None)
+    bypass = ["localhost", "127.0.0.1", "::1"]
+    existing = env.get("NO_PROXY") or env.get("no_proxy") or ""
+    for value in existing.split(","):
+        value = value.strip()
+        if value and value not in bypass:
+            bypass.append(value)
+    encoded = ",".join(bypass)
+    env["NO_PROXY"] = encoded
+    env["no_proxy"] = encoded
+    return env
+
+
 def _stop_gateways() -> None:
     with _GATEWAY_LOCK:
         processes = list(_GATEWAY_PROCESSES.values())
@@ -121,7 +147,9 @@ class OpenClawAdapter(RuntimeProvider):
         bridge = self.config.skill_root / "document-ingest" / "scripts" / "bridge"
         if not bridge.is_file():
             raise RuntimeError(f"document-ingest bridge is missing: {bridge}")
-        env = os.environ.copy()
+        # Only the local parsing child bypasses the user's model proxy.  The
+        # surrounding Flask/OpenClaw process keeps its original environment.
+        env = _local_parser_env()
         env["SAM_PROJECT_ROOT"] = str(self.config.project_root)
         env["SAM_L2_IMAGE_ROOT"] = str(self.config.data_root / "l2-images")
         proc = self._runner(

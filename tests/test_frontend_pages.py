@@ -75,8 +75,8 @@ def test_todo_status_filters_and_file_detail_use_actual_local_columns(tmp_path: 
 def test_parse_failure_message_prefers_bridge_user_message() -> None:
     webapp = _webapp_module()
     assert webapp._parse_failure_message({"parse_summary": {
-        "user_message": "本地解析服务启动失败，请稍后重试或联系管理员。",
-    }}, "parse_failed") == "本地解析服务启动失败，请稍后重试或联系管理员。"
+        "user_message": "本地 MinerU 解析服务启动失败或被网络代理拦截；请检查本地解析服务状态。",
+    }}, "parse_failed") == "本地 MinerU 解析服务启动失败或被网络代理拦截；请检查本地解析服务状态。"
     assert webapp._parse_failure_message({}, "engine_unavailable") == "本地解析服务暂不可用，请稍后重试或联系管理员。"
 
 

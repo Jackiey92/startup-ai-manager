@@ -176,7 +176,55 @@ def _text_parts(content: Any) -> list[str]:
 class MinerUServerUnavailable(RuntimeError):
     """The local MinerU daemon could not be made ready for a parse request."""
 
-    user_message = "本地解析服务启动失败，请稍后重试或联系管理员。"
+    user_message = "本地 MinerU 解析服务启动失败或被网络代理拦截；请检查本地解析服务状态。"
+
+
+def _local_engine_env(base: dict[str, str] | None = None) -> dict[str, str]:
+    """Build an environment for local parser processes only.
+
+    The web process may need its proxy to reach the configured model endpoint.
+    Parser control traffic and parser-side model/file access are local, so the
+    bridge must never inherit that proxy for ``mineru`` or other local tools.
+    This function is deliberately scoped to the bridge child and never mutates
+    the caller's ``os.environ``.
+    """
+    env = dict(base if base is not None else os.environ)
+    proxy_names = {
+        "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
+        "http_proxy", "https_proxy", "all_proxy",
+    }
+    for name in tuple(env):
+        if name in proxy_names or name.lower().endswith("_proxy") and name.lower() not in {"no_proxy"}:
+            env.pop(name, None)
+    bypass = ["localhost", "127.0.0.1", "::1"]
+    existing = env.get("NO_PROXY") or env.get("no_proxy") or ""
+    for value in existing.split(","):
+        value = value.strip()
+        if value and value not in bypass:
+            bypass.append(value)
+    encoded = ",".join(bypass)
+    env["NO_PROXY"] = encoded
+    env["no_proxy"] = encoded
+    return env
+
+
+@contextmanager
+def _local_engine_process_environment():
+    """Temporarily apply the local-parser environment inside this bridge.
+
+    The bridge is already a child process of Flask, so changing its own
+    environment cannot affect the model/OpenClaw parent.  This also covers
+    Docling's in-process Python imports and any lazy local model helpers that
+    inspect proxy variables after import.
+    """
+    original = os.environ.copy()
+    os.environ.clear()
+    os.environ.update(_local_engine_env(original))
+    try:
+        yield
+    finally:
+        os.environ.clear()
+        os.environ.update(original)
 
 
 class LegacyOfficeConversionError(RuntimeError):
@@ -235,7 +283,7 @@ def _legacy_office_source(source: Path, fmt: str, filename: str):
             proc = subprocess.run(
                 command, text=True, capture_output=True, timeout=float(
                     os.environ.get("SAM_SOFFICE_TIMEOUT", "120")
-                ),
+                ), env=_local_engine_env(),
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise LegacyOfficeConversionError(
@@ -281,7 +329,7 @@ def _ensure_mineru_server(*, mineru_bin: str | None = None,
     started service; readiness is still verified through ``server status``.
     """
     command = mineru_bin or _mineru_binary()
-    env = dict(os.environ)
+    env = _local_engine_env()
     ready_timeout = ready_timeout if ready_timeout is not None else float(
         os.environ.get("SAM_MINERU_SERVER_READY_TIMEOUT", "90")
     )
@@ -341,7 +389,7 @@ def _run_mineru(source: Path, file_hash: str, fmt: str, filename: str) -> tuple[
     with _engine_source(source, fmt, filename) as engine_source:
         with tempfile.TemporaryDirectory(prefix="sam-mineru-") as temp:
             command = [mineru_bin, "parse", str(engine_source), "--json", "--force", "--wait", "300", "--output", str(Path(temp) / "parse.json")]
-            env = dict(os.environ)
+            env = _local_engine_env()
             env["MINERU_REMOTE"] = "0"
             # The daemon's control socket can become available before its
             # managed basic-tier parser has loaded models. Retry only known
@@ -502,6 +550,38 @@ def _run_docling(source: Path, file_hash: str, fmt: str, filename: str) -> tuple
     return [page_map[key] for key in sorted(page_map)], summary
 
 
+def _engine_failure_message(engine: str, exc: Exception) -> str:
+    """Turn a local engine failure into an actionable, non-secret message."""
+    if engine == "mineru" and isinstance(exc, MinerUServerUnavailable):
+        return MinerUServerUnavailable.user_message
+    if engine == "docling" and isinstance(exc, ModuleNotFoundError):
+        missing = str(exc).lower()
+        if "torch" in missing or "docling" in missing:
+            return "本地 Docling/Torch 解析依赖未就绪，请检查隔离解析环境。"
+        return "本地 Docling 解析依赖未就绪，请检查隔离解析环境。"
+    if engine == "mineru":
+        return "本地 MinerU 解析服务通信或启动失败，可能受网络代理影响。"
+    if engine == "docling":
+        return "本地 Docling 解析失败，请检查文档格式或解析依赖。"
+    return "本地文档解析失败，请检查解析引擎状态。"
+
+
+def _combined_failure_message(engines: list[str], failures: list[tuple[str, Exception]]) -> str:
+    """Explain each attempted local engine without exposing raw internals."""
+    labels: list[str] = []
+    for engine, exc in failures:
+        message = _engine_failure_message(engine, exc)
+        if message not in labels:
+            labels.append(message)
+    if len(labels) == 1:
+        return labels[0]
+    if labels:
+        return "本地解析引擎均失败：" + "；".join(labels)
+    if not engines:
+        return "本地解析引擎不可用，请检查隔离解析环境。"
+    return "本地文档解析失败，请检查解析引擎状态。"
+
+
 def _image_root() -> Path:
     return Path(os.environ.get("SAM_L2_IMAGE_ROOT", ".sam-isolated/data/l2-images"))
 
@@ -638,7 +718,7 @@ def _manifest(task: dict[str, Any], source: Path) -> dict[str, Any]:
             parse_source, parse_fmt, parse_filename, conversion_warnings,
         ):
             engines, selection_warnings = _select_engines(parse_fmt)
-            user_message: str | None = None
+            failures: list[tuple[str, Exception]] = []
             for engine in engines:
                 try:
                     if engine == "mineru":
@@ -648,9 +728,8 @@ def _manifest(task: dict[str, Any], source: Path) -> dict[str, Any]:
                     summary.setdefault("warnings", []).extend(conversion_warnings + failure_warnings)
                     break
                 except Exception as exc:
+                    failures.append((engine, exc))
                     failure_warnings.append(f"{engine} failed ({type(exc).__name__}): {str(exc)[:300]}")
-                    if isinstance(exc, MinerUServerUnavailable):
-                        user_message = exc.user_message
             else:
                 status = "engine_unavailable" if not engines else "parse_failed"
                 summary = {
@@ -660,7 +739,7 @@ def _manifest(task: dict[str, Any], source: Path) -> dict[str, Any]:
                     "table_count": 0,
                     "table_row_count": 0,
                     "warnings": selection_warnings + conversion_warnings + failure_warnings,
-                    "user_message": user_message or "本地文档解析失败，请稍后重试或联系管理员。",
+                    "user_message": _combined_failure_message(engines, failures),
                     "raw_bytes_external": False,
                     "full_text_external": False,
                 }
@@ -701,7 +780,8 @@ def main() -> int:
     source = Path(task.get("source_path") or task.get("file_path", ""))
     if not source.is_file():
         raise SystemExit(f"source file does not exist: {source}")
-    result = _manifest(task, source)
+    with _local_engine_process_environment():
+        result = _manifest(task, source)
     encoded = json.dumps(result, ensure_ascii=False, indent=2) + "\n"
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)

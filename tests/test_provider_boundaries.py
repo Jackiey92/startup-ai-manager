@@ -80,3 +80,11 @@ def test_bridge_interpreter_keeps_venv_symlink_and_prefix() -> None:
         text=True,
     )
     assert result.stdout.strip() == str(ROOT / ".sam-isolated" / "venv")
+
+
+def test_default_bridge_prefers_isolated_parser_venv_when_present() -> None:
+    isolated = ROOT / ".sam-isolated" / "venv" / "bin" / "python"
+    if not isolated.is_file():
+        pytest.skip("isolated venv is not present in this checkout")
+    config = RuntimeConfig.from_env(project_root=ROOT, env={"SAM_PROFILE": "local"})
+    assert config.tool_bridge_python == isolated

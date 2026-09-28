@@ -136,7 +136,21 @@ class RuntimeConfig:
         state = _path(configured_root, env.get("SAM_OPENCLAW_STATE_DIR", paths.get("state_dir")), harness / "state")
         config_path = _path(configured_root, env.get("SAM_OPENCLAW_CONFIG", paths.get("config_path")), state / "openclaw.json")
         plugin_dir = _path(configured_root, env.get("SAM_TOOL_PLUGIN_DIR", paths.get("tool_plugin_dir")), harness / "plugins" / "sam-memory")
-        bridge_python = _path(configured_root, env.get("SAM_TOOL_BRIDGE_PYTHON", paths.get("tool_bridge_python")), venv_bin / "python", follow_symlinks=False)
+        # The web/runtime venv intentionally remains separate from the parser
+        # venv.  A clean checkout may have Docling in ``.venv`` but CPU Torch
+        # only in ``.sam-isolated/venv``; prefer the latter for the bridge when
+        # no explicit interpreter was injected.  Explicit configuration always
+        # wins, so deployments can use their own isolated interpreter.
+        configured_bridge = env.get("SAM_TOOL_BRIDGE_PYTHON")
+        manifest_bridge = paths.get("tool_bridge_python")
+        if configured_bridge is None and manifest_bridge in {None, ".venv/bin/python"}:
+            isolated_bridge = configured_root / ".sam-isolated" / "venv" / "bin" / "python"
+            if isolated_bridge.is_file():
+                bridge_python = _path(configured_root, str(isolated_bridge), venv_bin / "python", follow_symlinks=False)
+            else:
+                bridge_python = _path(configured_root, manifest_bridge, venv_bin / "python", follow_symlinks=False)
+        else:
+            bridge_python = _path(configured_root, configured_bridge or manifest_bridge, venv_bin / "python", follow_symlinks=False)
         agent_id = str(env.get("SAM_OPENCLAW_AGENT", runtime.get("agent_id", "sam-guide")))
         mapping = dict(skills.get("map", {"*": "document-ingest"}))
         raw_mapping = env.get("SAM_SKILL_MAP")

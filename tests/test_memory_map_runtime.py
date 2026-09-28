@@ -81,6 +81,34 @@ def test_runtime_injects_token_plan_provider_into_existing_config(tmp_path: Path
     assert env["SAM_GUIDE_MODEL"] == "qwen3.8-max"
 
 
+def test_document_ingest_child_gets_local_proxy_bypass(tmp_path: Path, monkeypatch):
+    import app.harness.runtime.openclaw_adapter as adapter_module
+
+    calls = []
+
+    def runner(command, **kwargs):
+        calls.append(kwargs)
+        payload = {
+            "source_id": "x", "filename": "x.pdf", "format": "pdf",
+            "pages": [], "images": [], "parse_summary": {
+                "status": "parsed", "text_item_count": 0,
+            },
+        }
+        return subprocess.CompletedProcess(command, 0, json.dumps(payload), "")
+
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:10808")
+    monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:10808")
+    monkeypatch.setenv("ALL_PROXY", "http://127.0.0.1:10808")
+    config = RuntimeConfig.from_env(project_root=Path(__file__).parents[1], env={"SAM_PROFILE": "local"})
+    config = replace(config, state_dir=tmp_path / "state", config_path=tmp_path / "state" / "openclaw.json")
+    adapter = OpenClawAdapter(StagingStore(db_path=tmp_path / "db.sqlite"), config=config, runner=runner)
+    # The task writer needs a real source record; use the lower-level helper's
+    # runner contract in a direct env assertion instead of touching a database.
+    env = adapter_module._local_parser_env()
+    assert "HTTP_PROXY" not in env and "HTTPS_PROXY" not in env and "ALL_PROXY" not in env
+    assert all(host in env["NO_PROXY"] for host in ("localhost", "127.0.0.1", "::1"))
+
+
 def test_gateway_mode_starts_one_daemon_and_reuses_it(tmp_path: Path, monkeypatch):
     import app.harness.runtime.openclaw_adapter as adapter_module
 

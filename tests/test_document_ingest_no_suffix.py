@@ -121,6 +121,47 @@ def test_mineru_status_treats_zero_exit_not_running_as_not_ready(monkeypatch) ->
     assert "not running" in detail.lower()
 
 
+def test_local_engine_env_bypasses_proxy_without_mutating_parent(monkeypatch) -> None:
+    bridge = _bridge_module()
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:10808")
+    monkeypatch.setenv("https_proxy", "http://127.0.0.1:10808")
+    monkeypatch.setenv("NO_PROXY", "example.test")
+    before = __import__("os").environ.get("HTTP_PROXY")
+    env = bridge._local_engine_env()
+    assert "HTTP_PROXY" not in env
+    assert "https_proxy" not in env
+    assert all(host in env["NO_PROXY"] for host in ("localhost", "127.0.0.1", "::1", "example.test"))
+    assert __import__("os").environ.get("HTTP_PROXY") == before
+
+
+def test_local_engine_process_environment_restores_parent(monkeypatch) -> None:
+    bridge = _bridge_module()
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:10808")
+    with bridge._local_engine_process_environment():
+        assert "HTTP_PROXY" not in __import__("os").environ
+        assert "127.0.0.1" in __import__("os").environ["NO_PROXY"]
+    assert __import__("os").environ["HTTP_PROXY"] == "http://127.0.0.1:10808"
+
+
+def test_mineru_and_docling_failures_keep_distinct_user_message(monkeypatch, tmp_path: Path) -> None:
+    bridge = _bridge_module()
+    source = tmp_path / "failure.pdf"
+    source.write_bytes(b"not a PDF")
+    monkeypatch.setattr(bridge, "_select_engines", lambda _fmt: (["mineru", "docling"], []))
+    monkeypatch.setattr(bridge, "_extract_embedded_images", lambda *args: ([], []))
+    monkeypatch.setattr(bridge, "_run_mineru", lambda *_args: (_ for _ in ()).throw(
+        bridge.MinerUServerUnavailable("server_not_running")
+    ))
+    monkeypatch.setattr(bridge, "_run_docling", lambda *_args: (_ for _ in ()).throw(
+        ModuleNotFoundError("No module named 'torch'")
+    ))
+    summary = bridge._manifest({"format": "pdf", "filename": "failure.pdf"}, source)["parse_summary"]
+    assert summary["status"] == "parse_failed"
+    assert "MinerU" in summary["user_message"]
+    assert "Docling/Torch" in summary["user_message"]
+    assert len(summary["warnings"]) == 2
+
+
 def test_mineru_server_is_started_once_and_waited_until_ready(monkeypatch) -> None:
     bridge = _bridge_module()
     status_codes = iter((1, 1, 0))
@@ -165,7 +206,8 @@ def test_mineru_start_failure_is_reported_as_a_user_message(monkeypatch, tmp_pat
     result = bridge._manifest({"format": "pdf", "filename": "failure.pdf"}, source)
     summary = result["parse_summary"]
     assert summary["status"] == "parse_failed"
-    assert summary["user_message"] == "本地解析服务启动失败，请稍后重试或联系管理员。"
+    assert "MinerU" in summary["user_message"]
+    assert "代理" in summary["user_message"]
     assert "MinerUServerUnavailable" in summary["warnings"][0]
 
 
