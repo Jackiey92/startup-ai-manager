@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import os
-import sqlite3
 import subprocess
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -35,15 +34,12 @@ from app.providers import memory_provider, runtime_provider
 from app.runtime_config import RuntimeConfig
 from app.runtime_memory import RuntimeWorkingMemory
 from app.upload_status import parse_result_status
-from markdown_render import render_markdown
-import markdown as md_lib
 
 RUNTIME_CONFIG = RuntimeConfig.from_env(project_root=_PROJECT_ROOT)
 DATA_ROOT = RUNTIME_CONFIG.data_root
 DATA_DIR = RUNTIME_CONFIG.app_db.parent
 OBJECTS_DIR = RUNTIME_CONFIG.objects_dir
 MAIN_DB = RUNTIME_CONFIG.main_db
-DB_PATH = RUNTIME_CONFIG.app_db
 
 OBJECTS_DIR.mkdir(parents=True, exist_ok=True)
 DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -73,11 +69,6 @@ def now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def db() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
-
 
 def classification_service() -> ClassificationService:
     """Return the company-scoped 2A navigation-label ledger."""
@@ -90,23 +81,8 @@ def consolidation_service() -> ConsolidationService:
 
 
 def init_db() -> None:
+    """Initialize the canonical source/fact/classification ledger only."""
     init_core_db(MAIN_DB)
-    with db() as conn:
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS files ("
-            "id INTEGER PRIMARY KEY AUTOINCREMENT,"
-            "file_hash TEXT NOT NULL UNIQUE,"
-            "original_name TEXT NOT NULL,"
-            "file_format TEXT NOT NULL,"
-            "size INTEGER NOT NULL,"
-            "storage_path TEXT NOT NULL,"
-            "module TEXT,"
-            "doc_type TEXT,"
-            "confidence REAL,"
-            "structured TEXT,"
-            "uploaded_at TEXT NOT NULL)"
-        )
-        conn.commit()
 
 
 def detect_format(filename: str) -> str:
@@ -586,19 +562,30 @@ def api_import_guide_status():
     return _GUIDE_COORDINATOR.snapshot(_guide_key(company_id))
 
 
-@app.route("/files/<int:file_id>")
-def detail(file_id):
-    with db() as conn:
-        row = conn.execute("SELECT * FROM files WHERE id=?", (file_id,)).fetchone()
-    if row is None:
+@app.route("/files/<file_hash>")
+def detail(file_hash: str):
+    """Render canonical source-file metadata plus its current 2A/2B references."""
+    store = SourceFileStore(objects_path=OBJECTS_DIR, db_path=MAIN_DB)
+    try:
+        stored = store.get(file_hash)
+    except KeyError:
         abort(404)
-    data = dict(row)
-    structured = json.loads(data["structured"])
-    markdown_text = structured.get("markdown") or render_markdown(structured)
-    markdown_html = md_lib.markdown(markdown_text, extensions=["tables"])
-    markdown_html = markdown_html.replace("<table>", "<div class=\"tbl-wrap\"><table>").replace("</table>", "</table></div>")
-    context = _page_context(company_id=_company_id())
-    return render_template("detail.html", file=data, markdown_html=markdown_html, **context)
+
+    company_id = _company_id()
+    classification = next(
+        (item for item in classification_service().list_current(company_id=company_id)
+         if item["file_hash"] == file_hash),
+        None,
+    )
+    context = _page_context(company_id=company_id)
+    context.update({
+        "file": stored,
+        "classification": classification,
+        "file_facts": consolidation_service().list_facts(
+            company_id=company_id, file_hash=file_hash,
+        ),
+    })
+    return render_template("detail.html", **context)
 
 
 if __name__ == "__main__":

@@ -1,1 +1,34 @@
-{% extends 'base.html' %}{% block title %}{{ file.original_name }} · SAM{% endblock %}{% block crumb %}文件柜 <span>/</span> {{ file.original_name }}{% endblock %}{% block content %}<div class="page-head"><div><h1>{{ file.original_name }}</h1><p>结构化解析结果与原始文件元信息。</p></div><div class="right"><a class="button" href="{{ url_for('files_page') }}">返回文件柜</a></div></div><section class="card"><div class="grid split-grid"><div><span class="muted">格式</span><p>{{ file.file_format }}</p></div><div><span class="muted">归类</span><p>{{ file.module or '未归类' }}{% if file.doc_type %} / {{ file.doc_type }}{% endif %}</p></div><div><span class="muted">大小</span><p>{{ '%.1f'|format(file.size/1024) }} KB</p></div><div><span class="muted">文件哈希</span><p class="hash">{{ file.file_hash }}</p></div></div></section><section class="card" style="margin-top:16px"><div class="card-head"><h2>结构化结果</h2></div><div class="markdown">{{ markdown_html|safe }}</div></section>{% endblock %}
+{% extends 'base.html' %}
+{% block title %}{{ file.original_name }} · SAM{% endblock %}
+{% block crumb %}文件柜 <span>/</span> {{ file.original_name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>{{ file.original_name }}</h1><p>原件元信息、当前归类与可追溯事实。</p></div>
+  <div class="right"><a class="button" href="{{ url_for('files_page') }}">返回文件柜</a></div>
+</div>
+<section class="card">
+  <div class="grid split-grid">
+    <div><span class="muted">MIME 类型</span><p>{{ file.mime_type or '未提供' }}</p></div>
+    <div><span class="muted">大小</span><p>{{ '%.1f'|format(file.size_bytes / 1024) }} KB</p></div>
+    <div><span class="muted">状态</span><p>{{ file.status }}</p></div>
+    <div><span class="muted">上传时间</span><p>{{ file.uploaded_at }}</p></div>
+    <div><span class="muted">文件哈希</span><p class="hash">{{ file.file_hash }}</p></div>
+    <div><span class="muted">存储路径</span><p class="hash">{{ file.storage_path }}</p></div>
+  </div>
+</section>
+<section class="card" style="margin-top:16px">
+  <div class="card-head"><h2>当前归类</h2></div>
+  {% if classification %}
+  <p>{{ module_labels.get(classification.module, classification.module or '未归类') }}{% if classification.doc_type %} / {{ classification.doc_type }}{% endif %}</p>
+  <p class="muted">依据：{{ classification.basis }} · 置信度：{{ '%.0f'|format((classification.confidence or 0) * 100) }}%</p>
+  {% else %}<div class="empty">该文件暂无归类记录。</div>{% endif %}
+</section>
+<section class="card" style="margin-top:16px">
+  <div class="card-head"><h2>该文件产生的事实</h2></div>
+  {% if file_facts %}
+  <div class="table-wrap"><table class="data-table"><thead><tr><th>指标</th><th class="numeric">数值</th><th>期间</th><th>状态</th></tr></thead><tbody>
+  {% for fact in file_facts %}<tr><td>{{ fact.attribute }}</td><td class="numeric"><b>{{ fact.value }}</b>{% if fact.unit %} {{ fact.unit }}{% endif %}</td><td>{{ fact.period }}</td><td><span class="badge">{{ fact.status }}</span></td></tr>{% endfor %}
+  </tbody></table></div>
+  {% else %}<div class="empty">该文件尚未产生当前有效事实。</div>{% endif %}
+</section>
+{% endblock %}

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 import sys
 
@@ -53,17 +52,8 @@ def test_todo_status_filters_and_file_detail_use_actual_local_columns(tmp_path: 
 
     webapp = _webapp_module()
     monkeypatch.setattr(webapp, "MAIN_DB", db_path)
-    monkeypatch.setattr(webapp, "DB_PATH", db_path)
+    monkeypatch.setattr(webapp, "OBJECTS_DIR", tmp_path / "objects")
     webapp.init_db()
-    with webapp.db() as conn:
-        cursor = conn.execute(
-            """INSERT INTO files(file_hash,original_name,file_format,size,storage_path,module,doc_type,
-               confidence,structured,uploaded_at) VALUES (?,?,?,?,?,?,?,?,?,?)""",
-            (second.file_hash, "annual-b.xlsx", "excel", 1, "objects/b", "finance", None,
-             0.9, json.dumps({"markdown": "# Parsed report\n\nRevenue: 20"}), "now"),
-        )
-        file_id = cursor.lastrowid
-        conn.commit()
 
     client = webapp.app.test_client()
     resolved = client.get("/todos?company_id=acme&status=resolved")
@@ -73,7 +63,10 @@ def test_todo_status_filters_and_file_detail_use_actual_local_columns(tmp_path: 
     invalid = client.get("/todos?company_id=acme&status=not-a-state")
     assert invalid.status_code == 200
     assert b'value="open" selected' in invalid.data
-    detail = client.get(f"/files/{file_id}?company_id=acme")
+    detail = client.get(f"/files/{second.file_hash}?company_id=acme")
     assert detail.status_code == 200
-    assert "annual-b.xlsx" in detail.get_data(as_text=True)
-    assert "Parsed report" in detail.get_data(as_text=True)
+    detail_text = detail.get_data(as_text=True)
+    assert "annual-b.xlsx" in detail_text
+    assert "MIME 类型" in detail_text
+    assert "营业收入" in detail_text
+    assert client.get("/files/1?company_id=acme").status_code == 404
