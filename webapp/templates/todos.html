@@ -1,1 +1,23 @@
-{% extends 'base.html' %}{% block crumb %}待办中心{% endblock %}{% block content %}<div class="page-head"><div><h1>待办中心</h1><p>候选事实仅在此处人工决定；操作会真实写入当前事实台账。</p></div><div class="right"><select id="todo-status"><option value="open">待处理</option><option value="all">全部</option><option value="resolved">已解决</option><option value="dismissed">已忽略</option></select></div></div><div id="todo-feedback" class="feedback" aria-live="polite"></div><div id="todo-list">{% if open_conflicts %}<h2>数据冲突</h2>{% for todo in open_conflicts %}{% include '_todo_card.html' %}{% endfor %}{% endif %}{% if open_critical %}<h2>重大事项待确认</h2>{% for todo in open_critical %}{% include '_todo_card.html' %}{% endfor %}{% endif %}{% if not todos %}<div class="empty">所有事实都已确认，暂无待办</div>{% endif %}</div>{% endblock %}
+{% extends 'base.html' %}
+{% block crumb %}待办中心{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>待办中心</h1><p>候选事实仅在此处人工决定；操作会真实写入当前事实台账。</p></div>
+  <div class="right"><select id="todo-status" aria-label="待办状态">
+    <option value="open" {% if todo_status == 'open' %}selected{% endif %}>待处理</option>
+    <option value="all" {% if todo_status == 'all' %}selected{% endif %}>全部</option>
+    <option value="resolved" {% if todo_status == 'resolved' %}selected{% endif %}>已解决</option>
+    <option value="dismissed" {% if todo_status == 'dismissed' %}selected{% endif %}>已忽略</option>
+  </select></div>
+</div>
+<div id="todo-feedback" class="feedback" aria-live="polite"></div>
+<div id="todo-list">
+  {% if todos %}
+    {% if open_conflicts %}<h2>数据冲突</h2>{% for todo in open_conflicts %}{% include '_todo_card.html' %}{% endfor %}{% endif %}
+    {% if open_critical %}<h2>重大事项待确认</h2>{% for todo in open_critical %}{% include '_todo_card.html' %}{% endfor %}{% endif %}
+  {% else %}
+    {% set empty_labels = {'open': '暂无待处理待办', 'resolved': '暂无已解决待办', 'dismissed': '暂无已忽略待办', 'all': '暂无待办'} %}
+    <div class="empty">{{ empty_labels[todo_status] }}</div>
+  {% endif %}
+</div>
+{% endblock %}

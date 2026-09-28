@@ -214,7 +214,15 @@ def prototype_page():
 
 @app.route("/todos")
 def todos_page():
+    selected_status = str(request.args.get("status") or "open").lower()
+    if selected_status not in {"open", "all", "resolved", "dismissed"}:
+        selected_status = "open"
     context = _page_context(company_id=_company_id())
+    context["todos"] = consolidation_service().list_todos(
+        company_id=context["company_id"],
+        status=None if selected_status == "all" else selected_status,
+    )
+    context["todo_status"] = selected_status
     context["open_conflicts"] = [t for t in context["todos"] if t["reason"] == "conflict"]
     context["open_critical"] = [t for t in context["todos"] if t["reason"] == "critical_review"]
     return render_template("todos.html", **context)
