@@ -20,6 +20,7 @@ _sys.path.insert(0, str(_PROJECT_ROOT))
 
 from app.storage import SourceFileStore
 from app.db.database import init_db as init_core_db
+from app.classifier import ClassificationService
 from app.guidance import GuideJobCoordinator, ImportGuideService, ModelUnavailable
 from app.harness.staging import StagingStore
 from app.memory import ExtractionMemoryService
@@ -75,6 +76,11 @@ def db() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def classification_service() -> ClassificationService:
+    """Return the company-scoped 2A navigation-label ledger."""
+    return ClassificationService(MAIN_DB)
 
 
 def init_db() -> None:
@@ -287,7 +293,7 @@ def api_upload():
         origin_zone="internal",
     )
     file_hash = stored.file_hash
-    company_id = os.environ.get("SAM_COMPANY_ID", "default")
+    company_id = str(request.form.get("company_id") or os.environ.get("SAM_COMPANY_ID", "default"))
 
     harness_format = "xlsx" if file_format == "excel" else file_format
     staging = StagingStore(db_path=MAIN_DB)
@@ -301,6 +307,12 @@ def api_upload():
             payload = staged.get("payload", {})
             parse_status, memory_status = parse_result_status(payload)
             if parse_status == "parsed":
+                # Content labels are low-risk 2A browsing metadata.  They are
+                # generated from the parsed manifest (never the filename),
+                # become active immediately, and do not write any 2B facts.
+                classification = classification_service().classify_parsed(
+                    file_hash=file_hash, company_id=company_id, manifest=payload,
+                )
                 ExtractionMemoryService(app.extensions["sam_memory_provider"]).ingest(company_id, payload)
                 # ls --recursive is eventually consistent on OV.  The source
                 # ID is known here, so verify its L0 by exact read immediately.
@@ -315,6 +327,13 @@ def api_upload():
                 # The original remains safely stored, but no empty/failed
                 # manifest is allowed into 2a.
                 memory_status = parse_status
+                # There is no content evidence for a failed parse.  A
+                # filename hint is explicitly marked as such and remains only
+                # a low-confidence browsing aid; it never substitutes for a
+                # content classification.
+                classification = classification_service().classify_name_fallback(
+                    file_hash=file_hash, company_id=company_id, original_name=upload.filename,
+                )
         except MemoryUnavailable:
             memory_status = "unavailable"
             app.logger.exception("document parser memory backend unavailable")
@@ -333,11 +352,70 @@ def api_upload():
         "parse_status": parse_status,
         "memory_status": memory_status,
     }
+    if "classification" in locals() and classification is not None:
+        response["classification"] = {
+            key: classification.get(key)
+            for key in ("module", "doc_type", "confidence", "status", "classified_by", "basis")
+        }
     # Do not synchronously start a cold OpenClaw process here. Clients can use
     # /api/import-guide with this hash to request/read guidance separately.
     queue_import_guide(file_hash, company_id=company_id)
     response["guide_status"] = "queued"
     return response
+
+
+@app.route("/api/files/classifications", methods=["GET", "POST", "OPTIONS"])
+def api_file_classifications():
+    """List effective 2A labels or append one human correction."""
+    if request.method == "OPTIONS":
+        return ("", 204)
+    if request.method == "GET":
+        company_id = str(request.args.get("company_id") or os.environ.get("SAM_COMPANY_ID", "default"))
+        module = request.args.get("module")
+        if module == "":
+            module = None
+        include_history = str(request.args.get("include_history", "")).lower() in {"1", "true", "yes"}
+        return {"files": classification_service().list_current(
+            company_id=company_id, module=module, include_history=include_history,
+        )}
+
+    payload = request.get_json(silent=True) or {}
+    file_hash = payload.get("file_hash")
+    company_id = payload.get("company_id") or os.environ.get("SAM_COMPANY_ID", "default")
+    module = payload.get("module")
+    doc_type = payload.get("doc_type")
+    if not isinstance(file_hash, str) or not isinstance(company_id, str):
+        return {"error": "file_hash and company_id are required"}, 400
+    if module is not None and not isinstance(module, str):
+        return {"error": "module must be a string or null"}, 400
+    if doc_type is not None and not isinstance(doc_type, str):
+        return {"error": "doc_type must be a string or null"}, 400
+    try:
+        record = classification_service().reclassify(
+            file_hash=file_hash, company_id=company_id, module=module, doc_type=doc_type,
+        )
+    except KeyError:
+        return {"error": "file not found"}, 404
+    except ValueError as exc:
+        return {"error": str(exc)}, 400
+    return {"classification": record}
+
+
+@app.route("/api/files/classifications/confirm", methods=["POST", "OPTIONS"])
+def api_confirm_file_classification():
+    """Optional review marker; automatic labels are already active without it."""
+    if request.method == "OPTIONS":
+        return ("", 204)
+    payload = request.get_json(silent=True) or {}
+    file_hash = payload.get("file_hash")
+    company_id = payload.get("company_id") or os.environ.get("SAM_COMPANY_ID", "default")
+    if not isinstance(file_hash, str) or not isinstance(company_id, str):
+        return {"error": "file_hash and company_id are required"}, 400
+    try:
+        record = classification_service().confirm(file_hash=file_hash, company_id=company_id)
+    except KeyError:
+        return {"error": "classification not found"}, 404
+    return {"classification": record}
 
 
 @app.route("/api/import-guide", methods=["POST", "OPTIONS"])

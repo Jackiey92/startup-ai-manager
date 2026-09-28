@@ -32,19 +32,24 @@ CREATE TABLE IF NOT EXISTS doc_types (
     sort_order     INTEGER NOT NULL DEFAULT 0
 );
 
--- 归类记录（append-only；改类 = 追加新行，旧行 superseded）
+-- 归类记录（append-only；改类 = 追加新行，旧行 superseded）。
+-- module 可为空：正文没有足够证据时，宁可进入未归类视图也不猜测。
 CREATE TABLE IF NOT EXISTS file_classifications (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     file_hash     TEXT NOT NULL REFERENCES source_files(file_hash),
-    module        TEXT NOT NULL REFERENCES modules(code),
+    company_id    TEXT NOT NULL DEFAULT 'default',
+    module        TEXT REFERENCES modules(code),
     doc_type      TEXT REFERENCES doc_types(code),
     confidence    REAL NOT NULL DEFAULT 0.0,
-    status        TEXT NOT NULL DEFAULT 'pending',   -- pending | confirmed | superseded
+    status        TEXT NOT NULL DEFAULT 'auto',      -- auto | confirmed | superseded
     classified_by TEXT NOT NULL DEFAULT 'auto',      -- auto | human
+    basis         TEXT NOT NULL DEFAULT 'name',      -- name | content | human
     created_at    TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_class_file ON file_classifications(file_hash);
 CREATE INDEX IF NOT EXISTS idx_class_status ON file_classifications(status);
+CREATE INDEX IF NOT EXISTS idx_class_company_current
+    ON file_classifications(company_id, status, file_hash, id);
 
 -- 文件补充标签（多对多）
 CREATE TABLE IF NOT EXISTS file_tags (
