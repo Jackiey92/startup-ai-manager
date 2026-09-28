@@ -1,6 +1,6 @@
 (() => {
   const companyId = window.SAM_COMPANY_ID || 'default';
-  const json = async (url, options={}) => { const r=await fetch(url,options); const body=await r.json().catch(()=>({})); if(!r.ok) throw new Error(body.error||`请求失败 (${r.status})`); return body; };
+  const json = async (url, options={}) => { const r=await fetch(url,options); const body=await r.json().catch(()=>({})); if(!r.ok) throw new Error(body.message||body.error||`请求失败 (${r.status})`); return body; };
   const modal=document.querySelector('#upload-modal');
   document.querySelectorAll('[data-upload-open]').forEach(b=>b.addEventListener('click',()=>{modal?.classList.add('open');modal?.setAttribute('aria-hidden','false');}));
   document.querySelectorAll('[data-upload-close]').forEach(b=>b.addEventListener('click',()=>modal?.classList.remove('open')));

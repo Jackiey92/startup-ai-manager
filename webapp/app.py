@@ -89,6 +89,10 @@ def detect_format(filename: str) -> str:
     name = filename.lower()
     if name.endswith((".xlsx", ".xlsm", ".xls")):
         return "excel"
+    if name.endswith((".ppt", ".pptx")):
+        return "ppt"
+    if name.endswith((".doc", ".docx")):
+        return "doc"
     if name.endswith(".pdf"):
         return "pdf"
     return "unknown"
@@ -339,7 +343,10 @@ def api_upload():
     blob = upload.read()
     file_format = detect_format(upload.filename)
     if file_format == "unknown":
-        return {"error": "unsupported format"}, 400
+        return {
+            "error": "unsupported format",
+            "message": "暂不支持该文件格式；请上传 PDF、Excel、PPT 或 Word 文件。",
+        }, 400
 
     store = SourceFileStore(objects_path=OBJECTS_DIR, db_path=MAIN_DB)
     stored = store.put_bytes(
@@ -351,7 +358,16 @@ def api_upload():
     file_hash = stored.file_hash
     company_id = str(request.form.get("company_id") or os.environ.get("SAM_COMPANY_ID", "default"))
 
-    harness_format = "xlsx" if file_format == "excel" else file_format
+    # The UI groups modern and legacy Office extensions under one document
+    # type, while the deterministic bridge needs the concrete container format.
+    if file_format == "excel":
+        harness_format = "xlsx"
+    elif file_format == "ppt":
+        harness_format = "pptx" if upload.filename.lower().endswith(".pptx") else "ppt"
+    elif file_format == "doc":
+        harness_format = "docx" if upload.filename.lower().endswith(".docx") else "doc"
+    else:
+        harness_format = file_format
     staging = StagingStore(db_path=MAIN_DB)
     adapter = runtime_provider(RUNTIME_CONFIG, staging)
     parse_status = "not_supported"

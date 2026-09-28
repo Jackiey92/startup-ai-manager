@@ -78,3 +78,11 @@ def test_parse_failure_message_prefers_bridge_user_message() -> None:
         "user_message": "本地解析服务启动失败，请稍后重试或联系管理员。",
     }}, "parse_failed") == "本地解析服务启动失败，请稍后重试或联系管理员。"
     assert webapp._parse_failure_message({}, "engine_unavailable") == "本地解析服务暂不可用，请稍后重试或联系管理员。"
+
+
+def test_detect_format_accepts_word_and_powerpoint() -> None:
+    webapp = _webapp_module()
+    assert webapp.detect_format("brief.pptx") == "ppt"
+    assert webapp.detect_format("legacy.ppt") == "ppt"
+    assert webapp.detect_format("brief.docx") == "doc"
+    assert webapp.detect_format("legacy.doc") == "doc"

@@ -207,3 +207,15 @@ def test_docling_provenance_keeps_the_engine_namespace() -> None:
 
     location = bridge._docling_provenance(Item(), "e" * 64, "docling:text/7")
     assert location["locator"] == "docling:text/7@#/texts/7"
+
+
+def test_legacy_office_failure_recommends_modern_format(monkeypatch, tmp_path: Path) -> None:
+    bridge = _bridge_module()
+    source = tmp_path / "legacy.ppt"
+    source.write_bytes(b"legacy binary")
+    monkeypatch.setattr(bridge, "_select_engines", lambda _fmt: (["docling"], []))
+    monkeypatch.setattr(bridge, "_extract_embedded_images", lambda *_args: ([], []))
+    monkeypatch.setattr(bridge, "_run_docling", lambda *_args: (_ for _ in ()).throw(RuntimeError("unsupported")))
+    result = bridge._manifest({"format": "ppt", "filename": "legacy.ppt"}, source)
+    assert result["parse_summary"]["status"] == "parse_failed"
+    assert "建议转为 .docx/.pptx 或 PDF" in result["parse_summary"]["user_message"]

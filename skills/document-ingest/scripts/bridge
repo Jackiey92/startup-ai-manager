@@ -582,7 +582,11 @@ def _manifest(task: dict[str, Any], source: Path) -> dict[str, Any]:
             "table_count": 0,
             "table_row_count": 0,
             "warnings": selection_warnings + failure_warnings,
-            "user_message": user_message or "本地文档解析失败，请稍后重试或联系管理员。",
+            "user_message": user_message or (
+                "旧版 Word/PPT 解析失败，建议转为 .docx/.pptx 或 PDF 后重试。"
+                if fmt in {"doc", "ppt"}
+                else "本地文档解析失败，请稍后重试或联系管理员。"
+            ),
             "raw_bytes_external": False,
             "full_text_external": False,
         }
