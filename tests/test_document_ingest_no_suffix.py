@@ -209,13 +209,42 @@ def test_docling_provenance_keeps_the_engine_namespace() -> None:
     assert location["locator"] == "docling:text/7@#/texts/7"
 
 
-def test_legacy_office_failure_recommends_modern_format(monkeypatch, tmp_path: Path) -> None:
+def test_legacy_office_missing_converter_is_a_deployment_error(monkeypatch, tmp_path: Path) -> None:
     bridge = _bridge_module()
     source = tmp_path / "legacy.ppt"
     source.write_bytes(b"legacy binary")
-    monkeypatch.setattr(bridge, "_select_engines", lambda _fmt: (["docling"], []))
-    monkeypatch.setattr(bridge, "_extract_embedded_images", lambda *_args: ([], []))
-    monkeypatch.setattr(bridge, "_run_docling", lambda *_args: (_ for _ in ()).throw(RuntimeError("unsupported")))
+    monkeypatch.setattr(bridge, "_soffice_binary", lambda: None)
     result = bridge._manifest({"format": "ppt", "filename": "legacy.ppt"}, source)
-    assert result["parse_summary"]["status"] == "parse_failed"
-    assert "建议转为 .docx/.pptx 或 PDF" in result["parse_summary"]["user_message"]
+    summary = result["parse_summary"]
+    assert summary["status"] == "engine_unavailable"
+    assert "需安装 LibreOffice" in summary["user_message"]
+
+
+def test_legacy_office_conversion_passes_ooxml_to_docling(monkeypatch, tmp_path: Path) -> None:
+    bridge = _bridge_module()
+    source = tmp_path / "legacy.doc"
+    source.write_bytes(b"legacy binary")
+    converter = tmp_path / "soffice"
+    converter.write_text("placeholder", encoding="utf-8")
+    converter.chmod(0o755)
+    seen: dict[str, object] = {}
+
+    def fake_run(command, **_kwargs):
+        outdir = Path(command[command.index("--outdir") + 1])
+        (outdir / "source.docx").write_bytes(b"ooxml")
+        return bridge.subprocess.CompletedProcess(command, 0, stdout="converted", stderr="")
+
+    def fake_docling(path, _file_hash, fmt, filename):
+        seen.update({"path": path, "fmt": fmt, "filename": filename})
+        return [], {"status": "parsed", "engine": "docling", "warnings": []}
+
+    monkeypatch.setattr(bridge, "_soffice_binary", lambda: str(converter))
+    monkeypatch.setattr(bridge.subprocess, "run", fake_run)
+    monkeypatch.setattr(bridge, "_select_engines", lambda fmt: (["docling"], []) if fmt == "docx" else ([], []))
+    monkeypatch.setattr(bridge, "_extract_embedded_images", lambda *_args: ([], []))
+    monkeypatch.setattr(bridge, "_run_docling", fake_docling)
+    result = bridge._manifest({"format": "doc", "filename": "legacy.doc"}, source)
+    assert result["parse_summary"]["status"] == "parsed"
+    assert seen["fmt"] == "docx"
+    assert seen["filename"] == "legacy.docx"
+    assert any("converted legacy .doc" in item for item in result["parse_summary"]["warnings"])

@@ -15,6 +15,7 @@ import io
 import json
 import mimetypes
 import os
+import shutil
 from contextlib import contextmanager
 import zipfile
 import subprocess
@@ -176,6 +177,79 @@ class MinerUServerUnavailable(RuntimeError):
     """The local MinerU daemon could not be made ready for a parse request."""
 
     user_message = "本地解析服务启动失败，请稍后重试或联系管理员。"
+
+
+class LegacyOfficeConversionError(RuntimeError):
+    """A local LibreOffice conversion of a legacy Office binary failed."""
+
+    def __init__(self, message: str, *, missing_converter: bool = False) -> None:
+        super().__init__(message)
+        self.user_message = (
+            "本机需安装 LibreOffice 才能解析旧版 Word/PPT。"
+            if missing_converter
+            else "旧版 Word/PPT 文件转换失败；请检查文件是否损坏、加密或受保护。"
+        )
+
+
+def _soffice_binary() -> str | None:
+    """Return an injected or PATH-discovered local LibreOffice executable."""
+    configured = os.environ.get("SAM_SOFFICE_BIN")
+    if configured:
+        candidate = Path(configured).expanduser()
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+        return None
+    return shutil.which("soffice") or shutil.which("libreoffice")
+
+
+@contextmanager
+def _legacy_office_source(source: Path, fmt: str, filename: str):
+    """Locally convert legacy ``.doc``/``.ppt`` into OOXML for parsing.
+
+    LibreOffice receives only a temporary local copy and writes to a private
+    temporary directory.  The immutable content-addressed source is never
+    modified and no document bytes are sent to an external service.
+    """
+    if fmt not in {"doc", "ppt"}:
+        yield source, fmt, filename, []
+        return
+    soffice = _soffice_binary()
+    if not soffice:
+        raise LegacyOfficeConversionError("no local LibreOffice executable", missing_converter=True)
+    target_fmt = f"{fmt}x"
+    suffix = f".{fmt}"
+    with tempfile.TemporaryDirectory(prefix="sam-office-convert-") as temporary:
+        root = Path(temporary)
+        incoming = root / f"source{suffix}"
+        incoming.write_bytes(source.read_bytes())
+        output_dir = root / "output"
+        output_dir.mkdir()
+        profile_dir = root / "profile"
+        profile_dir.mkdir()
+        command = [
+            soffice, "--headless", "--nologo", "--nodefault", "--nolockcheck",
+            f"-env:UserInstallation={profile_dir.as_uri()}",
+            "--convert-to", target_fmt, "--outdir", str(output_dir), str(incoming),
+        ]
+        try:
+            proc = subprocess.run(
+                command, text=True, capture_output=True, timeout=float(
+                    os.environ.get("SAM_SOFFICE_TIMEOUT", "120")
+                ),
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise LegacyOfficeConversionError(
+                f"LibreOffice conversion failed ({type(exc).__name__})"
+            ) from exc
+        converted = sorted(path for path in output_dir.glob(f"*.{target_fmt}") if path.is_file() and path.stat().st_size > 0)
+        if proc.returncode != 0 or len(converted) != 1:
+            detail = (proc.stderr or proc.stdout or "no output").strip()[-500:]
+            raise LegacyOfficeConversionError(
+                f"LibreOffice conversion did not produce one {target_fmt} file: {detail}"
+            )
+        yield converted[0], target_fmt, f"{Path(filename).stem}.{target_fmt}", [
+            f"locally converted legacy .{fmt} with LibreOffice"
+        ]
 
 
 def _mineru_binary() -> str:
@@ -554,39 +628,51 @@ def _manifest(task: dict[str, Any], source: Path) -> dict[str, Any]:
     file_hash = str(task.get("file_hash") or _sha256(source))
     filename = str(task.get("filename") or task.get("original_name") or source.name)
     fmt = _format(source, task)
-    engines, selection_warnings = _select_engines(fmt)
     pages: list[dict[str, Any]] = []
     images, image_warnings = _extract_embedded_images(source, file_hash, fmt)
     failure_warnings: list[str] = []
-    user_message: str | None = None
     summary: dict[str, Any]
-    for engine in engines:
-        try:
-            if engine == "mineru":
-                pages, summary = _run_mineru(source, file_hash, fmt, filename)
+
+    try:
+        with _legacy_office_source(source, fmt, filename) as (
+            parse_source, parse_fmt, parse_filename, conversion_warnings,
+        ):
+            engines, selection_warnings = _select_engines(parse_fmt)
+            user_message: str | None = None
+            for engine in engines:
+                try:
+                    if engine == "mineru":
+                        pages, summary = _run_mineru(parse_source, file_hash, parse_fmt, parse_filename)
+                    else:
+                        pages, summary = _run_docling(parse_source, file_hash, parse_fmt, parse_filename)
+                    summary.setdefault("warnings", []).extend(conversion_warnings + failure_warnings)
+                    break
+                except Exception as exc:
+                    failure_warnings.append(f"{engine} failed ({type(exc).__name__}): {str(exc)[:300]}")
+                    if isinstance(exc, MinerUServerUnavailable):
+                        user_message = exc.user_message
             else:
-                pages, summary = _run_docling(source, file_hash, fmt, filename)
-            if failure_warnings:
-                summary.setdefault("warnings", []).extend(failure_warnings)
-            break
-        except Exception as exc:
-            failure_warnings.append(f"{engine} failed ({type(exc).__name__}): {str(exc)[:300]}")
-            if isinstance(exc, MinerUServerUnavailable):
-                user_message = exc.user_message
-    else:
-        status = "engine_unavailable" if not engines else "parse_failed"
+                status = "engine_unavailable" if not engines else "parse_failed"
+                summary = {
+                    "status": status,
+                    "engine": engines[0] if engines else "none",
+                    "text_item_count": 0,
+                    "table_count": 0,
+                    "table_row_count": 0,
+                    "warnings": selection_warnings + conversion_warnings + failure_warnings,
+                    "user_message": user_message or "本地文档解析失败，请稍后重试或联系管理员。",
+                    "raw_bytes_external": False,
+                    "full_text_external": False,
+                }
+    except LegacyOfficeConversionError as exc:
         summary = {
-            "status": status,
-            "engine": engines[0] if engines else "none",
+            "status": "engine_unavailable" if "安装 LibreOffice" in exc.user_message else "parse_failed",
+            "engine": "libreoffice",
             "text_item_count": 0,
             "table_count": 0,
             "table_row_count": 0,
-            "warnings": selection_warnings + failure_warnings,
-            "user_message": user_message or (
-                "旧版 Word/PPT 解析失败，建议转为 .docx/.pptx 或 PDF 后重试。"
-                if fmt in {"doc", "ppt"}
-                else "本地文档解析失败，请稍后重试或联系管理员。"
-            ),
+            "warnings": [f"legacy Office conversion failed ({type(exc).__name__}): {str(exc)[:300]}"],
+            "user_message": exc.user_message,
             "raw_bytes_external": False,
             "full_text_external": False,
         }
