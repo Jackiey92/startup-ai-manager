@@ -70,3 +70,11 @@ def test_todo_status_filters_and_file_detail_use_actual_local_columns(tmp_path: 
     assert "MIME 类型" in detail_text
     assert "营业收入" in detail_text
     assert client.get("/files/1?company_id=acme").status_code == 404
+
+
+def test_parse_failure_message_prefers_bridge_user_message() -> None:
+    webapp = _webapp_module()
+    assert webapp._parse_failure_message({"parse_summary": {
+        "user_message": "本地解析服务启动失败，请稍后重试或联系管理员。",
+    }}, "parse_failed") == "本地解析服务启动失败，请稍后重试或联系管理员。"
+    assert webapp._parse_failure_message({}, "engine_unavailable") == "本地解析服务暂不可用，请稍后重试或联系管理员。"

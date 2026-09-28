@@ -172,6 +172,84 @@ def _text_parts(content: Any) -> list[str]:
     return parts
 
 
+class MinerUServerUnavailable(RuntimeError):
+    """The local MinerU daemon could not be made ready for a parse request."""
+
+    user_message = "本地解析服务启动失败，请稍后重试或联系管理员。"
+
+
+def _mineru_binary() -> str:
+    return str(Path(sys.executable).with_name("mineru"))
+
+
+def _mineru_status(mineru_bin: str, env: dict[str, str]) -> tuple[bool, str]:
+    """Probe the daemon through MinerU's supported status command."""
+    try:
+        proc = subprocess.run(
+            [mineru_bin, "server", "status"], text=True, capture_output=True,
+            env=env, timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return False, f"status probe failed ({type(exc).__name__})"
+    detail = "\n".join(part for part in (proc.stdout, proc.stderr) if part).strip()[-500:]
+    # MinerU 4.0.7 prints "Server is not running." with exit code 0, so the
+    # exit status alone is not a readiness signal.
+    stopped = "server is not running" in detail.lower()
+    return proc.returncode == 0 and not stopped, detail
+
+
+def _ensure_mineru_server(*, mineru_bin: str | None = None,
+                          ready_timeout: float | None = None) -> None:
+    """Ensure the local MinerU daemon is ready before submitting a parse.
+
+    ``mineru server start`` is a local background-daemon command.  It is run
+    in a new session so the bridge's own process lifetime cannot terminate the
+    started service; readiness is still verified through ``server status``.
+    """
+    command = mineru_bin or _mineru_binary()
+    env = dict(os.environ)
+    ready_timeout = ready_timeout if ready_timeout is not None else float(
+        os.environ.get("SAM_MINERU_SERVER_READY_TIMEOUT", "90")
+    )
+    poll_seconds = float(os.environ.get("SAM_MINERU_SERVER_POLL_SECONDS", "1"))
+    if ready_timeout <= 0 or poll_seconds <= 0:
+        raise ValueError("MinerU server timeout and poll interval must be positive")
+
+    ready, detail = _mineru_status(command, env)
+    if ready:
+        return
+    try:
+        starter = subprocess.Popen(
+            [command, "server", "start"], text=True, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, env=env, start_new_session=True,
+        )
+        try:
+            stdout, stderr = starter.communicate(timeout=min(30, ready_timeout))
+        except subprocess.TimeoutExpired:
+            starter.kill()
+            stdout, stderr = starter.communicate()
+            raise MinerUServerUnavailable(
+                f"MinerU server start timed out: {(stderr or stdout or detail)[-500:]}"
+            )
+    except OSError as exc:
+        raise MinerUServerUnavailable(f"MinerU server start failed ({type(exc).__name__})") from exc
+    if starter.returncode != 0:
+        raise MinerUServerUnavailable(
+            f"MinerU server start exited {starter.returncode}: {(stderr or stdout or detail)[-500:]}"
+        )
+
+    deadline = time.monotonic() + ready_timeout
+    last_detail = detail
+    while time.monotonic() < deadline:
+        ready, last_detail = _mineru_status(command, env)
+        if ready:
+            return
+        time.sleep(poll_seconds)
+    raise MinerUServerUnavailable(
+        f"MinerU server did not become ready within {ready_timeout:g}s: {last_detail}"
+    )
+
+
 def _mineru_cache_json(file_hash: str, tier: str | None) -> Path | None:
     home = Path(os.environ.get("MINERU_HOME", "~/.mineru")).expanduser()
     root = home / "doclib" / "parsed" / file_hash[:2] / file_hash
@@ -184,15 +262,34 @@ def _run_mineru(source: Path, file_hash: str, fmt: str, filename: str) -> tuple[
     """Run only the local MinerU server and convert its local JSON cache."""
     tier = os.environ.get("SAM_MINERU_TIER", "basic")
     started = time.monotonic()
+    mineru_bin = _mineru_binary()
+    _ensure_mineru_server(mineru_bin=mineru_bin)
     with _engine_source(source, fmt, filename) as engine_source:
         with tempfile.TemporaryDirectory(prefix="sam-mineru-") as temp:
-            mineru_bin = str(Path(sys.executable).with_name("mineru"))
             command = [mineru_bin, "parse", str(engine_source), "--json", "--force", "--wait", "300", "--output", str(Path(temp) / "parse.json")]
             env = dict(os.environ)
             env["MINERU_REMOTE"] = "0"
-            proc = subprocess.run(command, text=True, capture_output=True, env=env, timeout=360)
+            # The daemon's control socket can become available before its
+            # managed basic-tier parser has loaded models. Retry only known
+            # startup races; genuine document errors remain single-attempt.
+            parse_ready_timeout = float(os.environ.get("SAM_MINERU_PARSE_READY_TIMEOUT", "90"))
+            deadline = time.monotonic() + parse_ready_timeout
+            while True:
+                proc = subprocess.run(command, text=True, capture_output=True, env=env, timeout=360)
+                if proc.returncode == 0:
+                    break
+                detail = (proc.stderr or proc.stdout or "unknown local error").strip()[-1000:]
+                transient = any(token in detail.lower() for token in (
+                    "server_not_running", "server is not running", "quality_tier_unavailable", "engine_unavailable",
+                ))
+                if not transient or time.monotonic() >= deadline:
+                    break
+                time.sleep(min(float(os.environ.get("SAM_MINERU_SERVER_POLL_SECONDS", "1")), 2.0))
     if proc.returncode != 0:
-        raise RuntimeError(f"local MinerU parse failed: {proc.stderr[-1000:]}")
+        detail = (proc.stderr or proc.stdout or "unknown local error").strip()[-1000:]
+        if "server_not_running" in detail or "server is not running" in detail.lower() or "quality_tier_unavailable" in detail.lower():
+            raise MinerUServerUnavailable(f"MinerU server became unavailable during parse: {detail}")
+        raise RuntimeError(f"local MinerU parse failed: {detail}")
     response: dict[str, Any] = {}
     try:
         response = json.loads(proc.stdout)
@@ -252,22 +349,44 @@ def _docling_provenance(item: Any, file_hash: str, fallback: str) -> dict[str, A
         "page_no": int(page_no) if page_no is not None else None,
         "slide_no": int(page_no) if page_no is not None else None,
         "bbox": _docling_bbox(provenance),
-        "locator": str(getattr(item, "self_ref", None) or fallback),
+        # Keep the engine namespace even when Docling also provides its
+        # document-internal self_ref.  This makes a returned L2 anchor
+        # unambiguous about the parser that produced it.
+        "locator": f"{fallback}@{getattr(item, 'self_ref', None)}" if getattr(item, "self_ref", None) else fallback,
     }
 
 
 def _run_docling(source: Path, file_hash: str, fmt: str, filename: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Convert a local file with Docling's Python API.
 
-    ``docling-slim`` handles Office files without Torch.  PDF conversion may
-    require the optional layout/model stack; that failure is reported plainly
-    instead of silently falling back to another engine.
+    PDF conversion uses the local CPU Torch/Transformers layout stack declared
+    in requirements. Any unavailable local model stack is reported through the
+    manifest failure summary rather than being mistaken for parsed content.
     """
     started = time.monotonic()
-    from docling.document_converter import DocumentConverter
+    from docling.document_converter import DocumentConverter, PdfFormatOption
+    from docling.datamodel.base_models import InputFormat
+    from docling.datamodel.pipeline_options import PdfPipelineOptions
+
+    # MinerU remains the high-fidelity PDF path.  Docling is its local CPU
+    # fallback, so prefer embedded PDF text and avoid optional OCR/table model
+    # work that needs a separately managed OCR service. The normal Docling
+    # layout model remains local and is supplied by the pinned CPU stack.
+    converter: DocumentConverter
+    if fmt == "pdf":
+        options = PdfPipelineOptions(
+            force_backend_text=True,
+            do_ocr=False,
+            do_table_structure=False,
+        )
+        converter = DocumentConverter(format_options={
+            InputFormat.PDF: PdfFormatOption(pipeline_options=options),
+        })
+    else:
+        converter = DocumentConverter()
 
     with _engine_source(source, fmt, filename) as engine_source:
-        document = DocumentConverter().convert(str(engine_source)).document
+        document = converter.convert(str(engine_source)).document
     page_map: dict[int, dict[str, Any]] = {}
 
     def page(page_no: int) -> dict[str, Any]:
@@ -439,6 +558,7 @@ def _manifest(task: dict[str, Any], source: Path) -> dict[str, Any]:
     pages: list[dict[str, Any]] = []
     images, image_warnings = _extract_embedded_images(source, file_hash, fmt)
     failure_warnings: list[str] = []
+    user_message: str | None = None
     summary: dict[str, Any]
     for engine in engines:
         try:
@@ -451,6 +571,8 @@ def _manifest(task: dict[str, Any], source: Path) -> dict[str, Any]:
             break
         except Exception as exc:
             failure_warnings.append(f"{engine} failed ({type(exc).__name__}): {str(exc)[:300]}")
+            if isinstance(exc, MinerUServerUnavailable):
+                user_message = exc.user_message
     else:
         status = "engine_unavailable" if not engines else "parse_failed"
         summary = {
@@ -460,6 +582,7 @@ def _manifest(task: dict[str, Any], source: Path) -> dict[str, Any]:
             "table_count": 0,
             "table_row_count": 0,
             "warnings": selection_warnings + failure_warnings,
+            "user_message": user_message or "本地文档解析失败，请稍后重试或联系管理员。",
             "raw_bytes_external": False,
             "full_text_external": False,
         }

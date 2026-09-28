@@ -2,4 +2,10 @@ openpyxl
 pymupdf
 flask
 markdown
+# Deterministic local Office/PDF fallback.  The CPU wheels below deliberately
+# keep document bytes on the host and do not require CUDA.
 docling-slim[convert-core,format-office,format-pdf,format-xlsx]==2.130.0
+transformers==5.3.0
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.14.0+cpu
+torchvision==0.29.0+cpu

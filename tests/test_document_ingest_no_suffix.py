@@ -105,3 +105,105 @@ def test_auto_office_prefers_docling_and_falls_back(monkeypatch, tmp_path: Path)
     assert result["parse_summary"]["engine"] == "mineru"
     assert calls == ["docling", "mineru"]
     assert "docling failed" in result["parse_summary"]["warnings"][0]
+
+
+def test_mineru_status_treats_zero_exit_not_running_as_not_ready(monkeypatch) -> None:
+    bridge = _bridge_module()
+
+    monkeypatch.setattr(
+        bridge.subprocess, "run",
+        lambda command, **_kwargs: bridge.subprocess.CompletedProcess(
+            command, 0, stdout="Server is not running.\n", stderr="",
+        ),
+    )
+    ready, detail = bridge._mineru_status("mineru", {})
+    assert ready is False
+    assert "not running" in detail.lower()
+
+
+def test_mineru_server_is_started_once_and_waited_until_ready(monkeypatch) -> None:
+    bridge = _bridge_module()
+    status_codes = iter((1, 1, 0))
+    status_calls: list[list[str]] = []
+    starts: list[dict] = []
+
+    def fake_run(command, **kwargs):
+        status_calls.append(command)
+        return bridge.subprocess.CompletedProcess(command, next(status_codes), stdout="not ready", stderr="")
+
+    class Starter:
+        returncode = 0
+
+        def communicate(self, timeout):
+            assert timeout == 5
+            return "started", ""
+
+    def fake_popen(command, **kwargs):
+        starts.append(kwargs)
+        assert command == ["mineru", "server", "start"]
+        return Starter()
+
+    monkeypatch.setattr(bridge.subprocess, "run", fake_run)
+    monkeypatch.setattr(bridge.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(bridge.time, "sleep", lambda _seconds: None)
+    bridge._ensure_mineru_server(mineru_bin="mineru", ready_timeout=5)
+    assert status_calls == [["mineru", "server", "status"]] * 3
+    assert len(starts) == 1 and starts[0]["start_new_session"] is True
+
+
+def test_mineru_start_failure_is_reported_as_a_user_message(monkeypatch, tmp_path: Path) -> None:
+    bridge = _bridge_module()
+    source = tmp_path / "failure.pdf"
+    source.write_bytes(b"not a PDF")
+    monkeypatch.setattr(bridge, "_select_engines", lambda _fmt: (["mineru"], []))
+    monkeypatch.setattr(bridge, "_extract_embedded_images", lambda *args: ([], []))
+
+    def unavailable(*_args):
+        raise bridge.MinerUServerUnavailable("server did not become ready")
+
+    monkeypatch.setattr(bridge, "_run_mineru", unavailable)
+    result = bridge._manifest({"format": "pdf", "filename": "failure.pdf"}, source)
+    summary = result["parse_summary"]
+    assert summary["status"] == "parse_failed"
+    assert summary["user_message"] == "本地解析服务启动失败，请稍后重试或联系管理员。"
+    assert "MinerUServerUnavailable" in summary["warnings"][0]
+
+
+def test_mineru_parse_retries_until_the_basic_tier_is_ready(monkeypatch, tmp_path: Path) -> None:
+    """A control-ready daemon may still be loading the parser model."""
+    bridge = _bridge_module()
+    source = tmp_path / "report.pdf"
+    source.write_bytes(b"%PDF-1.4 local fixture")
+    cache = tmp_path / "parsed.json"
+    cache.write_text('{"pages": []}', encoding="utf-8")
+    attempts: list[list[str]] = []
+
+    monkeypatch.setattr(bridge, "_ensure_mineru_server", lambda **_kwargs: None)
+    monkeypatch.setattr(bridge, "_mineru_cache_json", lambda *_args: cache)
+    monkeypatch.setattr(bridge.time, "sleep", lambda _seconds: None)
+    monkeypatch.setenv("SAM_MINERU_PARSE_READY_TIMEOUT", "5")
+
+    def fake_run(command, **_kwargs):
+        attempts.append(command)
+        if len(attempts) == 1:
+            return bridge.subprocess.CompletedProcess(
+                command, 1, stdout="", stderr="quality_tier_unavailable",
+            )
+        return bridge.subprocess.CompletedProcess(command, 0, stdout='{"parse": {"tier": "basic"}}', stderr="")
+
+    monkeypatch.setattr(bridge.subprocess, "run", fake_run)
+    pages, summary = bridge._run_mineru(source, "d" * 64, "pdf", "report.pdf")
+    assert pages == []
+    assert summary["status"] == "parsed"
+    assert len(attempts) == 2
+
+
+def test_docling_provenance_keeps_the_engine_namespace() -> None:
+    bridge = _bridge_module()
+
+    class Item:
+        self_ref = "#/texts/7"
+        prov = []
+
+    location = bridge._docling_provenance(Item(), "e" * 64, "docling:text/7")
+    assert location["locator"] == "docling:text/7@#/texts/7"

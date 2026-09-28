@@ -159,6 +159,21 @@ def _company_id() -> str:
     return str(request.args.get("company_id") or os.environ.get("SAM_COMPANY_ID", "default"))
 
 
+def _parse_failure_message(payload: object, status: str) -> str | None:
+    """Return a safe, actionable parse failure message for upload clients."""
+    if isinstance(payload, dict):
+        summary = payload.get("parse_summary")
+        if isinstance(summary, dict):
+            message = summary.get("user_message")
+            if isinstance(message, str) and message.strip():
+                return message.strip()
+    if status in {"engine_unavailable", "pending_runtime", "unavailable"}:
+        return "本地解析服务暂不可用，请稍后重试或联系管理员。"
+    if status != "parsed":
+        return "文档解析失败，请检查文件后重试。"
+    return None
+
+
 def _page_context(*, company_id: str) -> dict:
     facts = consolidation_service().list_facts(company_id=company_id)
     todos = consolidation_service().list_todos(company_id=company_id, status="open")
@@ -347,6 +362,7 @@ def api_upload():
             staged = staging.get(staging_id)
             payload = staged.get("payload", {})
             parse_status, memory_status = parse_result_status(payload)
+            parse_message = _parse_failure_message(payload, parse_status)
             if parse_status == "parsed":
                 # Content labels are low-risk 2A browsing metadata.  They are
                 # generated from the parsed manifest (never the filename),
@@ -400,6 +416,8 @@ def api_upload():
         "parse_status": parse_status,
         "memory_status": memory_status,
     }
+    if parse_status != "parsed":
+        response["parse_message"] = locals().get("parse_message") or _parse_failure_message({}, parse_status)
     if "classification" in locals() and classification is not None:
         response["classification"] = {
             key: classification.get(key)
