@@ -36,6 +36,7 @@ from app.runtime_memory import RuntimeWorkingMemory
 from app.upload_status import parse_result_status
 from app.parse_jobs import ParseJobCanceled, ParseJobManager
 from app.business_overview import BusinessOverviewService
+from app.dashboard import DashboardPreferenceStore, REGISTRY, assemble_dashboard
 
 RUNTIME_CONFIG = RuntimeConfig.from_env(project_root=_PROJECT_ROOT)
 DATA_ROOT = RUNTIME_CONFIG.data_root
@@ -85,6 +86,10 @@ def consolidation_service() -> ConsolidationService:
 def business_overview_service() -> BusinessOverviewService:
     """Read-only deterministic business profile extracted from parsed L2."""
     return BusinessOverviewService(MAIN_DB)
+
+
+def dashboard_preferences() -> DashboardPreferenceStore:
+    return DashboardPreferenceStore(MAIN_DB)
 
 
 def init_db() -> None:
@@ -325,6 +330,10 @@ def business_overview_page():
     company_id = _company_id()
     context = _page_context(company_id=company_id)
     context["overview"] = business_overview_service().overview(company_id=company_id)
+    context["dashboard"] = assemble_dashboard(
+        overview=context["overview"], facts=context["facts"],
+        hidden=dashboard_preferences().get(company_id=company_id),
+    )
     return render_template("bizov.html", **context)
 
 
@@ -332,7 +341,66 @@ def business_overview_page():
 @app.route("/api/bizov", methods=["GET"])
 def api_business_overview():
     company_id = _company_id()
-    return {"overview": business_overview_service().overview(company_id=company_id)}
+    overview = business_overview_service().overview(company_id=company_id)
+    return {"overview": overview, "dashboard": assemble_dashboard(
+        overview=overview,
+        facts=consolidation_service().list_facts(company_id=company_id),
+        hidden=dashboard_preferences().get(company_id=company_id),
+    )}
+
+
+@app.route("/api/dashboard", methods=["GET"])
+def api_dashboard():
+    """Stable dashboard-only API for native clients and future modules."""
+    company_id = _company_id()
+    overview = business_overview_service().overview(company_id=company_id)
+    return {"dashboard": assemble_dashboard(
+        overview=overview,
+        facts=consolidation_service().list_facts(company_id=company_id),
+        hidden=dashboard_preferences().get(company_id=company_id),
+    )}
+
+
+def _dashboard_company_id() -> str:
+    payload = request.get_json(silent=True) or {}
+    return str(payload.get("company_id") or request.args.get("company_id")
+               or os.environ.get("SAM_COMPANY_ID", "default"))
+
+
+@app.route("/api/dashboard/preferences", methods=["GET", "POST"])
+def api_dashboard_preferences():
+    """Read or persist company-scoped card visibility preferences."""
+    if request.method == "GET":
+        company_id = _company_id()
+        return {"company_id": company_id, "dashboard_id": "business",
+                "hidden": dashboard_preferences().get(company_id=company_id)}
+    payload = request.get_json(silent=True) or {}
+    card_id = payload.get("card_id")
+    hidden = payload.get("hidden")
+    if not isinstance(card_id, str) or not isinstance(hidden, bool):
+        return {"error": "card_id and boolean hidden are required"}, 400
+    return _toggle_dashboard_card(card_id, company_id=_dashboard_company_id(), hidden=hidden)
+
+
+def _toggle_dashboard_card(card_id: str, *, company_id: str, hidden: bool):
+    known = {card.key: card for card in REGISTRY.cards("business")}
+    if card_id not in known:
+        return {"error": "unknown dashboard card"}, 404
+    if known[card_id].always_visible:
+        return {"error": "company overview cannot be hidden"}, 400
+    preference = dashboard_preferences().set(
+        company_id=company_id, dashboard_id="business", card_id=card_id, hidden=hidden,
+    )
+    return {"preference": preference, "hidden": dashboard_preferences().get(company_id=company_id)}
+
+
+@app.route("/api/dashboard/cards/<card_id>/toggle", methods=["POST"])
+def api_toggle_dashboard_card(card_id: str):
+    payload = request.get_json(silent=True) or {}
+    hidden = payload.get("hidden")
+    if not isinstance(hidden, bool):
+        return {"error": "boolean hidden is required"}, 400
+    return _toggle_dashboard_card(card_id, company_id=_dashboard_company_id(), hidden=hidden)
 
 
 @app.route("/todos")

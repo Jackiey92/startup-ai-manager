@@ -133,6 +133,16 @@ CREATE INDEX IF NOT EXISTS idx_parse_jobs_company_status
 CREATE INDEX IF NOT EXISTS idx_parse_jobs_status
     ON parse_jobs(status, created_at);
 
+-- Company-scoped dashboard visibility only; this never deletes source data.
+CREATE TABLE IF NOT EXISTS dashboard_preferences (
+    company_id   TEXT NOT NULL,
+    dashboard_id TEXT NOT NULL,
+    card_id      TEXT NOT NULL,
+    hidden       INTEGER NOT NULL DEFAULT 0 CHECK(hidden IN (0, 1)),
+    updated_at   TEXT NOT NULL,
+    PRIMARY KEY(company_id, dashboard_id, card_id)
+);
+
 """
 
 MODULES = [

@@ -32,9 +32,14 @@ def _manifest(*, name: str = "业务资料.xlsx", text: list[str] | None = None,
 
 def test_business_overview_extracts_all_fields_from_content_with_evidence() -> None:
     result = extract_business_overview(_manifest(
-        text=["商业模式：产品直销", "发明专利 3 项，软件著作权 2 项", "最高成熟度 TRL 7"],
+        text=["公司定位为工业材料供应商", "商业模式：产品直销", "发明专利 3 项，软件著作权 2 项", "最高成熟度 TRL 7"],
         rows=[["产品甲", "中试", 5, "工业客户", "验证中"]],
     ))
+    assert result["positioning"]["value"] == "工业材料供应商"
+    assert "产品甲" in result["summary"]["value"]
+    assert "工业客户" in result["summary"]["value"]
+    assert "产品直销" in result["summary"]["value"]
+    assert result["summary"]["sources"]
     assert result["product_line_count"] == 1
     assert result["max_trl"]["value"] == 7
     assert result["max_trl"]["stage"] == TRL_STAGE_MAP[7]
@@ -61,6 +66,8 @@ def test_business_overview_leaves_partial_evidence_blank() -> None:
     assert product["status"]["value"] == "研发中"
     assert result["invention_patent_count"] is None
     assert result["software_copyright_count"] is None
+    assert result["positioning"] is None
+    assert result["summary"] is not None
 
 
 def test_business_overview_all_missing_has_no_prototype_defaults() -> None:
@@ -68,7 +75,7 @@ def test_business_overview_all_missing_has_no_prototype_defaults() -> None:
     assert result == {
         "products": [], "product_line_count": None, "max_trl": None,
         "invention_patent_count": None, "software_copyright_count": None,
-        "business_model": None,
+        "business_model": None, "positioning": None, "summary": None,
     }
 
 
@@ -100,3 +107,4 @@ def test_business_overview_page_is_empty_before_first_parse(tmp_path: Path, monk
     response = webapp.app.test_client().get("/bizov?company_id=empty")
     assert response.status_code == 200
     assert "暂无可识别的产品矩阵证据" in response.get_data(as_text=True)
+    assert "建议上传公司介绍或 BP" in response.get_data(as_text=True)

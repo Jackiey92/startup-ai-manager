@@ -290,6 +290,111 @@ def _products(manifest: dict[str, Any]) -> list[ProductEvidence]:
     return list(unique.values())
 
 
+_POSITIONING_PATTERNS = (
+    # Keep these deliberately narrow: a free-form paragraph is not a company
+    # positioning claim unless it uses one of the explicit positioning cues.
+    re.compile(r"(?:公司定位(?:为|是)|定位为)\s*[：:]?\s*([^。；\n]+)", re.I),
+    re.compile(r"(?:我们)?是一家\s*([^。；\n]+?(?:供应商|公司|企业|厂商))", re.I),
+    re.compile(r"(?:专注于|专注在)\s*[：:]?\s*([^。；\n]+)", re.I),
+)
+
+
+def _positioning(manifest: dict[str, Any]) -> Evidence | None:
+    for page, raw, loc in _iter_page_values(manifest):
+        text = _flatten_text(raw)
+        for pattern in _POSITIONING_PATTERNS:
+            match = pattern.search(text)
+            if match:
+                value = match.group(1).strip(" ：:，,；;。")
+                item = _evidence(value, manifest=manifest, page=page, location=loc)
+                if item:
+                    return item
+    return None
+
+
+def _summary_from_parts(products: list[ProductEvidence], model: Evidence | None) -> dict[str, Any] | None:
+    """Compose a short, deterministic summary from already extracted fields."""
+    names: list[str] = []
+    targets: list[str] = []
+    sources: list[dict[str, Any]] = []
+    seen_sources: set[tuple[str, int | None, str | None, str]] = set()
+
+    def add_source(item: Evidence | None) -> None:
+        if item is None:
+            return
+        key = (item.source_file, item.source_page, item.source_locator, str(item.value))
+        if key not in seen_sources:
+            seen_sources.add(key)
+            sources.append(item.to_dict())
+
+    for product in products:
+        name = _text(product.product.value)
+        if name and name not in names:
+            names.append(name)
+        add_source(product.product)
+        target = _text(product.target_customer.value) if product.target_customer else ""
+        if target and target not in targets:
+            targets.append(target)
+        add_source(product.target_customer)
+    add_source(model)
+
+    pieces: list[str] = []
+    if names:
+        pieces.append(f"主要产品包括{'、'.join(names)}")
+    if targets:
+        pieces.append(f"目标客户为{'、'.join(targets)}")
+    if model is not None and _text(model.value):
+        pieces.append(f"商业模式为{_text(model.value)}")
+    if not pieces:
+        return None
+    return {
+        "value": "；".join(pieces) + "。",
+        "sources": sources,
+        "source_locator": "derived:business-summary",
+    }
+
+
+def _summary_from_dicts(products: list[dict[str, Any]], model: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Merge service-level product dictionaries without inventing evidence."""
+    names: list[str] = []
+    targets: list[str] = []
+    sources: list[dict[str, Any]] = []
+    seen: set[tuple[str, int | None, str | None, str]] = set()
+
+    def add(item: dict[str, Any] | None) -> None:
+        if not item:
+            return
+        key = (str(item.get("source_file") or ""), item.get("source_page"),
+               item.get("source_locator"), str(item.get("value") or ""))
+        if key not in seen:
+            seen.add(key)
+            sources.append(dict(item))
+
+    for product in products:
+        product_ev = product.get("product") or {}
+        value = _text(product_ev.get("value"))
+        if value and value not in names:
+            names.append(value)
+        add(product_ev)
+        target_ev = product.get("target_customer")
+        target = _text(target_ev.get("value")) if target_ev else ""
+        if target and target not in targets:
+            targets.append(target)
+        add(target_ev)
+    add(model)
+    pieces: list[str] = []
+    if names:
+        pieces.append(f"主要产品包括{'、'.join(names)}")
+    if targets:
+        pieces.append(f"目标客户为{'、'.join(targets)}")
+    if model and _text(model.get("value")):
+        pieces.append(f"商业模式为{_text(model['value'])}")
+    if not pieces:
+        return None
+    return {"value": "；".join(pieces) + "。", "sources": sources,
+            "source_locator": "derived:business-summary"}
+
+
 def extract_business_overview(manifest: dict[str, Any]) -> dict[str, Any]:
     """Extract one parsed manifest into the source-backed bizov contract."""
     trl = _trl_evidence(manifest)
@@ -297,7 +402,10 @@ def extract_business_overview(manifest: dict[str, Any]) -> dict[str, Any]:
     software = _count_evidence(manifest, ("软件著作权", "软件著作", "软著"))
     model = _evidence_for_label(manifest, ("商业模式", "盈利模式", "销售模式", "收入模式"))
     products = _products(manifest)
+    positioning = _positioning(manifest)
     return {
+        "positioning": positioning.to_dict() if positioning else None,
+        "summary": _summary_from_parts(products, model),
         "products": [item.to_dict() for item in products],
         "product_line_count": len(products) if products else None,
         "max_trl": ({**trl.to_dict(), "stage": TRL_STAGE_MAP.get(int(trl.value))} if trl else None),
@@ -355,6 +463,7 @@ class BusinessOverviewService:
         product_seen: set[str] = set()
         trl_candidates: list[dict[str, Any]] = []
         invention = software = model = None
+        positioning = None
         for item in extracted:
             for product in item["products"]:
                 key = str(product["product"]["value"])
@@ -366,6 +475,7 @@ class BusinessOverviewService:
             invention = invention or item["invention_patent_count"]
             software = software or item["software_copyright_count"]
             model = model or item["business_model"]
+            positioning = positioning or item["positioning"]
         trl_candidates.sort(key=lambda value: int(value["value"]), reverse=True)
         return {
             "products": products,
@@ -374,6 +484,8 @@ class BusinessOverviewService:
             "invention_patent_count": invention,
             "software_copyright_count": software,
             "business_model": model,
+            "positioning": positioning,
+            "summary": _summary_from_dicts(products, model),
             "insight": None,
             "source_files": [str(manifest.get("original_name") or manifest.get("file_hash")) for manifest in manifests],
         }
