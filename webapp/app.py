@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 import re
 
-from flask import Flask, abort, render_template, request, send_file
+from flask import Flask, abort, redirect, render_template, request, send_file, url_for
 
 import sys as _sys
 BASE_DIR = Path(__file__).resolve().parent
@@ -300,7 +300,13 @@ def _page_context(*, company_id: str) -> dict:
 
 @app.route("/")
 def home_page():
-    """Real-data overview; unavailable prototype metrics are intentionally absent."""
+    """Canonical landing redirects to the first real business screen."""
+    return redirect(url_for("business_overview_page"))
+
+
+@app.route("/overview")
+def legacy_overview_page():
+    """Preserve the previous real-data summary page under a stable legacy URL."""
     context = _page_context(company_id=_company_id())
     context["conflict_count"] = sum(t["reason"] == "conflict" for t in context["todos"])
     context["critical_count"] = sum(t["reason"] == "critical_review" for t in context["todos"])
