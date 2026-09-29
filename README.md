@@ -85,7 +85,7 @@ Startup AI Manager 不是在传统 ERP 上加一个聊天框，也不是又一�
 ├── schemas/                    # 事实、对话与凭证 Schema
 ├── tests/                      # 18 个以上 Python 回归测试文件（非占位）
 ├── docs/                       # 产品、架构与调研文档
-├── prototype/                  # 静态可交互前端原型
+├── prototype/                  # 唯一前端原型模板（startup-ai-manager.html），后续前端打磨以此为准
 ├── src/                        # 早期架构占位/说明，未进入当前主运行链路
 └── examples/                   # 合成样本/黄金评测的预留目录
 ```
@@ -117,7 +117,11 @@ export SAM_TOOL_BRIDGE_PYTHON="$PWD/.sam-isolated/venv/bin/python"
 (cd webapp && "$SAM_TOOL_BRIDGE_PYTHON" app.py)
 ```
 
-`prepare-openclaw-runtime.py` 会准备 state、技能与插件发现目录；随后由 `webapp/app.py` 启动 Flask。仅查看静态界面可打开 [`prototype/`](./prototype) 或在线体验链接；上传/Agent 功能需要本地运行时和模型密钥。
+`prepare-openclaw-runtime.py` 会准备 state、技能与插件发现目录；随后由 `webapp/app.py` 启动 Flask。仅查看静态界面可打开 [`prototype/startup-ai-manager.html`](./prototype/startup-ai-manager.html) 或在线体验链接；上传/Agent 功能需要本地运行时和模型密钥。
+
+## 唯一前端原型模板（设计基准）
+
+`prototype/startup-ai-manager.html` 是项目**唯一权威的前端原型模板**，由范范于 2026-09-29 拍板确认（对应云盘 `startup-ai-manager_最新前端.html`，二者内容哈希一致）。后续所有前端打磨、模块补齐、视觉与交互对齐都以该文件为基准；其它历史草图或临时页面不作为依据，真机功能仍只渲染后端真实数据。
 
 旧版 `.doc` 与 `.ppt` 需要本机 LibreOffice 进行**本地**无头转换（不会上传原件）：Ubuntu/WSL 安装 `libreoffice-core libreoffice-writer libreoffice-impress`，可选用 `SAM_SOFFICE_BIN` 指向 `soffice` 可执行文件。缺少该依赖时，旧格式上传会返回部署依赖错误，不会伪装为解析成功。
 
