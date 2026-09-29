@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+{% block crumb %}上传中转区{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>上传中转区</h1><p>文件先入队，再由后台逐步解析、归类和固化；页面不会被慢引擎卡住。</p></div></div>
+<section class="card inbox-card">
+  <label class="dropzone" for="inbox-input"><input id="inbox-input" type="file" multiple>
+    <span>选择或拖入文件</span><small>支持 PDF、Excel、PPT、Word；可继续追加上传</small>
+  </label>
+  <div id="inbox-feedback" class="feedback" aria-live="polite"></div>
+  <div id="inbox-jobs" class="result-list" aria-live="polite">
+    {% if not jobs %}<div class="empty">暂无上传任务。</div>{% endif %}
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const company = window.SAM_COMPANY_ID || 'default';
+  const list = document.querySelector('#inbox-jobs');
+  const input = document.querySelector('#inbox-input');
+  const feedback = document.querySelector('#inbox-feedback');
+  let timer = null;
+  const active = new Set(['queued', 'parsing']);
+  const labels = {queued:'排队中', parsing:'解析中', done:'已完成', failed:'解析失败', canceled:'已停止'};
+  const stages = {queued:'等待后台处理', uploading:'保存原件', starting_engine:'启动解析引擎', parsing:'读取正文', consolidating:'正在完成写入', done:'已完成', failed:'失败', canceled:'已停止'};
+  const esc = value => String(value ?? '');
+  async function api(url, options={}) {
+    const response = await fetch(url, options);
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.message || body.error || `请求失败 (${response.status})`);
+    return body;
+  }
+  function render(jobs) {
+    list.textContent = '';
+    if (!jobs.length) { const empty=document.createElement('div'); empty.className='empty'; empty.textContent='暂无上传任务。'; list.append(empty); return; }
+    jobs.forEach(job => {
+      const card=document.createElement('article'); card.className='result inbox-job'; card.dataset.jobId=job.job_id;
+      const title=document.createElement('div'); title.className='inbox-job-head';
+      const name=document.createElement('strong'); name.textContent=esc(job.original_name); title.append(name);
+      const badge=document.createElement('span'); badge.className=`badge job-${job.status}`; badge.textContent=labels[job.status] || job.status; title.append(badge); card.append(title);
+      const detail=document.createElement('div'); detail.className='inbox-job-detail';
+      const stage=document.createElement('span'); stage.textContent=stages[job.stage] || job.stage || ''; detail.append(stage);
+      if (job.progress_total) { const count=document.createElement('span'); count.textContent=` · ${job.progress_current || 0}/${job.progress_total} 页`; detail.append(count); }
+      card.append(detail);
+      if (job.message) { const msg=document.createElement('p'); msg.className='muted'; msg.textContent=job.message; card.append(msg); }
+      if (job.error_kind && job.status==='failed') { const err=document.createElement('p'); err.className='job-error'; err.textContent=`原因：${job.error_kind}`; card.append(err); }
+      const actions=document.createElement('div'); actions.className='todo-actions';
+      if (job.status==='done') { const link=document.createElement('a'); link.className='button small'; link.href=`/files/${encodeURIComponent(job.file_hash)}`; link.textContent='查看文件'; actions.append(link); }
+      if (active.has(job.status)) {
+        const stop=document.createElement('button'); stop.type='button'; stop.className='button small danger'; stop.textContent=job.stage==='consolidating'?'即将完成，无法中途停止':'停止'; stop.disabled=job.stage==='consolidating';
+        stop.addEventListener('click', async () => { stop.disabled=true; try { await api(`/api/parse-jobs/${encodeURIComponent(job.job_id)}/cancel?company_id=${encodeURIComponent(company)}`, {method:'POST'}); await load(); } catch (error) { feedback.textContent=error.message; stop.disabled=false; } }); actions.append(stop);
+      }
+      if (job.status==='failed' || job.status==='canceled') { const retry=document.createElement('button'); retry.type='button'; retry.className='button small'; retry.textContent='重新解析'; retry.addEventListener('click', async () => { retry.disabled=true; try { await api(`/api/parse-jobs/${encodeURIComponent(job.job_id)}/retry?company_id=${encodeURIComponent(company)}`, {method:'POST'}); await load(); } catch (error) { feedback.textContent=error.message; retry.disabled=false; } }); actions.append(retry); }
+      if (actions.children.length) card.append(actions);
+      list.append(card);
+    });
+  }
+  async function load() { try { const body=await api(`/api/parse-jobs?company_id=${encodeURIComponent(company)}`); render(body.jobs || []); } catch (error) { feedback.textContent=error.message; } }
+  function schedule() { if (!document.hidden && !timer) timer=setInterval(load, 1500); }
+  function stopSchedule() { if (timer) { clearInterval(timer); timer=null; } }
+  input?.addEventListener('change', async () => { const files=Array.from(input.files || []); input.value=''; for (const file of files) { const data=new FormData(); data.append('file',file); data.append('company_id',company); try { await api('/api/upload',{method:'POST',body:data}); } catch (error) { feedback.textContent=`${file.name}：${error.message}`; } } await load(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) stopSchedule(); else { load(); schedule(); } });
+  load(); schedule();
+})();
+</script>
+{% endblock %}

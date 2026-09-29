@@ -107,6 +107,32 @@ CREATE TABLE IF NOT EXISTS todos (
 CREATE INDEX IF NOT EXISTS idx_todos_company_status ON todos(company_id, status, id);
 CREATE INDEX IF NOT EXISTS idx_todos_coordinate ON todos(company_id, metric, period, status);
 
+-- 异步上传中转区任务。原件在 source_files，解析与固化状态独立可轮询。
+CREATE TABLE IF NOT EXISTS parse_jobs (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id            TEXT NOT NULL UNIQUE,
+    company_id        TEXT NOT NULL,
+    file_hash         TEXT NOT NULL REFERENCES source_files(file_hash),
+    original_name     TEXT NOT NULL,
+    file_format       TEXT NOT NULL,
+    harness_format    TEXT NOT NULL,
+    size_bytes        INTEGER NOT NULL,
+    status            TEXT NOT NULL DEFAULT 'queued',
+    stage             TEXT NOT NULL DEFAULT 'queued',
+    progress_current  INTEGER NOT NULL DEFAULT 0,
+    progress_total    INTEGER,
+    message           TEXT,
+    error_kind        TEXT,
+    created_at        TEXT NOT NULL,
+    updated_at        TEXT NOT NULL,
+    started_at        TEXT,
+    finished_at       TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_parse_jobs_company_status
+    ON parse_jobs(company_id, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_parse_jobs_status
+    ON parse_jobs(status, created_at);
+
 """
 
 MODULES = [

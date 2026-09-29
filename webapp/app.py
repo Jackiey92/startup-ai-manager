@@ -34,6 +34,7 @@ from app.providers import memory_provider, runtime_provider
 from app.runtime_config import RuntimeConfig
 from app.runtime_memory import RuntimeWorkingMemory
 from app.upload_status import parse_result_status
+from app.parse_jobs import ParseJobCanceled, ParseJobManager
 
 RUNTIME_CONFIG = RuntimeConfig.from_env(project_root=_PROJECT_ROOT)
 DATA_ROOT = RUNTIME_CONFIG.data_root
@@ -48,9 +49,9 @@ app = Flask(__name__)
 app.extensions["sam_runtime_config"] = RUNTIME_CONFIG
 app.extensions["sam_memory_provider"] = memory_provider(RUNTIME_CONFIG)
 
-# The parser/storage path remains synchronous so the upload response only
-# returns after its actual parse status is known.  Model guidance is a
-# separate bounded worker and never holds Flask's request thread open.
+# Both parsing/consolidation and model guidance run outside the Flask request
+# thread.  The upload endpoint only stores the immutable original and creates
+# a durable parse-job row; clients observe actual parser stages via /inbox.
 _GUIDE_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="sam-guide")
 _GUIDE_COORDINATOR = GuideJobCoordinator(
     _GUIDE_EXECUTOR, debounce_seconds=float(os.environ.get("SAM_GUIDE_DEBOUNCE", "3"))
@@ -83,6 +84,12 @@ def consolidation_service() -> ConsolidationService:
 def init_db() -> None:
     """Initialize the canonical source/fact/classification ledger only."""
     init_core_db(MAIN_DB)
+
+
+# Ensure the durable queue table exists for both the Flask entry point and the
+# test client.  This is schema initialization only; no upload is processed at
+# import time.
+init_db()
 
 
 def detect_format(filename: str) -> str:
@@ -154,6 +161,100 @@ def queue_import_guide(uploaded_file_hash: str, *, company_id: str | None = None
         _guide_key(company),
         lambda: _run_import_guide(event="upload", uploaded_file_hash=uploaded_file_hash, company_id=company),
     )
+
+
+def _parse_job_worker(job: dict, progress, cancel_event) -> None:
+    """Run the existing deterministic upload pipeline off the request thread."""
+    adapter = _PARSE_ADAPTER
+
+    def check_cancel() -> None:
+        if cancel_event.is_set():
+            # A cancel request can arrive in the tiny gap before the adapter
+            # registers its Popen process.  Clear that one-shot intent when
+            # this check wins the race and no child will be spawned.
+            clear_cancel = getattr(adapter, "clear_parse_cancel", None)
+            if clear_cancel is not None:
+                clear_cancel(job["file_hash"])
+            raise ParseJobCanceled("job canceled")
+
+    progress(stage="starting_engine", message="正在准备本地解析引擎")
+    check_cancel()
+    staging = StagingStore(db_path=MAIN_DB)
+    classification_id: int | None = None
+    critical_started = False
+    try:
+        progress(stage="parsing", message="正在解析文档")
+        # Cancellation can arrive while the worker is transitioning from
+        # engine setup to the private bridge.  Re-check immediately before
+        # spawning so a stopped queued job never starts a parser.
+        check_cancel()
+        staging_id = adapter.run_parse(job["file_hash"], job["harness_format"], timeout=600)
+        check_cancel()
+        staged = staging.get(staging_id)
+        payload = staged.get("payload", {})
+        parse_status, _memory_status = parse_result_status(payload)
+        summary = payload.get("parse_summary") if isinstance(payload, dict) else {}
+        if parse_status != "parsed":
+            error = RuntimeError(
+                str((summary or {}).get("user_message") or "文档解析失败")
+            )
+            error.error_kind = str((summary or {}).get("error_kind") or "engine")
+            raise error
+        pages = payload.get("pages") or []
+        total = len(pages) or None
+        progress(stage="parsing", current=total or 0, total=total, message=f"解析完成，已读取 {total or 0} 页")
+        check_cancel()
+
+        # Content-derived classification and 2A memory are independent of the
+        # 2B transaction.  Keep them outside the short critical section so a
+        # slow provider write does not make the stop button appear hung.
+        classification = classification_service().classify_parsed(
+            file_hash=job["file_hash"], company_id=job["company_id"], manifest=payload,
+        )
+        if classification.get("_created_for_parse"):
+            classification_id = int(classification["id"])
+        ExtractionMemoryService(app.extensions["sam_memory_provider"]).ingest(job["company_id"], payload)
+        check_cancel()
+
+        # Once this short local SQLite write starts, cancellation is rejected
+        # by the API.  No engine/model call is made in the critical section.
+        critical_started = True
+        progress(stage="consolidating", message="正在写入事实", critical=True)
+        consolidation_service().consolidate_manifest(payload, company_id=job["company_id"])
+        progress(stage="consolidating", current=total or 0, total=total,
+                 message="事实写入完成", critical_end=True)
+        try:
+            MapBuilder(app.extensions["sam_memory_provider"]).rebuild_map(
+                job["company_id"], source_ids=(str(payload["source_id"]),)
+            )
+        except Exception:
+            app.logger.info("memory map update deferred after upload job")
+        try:
+            queue_import_guide(job["file_hash"], company_id=job["company_id"])
+        except Exception:
+            # Guide generation is a follow-up; a model/runtime outage must not
+            # turn a successfully parsed and consolidated upload into failed.
+            app.logger.exception("import guide queue failed after parse job completion")
+    except (RuntimeError, OSError, subprocess.SubprocessError) as exc:
+        if classification_id is not None and not critical_started:
+            try:
+                classification_service().cancel_auto_content(
+                    classification_id=classification_id,
+                    file_hash=job["file_hash"], company_id=job["company_id"],
+                )
+            except Exception:
+                app.logger.exception("failed to invalidate canceled parse classification")
+        if cancel_event.is_set():
+            raise ParseJobCanceled("job canceled") from exc
+        raise
+
+
+_PARSE_ADAPTER = runtime_provider(RUNTIME_CONFIG, StagingStore(db_path=MAIN_DB))
+_PARSE_MANAGER = ParseJobManager(
+    MAIN_DB,
+    _parse_job_worker,
+    cancel_parser=_PARSE_ADAPTER.cancel_parse,
+)
 
 
 MODULE_LABELS = {"sales": "销售", "marketing": "市场", "hr": "人员", "finance": "财务"}
@@ -231,6 +332,16 @@ def facts_page():
 @app.route("/files")
 def files_page():
     return render_template("files.html", **_page_context(company_id=_company_id()))
+
+
+@app.route("/inbox")
+def inbox_page():
+    """Upload handoff queue; parsing itself remains in the worker pool."""
+    company_id = _company_id()
+    return render_template(
+        "inbox.html", company_id=company_id,
+        jobs=_PARSE_MANAGER.list(company_id=company_id),
+    )
 
 
 @app.route("/chat")
@@ -333,21 +444,19 @@ def api_chat():
 
 @app.route("/api/upload", methods=["POST", "OPTIONS"])
 def api_upload():
+    """Store an immutable original and enqueue parsing without blocking HTTP."""
     if request.method == "OPTIONS":
         return ("", 204)
-
     upload = request.files.get("file")
     if upload is None or not upload.filename:
         return {"error": "no file"}, 400
-
-    blob = upload.read()
     file_format = detect_format(upload.filename)
     if file_format == "unknown":
         return {
             "error": "unsupported format",
             "message": "暂不支持该文件格式；请上传 PDF、Excel、PPT 或 Word 文件。",
         }, 400
-
+    blob = upload.read()
     store = SourceFileStore(objects_path=OBJECTS_DIR, db_path=MAIN_DB)
     stored = store.put_bytes(
         blob,
@@ -355,11 +464,6 @@ def api_upload():
         mime_type="application/pdf" if file_format == "pdf" else None,
         origin_zone="internal",
     )
-    file_hash = stored.file_hash
-    company_id = str(request.form.get("company_id") or os.environ.get("SAM_COMPANY_ID", "default"))
-
-    # The UI groups modern and legacy Office extensions under one document
-    # type, while the deterministic bridge needs the concrete container format.
     if file_format == "excel":
         harness_format = "xlsx"
     elif file_format == "ppt":
@@ -368,88 +472,70 @@ def api_upload():
         harness_format = "docx" if upload.filename.lower().endswith(".docx") else "doc"
     else:
         harness_format = file_format
-    staging = StagingStore(db_path=MAIN_DB)
-    adapter = runtime_provider(RUNTIME_CONFIG, staging)
-    parse_status = "not_supported"
-    memory_status = "not_attempted"
-    if adapter.supports(harness_format):
-        try:
-            staging_id = adapter.run_parse(file_hash, harness_format, timeout=600)
-            staged = staging.get(staging_id)
-            payload = staged.get("payload", {})
-            parse_status, memory_status = parse_result_status(payload)
-            parse_message = _parse_failure_message(payload, parse_status)
-            if parse_status == "parsed":
-                # Content labels are low-risk 2A browsing metadata.  They are
-                # generated from the parsed manifest (never the filename),
-                # become active immediately, and do not write any 2B facts.
-                classification = classification_service().classify_parsed(
-                    file_hash=file_hash, company_id=company_id, manifest=payload,
-                )
-                ExtractionMemoryService(app.extensions["sam_memory_provider"]).ingest(company_id, payload)
-                # Document-derived operating facts take the only automatic
-                # route into 2B.  The consolidator writes ordinary, sourced
-                # metrics as verified or opens a todo for conflicts/critical
-                # items; it never calls the conversation promote path.
-                consolidation = consolidation_service().consolidate_manifest(
-                    payload, company_id=company_id,
-                )
-                # ls --recursive is eventually consistent on OV.  The source
-                # ID is known here, so verify its L0 by exact read immediately.
-                try:
-                    MapBuilder(app.extensions["sam_memory_provider"]).rebuild_map(
-                        company_id, source_ids=(str(payload["source_id"]),)
-                    )
-                except Exception:
-                    app.logger.info("memory map update deferred after upload")
-                memory_status = "stored_2a"
-            else:
-                # The original remains safely stored, but no empty/failed
-                # manifest is allowed into 2a.
-                memory_status = parse_status
-                # There is no content evidence for a failed parse.  A
-                # filename hint is explicitly marked as such and remains only
-                # a low-confidence browsing aid; it never substitutes for a
-                # content classification.
-                classification = classification_service().classify_name_fallback(
-                    file_hash=file_hash, company_id=company_id, original_name=upload.filename,
-                )
-        except MemoryUnavailable:
-            memory_status = "unavailable"
-            app.logger.exception("document parser memory backend unavailable")
-        except (RuntimeError, OSError, subprocess.SubprocessError):
-            # The immutable original is still stored. A failed optional parser
-            # must not turn a completed upload into a false client-side failure.
-            parse_status = "pending_runtime"
-            memory_status = "pending_runtime"
-            app.logger.exception("document parser runtime failed")
+    company_id = str(request.form.get("company_id") or os.environ.get("SAM_COMPANY_ID", "default"))
+    job = _PARSE_MANAGER.create(
+        company_id=company_id, file_hash=stored.file_hash,
+        original_name=upload.filename, file_format=file_format,
+        harness_format=harness_format, size_bytes=len(blob),
+    )
+    return {
+        "job_id": job["job_id"], "file_hash": stored.file_hash,
+        "original_name": upload.filename, "format": file_format,
+        "size": len(blob), "status": "queued", "stage": "queued",
+    }, 202
 
-    response = {
-        "file_hash": file_hash,
-        "original_name": upload.filename,
-        "format": file_format,
-        "size": len(blob),
-        "parse_status": parse_status,
-        "memory_status": memory_status,
-    }
-    if parse_status != "parsed":
-        response["parse_message"] = locals().get("parse_message") or _parse_failure_message({}, parse_status)
-    if "classification" in locals() and classification is not None:
-        response["classification"] = {
-            key: classification.get(key)
-            for key in ("module", "doc_type", "confidence", "status", "classified_by", "basis")
-        }
-    if "consolidation" in locals():
-        response["consolidation"] = {
-            "verified_fact_ids": list(consolidation.verified_fact_ids),
-            "todo_ids": list(consolidation.todo_ids),
-            "duplicate_fact_ids": list(consolidation.duplicate_fact_ids),
-        }
-    # Do not synchronously start a cold OpenClaw process here. Clients can use
-    # /api/import-guide with this hash to request/read guidance separately.
-    queue_import_guide(file_hash, company_id=company_id)
-    response["guide_status"] = "queued"
-    return response
+
+@app.route("/api/parse-jobs", methods=["GET"])
+def api_parse_jobs():
+    company_id = str(request.args.get("company_id") or os.environ.get("SAM_COMPANY_ID", "default"))
+    status = request.args.get("status")
+    if status is not None and status not in {"all", "queued", "parsing", "done", "failed", "canceled"}:
+        return {"error": "invalid parse job status"}, 400
+    return {"jobs": _PARSE_MANAGER.list(company_id=company_id, status=status)}
+
+
+@app.route("/api/parse-jobs/<job_id>", methods=["GET"])
+def api_parse_job(job_id: str):
+    try:
+        job = _PARSE_MANAGER.get(job_id)
+    except KeyError:
+        return {"error": "parse job not found"}, 404
+    company_id = str(request.args.get("company_id") or os.environ.get("SAM_COMPANY_ID", "default"))
+    if job["company_id"] != company_id:
+        return {"error": "parse job not found"}, 404
+    return {"job": job}
+
+
+@app.route("/api/parse-jobs/<job_id>/cancel", methods=["POST"])
+def api_cancel_parse_job(job_id: str):
+    try:
+        job = _PARSE_MANAGER.get(job_id)
+        payload = request.get_json(silent=True) or {}
+        company_id = str(request.args.get("company_id") or request.form.get("company_id") or payload.get("company_id") or os.environ.get("SAM_COMPANY_ID", "default"))
+        if job["company_id"] != company_id:
+            return {"error": "parse job not found"}, 404
+        result = _PARSE_MANAGER.cancel(job_id)
+    except KeyError:
+        return {"error": "parse job not found"}, 404
+    except RuntimeError as exc:
+        return {"error": str(exc)}, 409
+    return {"job": result}
+
+
+@app.route("/api/parse-jobs/<job_id>/retry", methods=["POST"])
+def api_retry_parse_job(job_id: str):
+    try:
+        job = _PARSE_MANAGER.get(job_id)
+        payload = request.get_json(silent=True) or {}
+        company_id = str(request.args.get("company_id") or request.form.get("company_id") or payload.get("company_id") or os.environ.get("SAM_COMPANY_ID", "default"))
+        if job["company_id"] != company_id:
+            return {"error": "parse job not found"}, 404
+        result = _PARSE_MANAGER.retry(job_id)
+    except KeyError:
+        return {"error": "parse job not found"}, 404
+    except RuntimeError as exc:
+        return {"error": str(exc)}, 409
+    return {"job": result}, 202
 
 
 @app.route("/api/facts", methods=["GET"])

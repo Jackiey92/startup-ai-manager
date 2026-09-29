@@ -102,6 +102,29 @@ def test_human_classification_is_not_overwritten_by_later_parser_retry(ledger) -
     assert after["classified_by"] == "human"
 
 
+def test_canceled_parse_invalidates_only_its_new_content_row_and_retry_reclassifies(ledger) -> None:
+    store, service = ledger
+    stored = store.put_bytes(b"cancel-me", original_name="cancel.pdf")
+    first = service.classify_parsed(
+        file_hash=stored.file_hash, company_id="acme",
+        manifest=_manifest("营业收入 净利润 毛利率 现金流"),
+    )
+    assert first["_created_for_parse"] is True
+    assert service.cancel_auto_content(
+        classification_id=first["id"], file_hash=stored.file_hash, company_id="acme",
+    ) is True
+    assert service.list_current(company_id="acme") == []
+    assert service.list_current(company_id="acme", include_history=True) == []
+    # A retry appends a fresh effective row; the canceled audit row is not
+    # resurrected or treated as the current classification.
+    retried = service.classify_parsed(
+        file_hash=stored.file_hash, company_id="acme",
+        manifest=_manifest("营业收入 净利润 毛利率 现金流"),
+    )
+    assert retried["id"] != first["id"]
+    assert service.list_current(company_id="acme")[0]["basis"] == "content"
+
+
 def test_http_list_filter_confirm_and_human_contract(monkeypatch, ledger) -> None:
     store, service = ledger
     stored = store.put_bytes(b"sales", original_name="销售订单.xlsx")

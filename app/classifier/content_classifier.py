@@ -132,7 +132,7 @@ class ClassificationService:
         return conn.execute(
             """
             SELECT * FROM file_classifications
-            WHERE file_hash=? AND company_id=? AND status != 'superseded'
+            WHERE file_hash=? AND company_id=? AND status NOT IN ('superseded', 'canceled')
             ORDER BY id DESC LIMIT 1
             """,
             (file_hash, company_id),
@@ -155,7 +155,12 @@ class ClassificationService:
                 classified_by="auto", basis="content",
             )
             conn.commit()
-            return dict(conn.execute("SELECT * FROM file_classifications WHERE id=?", (row_id,)).fetchone())
+            row = dict(conn.execute("SELECT * FROM file_classifications WHERE id=?", (row_id,)).fetchone())
+            # Internal pipeline marker: only this invocation's newly appended
+            # row may be invalidated if the parse job is canceled.  It is not
+            # included by the HTTP classification projection.
+            row["_created_for_parse"] = True
+            return row
 
     def classify_name_fallback(self, *, file_hash: str, company_id: str, original_name: str) -> dict[str, Any] | None:
         """Record a filename-only preliminary label only when no current row exists."""
@@ -172,12 +177,31 @@ class ClassificationService:
             conn.commit()
             return dict(conn.execute("SELECT * FROM file_classifications WHERE id=?", (row_id,)).fetchone())
 
+    def cancel_auto_content(self, *, classification_id: int, file_hash: str, company_id: str) -> bool:
+        """Invalidate one canceled job's automatic content row only.
+
+        The row id is captured from the current job's classify call, so a
+        later upload or a human correction for the same source cannot be
+        accidentally removed.  ``canceled`` is excluded from current views but
+        retained as an audit marker.
+        """
+        with self._conn() as conn:
+            cursor = conn.execute(
+                """UPDATE file_classifications
+                   SET status='canceled'
+                 WHERE id=? AND file_hash=? AND company_id=?
+                   AND status='auto' AND basis='content' AND classified_by='auto'""",
+                (classification_id, file_hash, company_id),
+            )
+            conn.commit()
+            return cursor.rowcount == 1
+
     def list_current(self, *, company_id: str, module: str | None = None, include_history: bool = False) -> list[dict[str, Any]]:
         sql = """
             SELECT c.*, s.original_name, s.mime_type, s.size_bytes, s.uploaded_at
             FROM file_classifications c
             JOIN source_files s ON s.file_hash=c.file_hash
-            WHERE c.company_id=? AND c.status != 'superseded'
+            WHERE c.company_id=? AND c.status NOT IN ('superseded', 'canceled')
         """
         params: list[Any] = [company_id]
         if module in {"null", "unclassified"}:
