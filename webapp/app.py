@@ -35,6 +35,7 @@ from app.runtime_config import RuntimeConfig
 from app.runtime_memory import RuntimeWorkingMemory
 from app.upload_status import parse_result_status
 from app.parse_jobs import ParseJobCanceled, ParseJobManager
+from app.business_overview import BusinessOverviewService
 
 RUNTIME_CONFIG = RuntimeConfig.from_env(project_root=_PROJECT_ROOT)
 DATA_ROOT = RUNTIME_CONFIG.data_root
@@ -79,6 +80,11 @@ def classification_service() -> ClassificationService:
 def consolidation_service() -> ConsolidationService:
     """2B document-consolidation path; deliberately unrelated to chat promote."""
     return ConsolidationService(MAIN_DB)
+
+
+def business_overview_service() -> BusinessOverviewService:
+    """Read-only deterministic business profile extracted from parsed L2."""
+    return BusinessOverviewService(MAIN_DB)
 
 
 def init_db() -> None:
@@ -306,6 +312,21 @@ def home_page():
 def prototype_page():
     """Keep the historic static prototype available for visual comparison only."""
     return send_file(str(BASE_DIR.parent / "prototype" / "startup-ai-manager.html"))
+
+
+@app.route("/bizov")
+def business_overview_page():
+    company_id = _company_id()
+    context = _page_context(company_id=company_id)
+    context["overview"] = business_overview_service().overview(company_id=company_id)
+    return render_template("bizov.html", **context)
+
+
+@app.route("/api/business-overview", methods=["GET"])
+@app.route("/api/bizov", methods=["GET"])
+def api_business_overview():
+    company_id = _company_id()
+    return {"overview": business_overview_service().overview(company_id=company_id)}
 
 
 @app.route("/todos")

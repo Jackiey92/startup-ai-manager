@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% block title %}业务概览 · SAM{% endblock %}
+{% block crumb %}业务概览{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>业务概览</h1><p>仅展示已解析资料中的可溯源业务证据，缺失字段保持为空。</p></div></div>
+{% if overview.insight %}
+<section class="bizov-insight" aria-label="AI提示"><span class="ai-badge">✦ AI</span><span>{{ overview.insight.text }}</span>{% if overview.insight.source_file %}<small>依据：{{ overview.insight.source_file }}{% if overview.insight.source_page %} · 第 {{ overview.insight.source_page }} 页{% endif %}</small>{% endif %}</section>
+{% endif %}
+<div class="grid kpi-grid bizov-cards">
+  <article class="card bizov-card"><div class="kpi-label">产品线</div><div class="kpi-value">{{ overview.product_line_count if overview.product_line_count is not none else '—' }}{% if overview.product_line_count is not none %}<small> 条</small>{% endif %}</div><div class="kpi-meta">{% if overview.products %}来自 {{ overview.products|length }} 条产品证据{% else %}暂无正文证据{% endif %}</div>{% if overview.products %}<small class="bizov-evidence">{{ overview.products[0].product.source_file }} · 第 {{ overview.products[0].product.source_page or '—' }} 页 · {{ overview.products[0].product.source_locator or '—' }}</small>{% endif %}</article>
+  <article class="card bizov-card"><div class="kpi-label">最高成熟度</div><div class="kpi-value">{% if overview.max_trl %}TRL {{ overview.max_trl.value }}{% else %}—{% endif %}</div><div class="kpi-meta">{{ overview.max_trl.stage if overview.max_trl and overview.max_trl.stage else '暂无阶段证据' }}</div>{% if overview.max_trl %}<small class="bizov-evidence">{{ overview.max_trl.source_file }} · 第 {{ overview.max_trl.source_page or '—' }} 页 · {{ overview.max_trl.source_locator or '—' }}</small>{% endif %}</article>
+  <article class="card bizov-card"><div class="kpi-label">知识产权</div><div class="kpi-value">{% if overview.invention_patent_count or overview.software_copyright_count %}{{ overview.invention_patent_count.value if overview.invention_patent_count else '—' }} / {{ overview.software_copyright_count.value if overview.software_copyright_count else '—' }}{% else %}—{% endif %}</div><div class="kpi-meta">发明专利 / 软件著作权</div>{% if overview.invention_patent_count %}<small class="bizov-evidence">发明：{{ overview.invention_patent_count.source_file }} · 第 {{ overview.invention_patent_count.source_page or '—' }} 页 · {{ overview.invention_patent_count.source_locator or '—' }}</small>{% endif %}{% if overview.software_copyright_count %}<small class="bizov-evidence">软著：{{ overview.software_copyright_count.source_file }} · 第 {{ overview.software_copyright_count.source_page or '—' }} 页 · {{ overview.software_copyright_count.source_locator or '—' }}</small>{% endif %}</article>
+  <article class="card bizov-card"><div class="kpi-label">商业模式</div><div class="kpi-value bizov-text-value">{{ overview.business_model.value if overview.business_model else '—' }}</div><div class="kpi-meta">{% if overview.business_model %}有来源证据{% else %}暂无正文证据{% endif %}</div>{% if overview.business_model %}<small class="bizov-evidence">{{ overview.business_model.source_file }} · 第 {{ overview.business_model.source_page or '—' }} 页 · {{ overview.business_model.source_locator or '—' }}</small>{% endif %}</article>
+</div>
+<section class="card bizov-matrix" style="margin-top:16px">
+  <div class="card-head"><h2>产品矩阵</h2><span class="muted">产品、阶段、TRL、目标客户、状态</span></div>
+  {% if overview.products %}
+  <div class="table-wrap"><table class="data-table"><thead><tr><th>产品</th><th>阶段</th><th>TRL</th><th>目标客户</th><th>状态</th></tr></thead><tbody>
+  {% for item in overview.products %}<tr>
+    <td><b>{{ item.product.value }}</b><small class="bizov-evidence">来源：{{ item.product.source_file }}{% if item.product.source_page %} · 第 {{ item.product.source_page }} 页{% endif %}{% if item.product.source_locator %} · {{ item.product.source_locator }}{% endif %}</small></td>
+    <td>{{ item.stage.value if item.stage else '—' }}</td>
+    <td>{{ item.trl.value if item.trl else '—' }}</td>
+    <td>{{ item.target_customer.value if item.target_customer else '—' }}</td>
+    <td>{{ item.status.value if item.status else '—' }}</td>
+  </tr>{% endfor %}
+  </tbody></table></div>
+  {% else %}<div class="empty">暂无可识别的产品矩阵证据。</div>{% endif %}
+</section>
+{% endblock %}
