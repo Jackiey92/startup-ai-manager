@@ -5,3 +5,25 @@
 .bizov-company-overview{padding:24px}.bizov-company-overview .card-head{margin-bottom:14px}.bizov-positioning{font-size:28px;line-height:1.35;letter-spacing:-.02em;margin:0 0 8px;color:var(--t1)}.bizov-summary{font-size:15px;line-height:1.7;color:var(--t2);margin:14px 0 4px}.bizov-summary-sources{display:flex;flex-wrap:wrap;gap:8px}.dashboard-settings{padding:16px 20px}.dashboard-controls{display:flex;flex-wrap:wrap;gap:12px 20px}.dashboard-controls label{color:var(--t2);font-size:13px;cursor:pointer}.dashboard-controls input{accent-color:var(--primary)}.bizov-fact-value{font-size:22px}
 .nav-groups{padding:10px;flex:1}.nav-section{margin:0 0 var(--space-2)}.nav-primary{display:flex;align-items:center;gap:9px;min-height:44px;padding:0 12px;border-radius:9px;color:var(--t1);text-decoration:none;font-weight:700}.nav-primary:hover,.nav-primary.active{background:#eef1ff;color:var(--primary)}.nav-group{display:grid;gap:2px;margin:3px 0 8px;padding-left:12px;border-left:2px solid #eef1ff}.nav-group .nav-link{min-height:36px;font-size:12px;font-weight:600;padding:0 10px}.nav-disabled{color:var(--t3);cursor:not-allowed;opacity:.7}.nav-disabled:hover{background:#f7f8fa;color:var(--t3)}.nav-soon{margin-left:auto;font-size:10px;font-weight:500;color:var(--t3)}.section-gap{margin-top:var(--space-4)}.surface{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:var(--space-4)}.table-shell{overflow:auto;border:1px solid var(--border);border-radius:10px}.empty-state{padding:var(--space-6) var(--space-4);text-align:center;color:var(--t3);border:1px dashed #d6d9df;border-radius:10px}
 :root{--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px}
+@media(max-width:850px){
+  html,body,.app-shell,.main,.page{width:100%;max-width:100%;min-width:0;overflow-x:hidden}
+  body{overflow-wrap:anywhere}
+  .sidebar{min-width:0;overflow:hidden}
+  .sidebar nav.nav-groups{display:flex;flex:0 0 auto;width:100%;min-width:0;max-width:100%;gap:8px;padding:6px 10px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+  .sidebar nav.nav-groups::-webkit-scrollbar{display:none}
+  .nav-groups .nav-section{flex:0 0 auto;min-width:0;margin:0}
+  .nav-groups .nav-primary{min-height:40px;white-space:nowrap;padding:0 13px;border:1px solid var(--border);background:#fff;font-size:13px}
+  .nav-groups .nav-primary.active{border-color:#c7d2fe;background:#eef1ff}
+  .nav-groups .nav-group{display:none}
+  .main{overflow-x:hidden}
+  .topbar,.crumb,.page-head{min-width:0;max-width:100%;overflow-wrap:anywhere}
+  .page{padding-left:14px;padding-right:14px}
+  .page-head,.card,.bizov-company-overview,.dashboard-settings{min-width:0;max-width:100%}
+  .dashboard-controls{min-width:0;max-width:100%;overflow-wrap:anywhere}
+  .table-wrap{width:100%;max-width:100%;overflow-x:auto;overflow-y:hidden}
+  .data-table{min-width:620px}
+}
+@media(max-width:600px){
+  .kpi-grid{grid-template-columns:minmax(0,1fr)}
+  .dashboard-controls{gap:8px 14px}
+}

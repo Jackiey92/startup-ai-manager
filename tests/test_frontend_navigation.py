@@ -34,3 +34,14 @@ def test_navigation_has_four_grouped_entries_and_bizov_landing(tmp_path: Path, m
     # Existing screens remain reachable under their grouped links.
     for path in ("/overview", "/inbox", "/todos", "/facts", "/files", "/chat"):
         assert client.get(path + "?company_id=empty").status_code == 200, path
+
+
+def test_mobile_layout_keeps_navigation_and_tables_inside_viewport() -> None:
+    css = (Path(__file__).resolve().parents[1] / "webapp/static/css/app.css").read_text(encoding="utf-8")
+    assert "@media(max-width:850px)" in css
+    assert ".nav-groups .nav-group{display:none}" in css
+    assert ".sidebar nav.nav-groups" in css and "overflow-x:auto" in css
+    assert "html,body,.app-shell,.main,.page" in css and "max-width:100%" in css
+    assert ".table-wrap" in css and "overflow-x:auto" in css
+    assert "@media(max-width:600px)" in css
+    assert ".kpi-grid{grid-template-columns:minmax(0,1fr)}" in css
