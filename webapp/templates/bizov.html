@@ -2,15 +2,15 @@
 {% block title %}业务概览 · SAM{% endblock %}
 {% block crumb %}业务概览{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>业务概览</h1><p>只展示当前公司已解析资料中的可溯源业务证据。</p></div></div>
+<div class="page-head"><div><h1>业务概览</h1><p>只展示当前公司已解析资料中的业务信息，缺失字段保持为空。</p></div></div>
 {% if overview.insight %}
-<section class="bizov-insight" aria-label="AI提示"><span class="ai-badge">✦ AI</span><span>{{ overview.insight.text }}</span>{% if overview.insight.source_file %}<small>依据：{{ overview.insight.source_file }}{% if overview.insight.source_page %} · 第 {{ overview.insight.source_page }} 页{% endif %}</small>{% endif %}</section>
+<section class="bizov-insight" aria-label="AI提示"><span class="ai-badge">✦ AI</span><span>{{ overview.insight.text }}</span></section>
 {% endif %}
 <section class="card bizov-company-overview" data-dashboard-card="company_overview">
-  <div class="card-head"><h2>公司概述</h2><span class="muted">真实资料 · 可溯源</span></div>
-  {% if overview.positioning %}<h2 class="bizov-positioning">{{ overview.positioning.value }}</h2><small class="bizov-evidence">来源：{{ overview.positioning.source_file }}{% if overview.positioning.source_page %} · 第 {{ overview.positioning.source_page }} 页{% endif %}{% if overview.positioning.source_locator %} · {{ overview.positioning.source_locator }}{% endif %}</small>
-  {% else %}<div class="empty-state">暂无公司定位证据，建议上传公司介绍或 BP。</div>{% endif %}
-  {% if overview.summary %}<p class="bizov-summary">{{ overview.summary.value }}</p><div class="bizov-summary-sources">{% for source in overview.summary.sources %}<small class="bizov-evidence">来源：{{ source.source_file }}{% if source.source_page %} · 第 {{ source.source_page }} 页{% endif %}{% if source.source_locator %} · {{ source.source_locator }}{% endif %}</small>{% endfor %}</div>
+  <div class="card-head"><h2>公司概述</h2><span class="muted">基于已解析资料</span></div>
+  {% if overview.positioning %}<h2 class="bizov-positioning">{{ overview.positioning.value }}</h2>
+  {% else %}<div class="empty-state">暂无公司定位信息，建议上传公司介绍或 BP。</div>{% endif %}
+  {% if overview.summary %}<p class="bizov-summary">{{ overview.summary.value }}</p>
   {% else %}<div class="empty-state">暂无业务简述，建议上传公司介绍或 BP。</div>{% endif %}
 </section>
 <section class="dashboard-settings card section-gap" aria-label="看板卡片设置">
@@ -21,18 +21,17 @@
 {% for card in dashboard.cards if card.id != 'company_overview' %}
   <article class="card bizov-card" data-dashboard-card="{{ card.id }}">
     <div class="kpi-label">{{ card.label }}</div>
-    {% if card.id == 'product_lines' %}<div class="kpi-value">{{ card.value }}<small> 条</small></div><div class="kpi-meta">来自产品矩阵证据</div>
-    {% elif card.id == 'max_trl' %}<div class="kpi-value">TRL {{ card.value }}</div><div class="kpi-meta">{{ card.stage or '暂无阶段证据' }}</div>
+    {% if card.id == 'product_lines' %}<div class="kpi-value">{{ card.value }}<small> 条</small></div><div class="kpi-meta">已识别产品线</div>
+    {% elif card.id == 'max_trl' %}<div class="kpi-value">TRL {{ card.value }}</div><div class="kpi-meta">{{ card.stage or '暂无阶段信息' }}</div>
     {% elif card.id == 'intellectual_property' %}<div class="kpi-value">{{ card.invention.value if card.invention else '—' }} / {{ card.software.value if card.software else '—' }}</div><div class="kpi-meta">发明专利 / 软件著作权</div>
-    {% else %}<div class="kpi-value bizov-fact-value">{{ card.value }}{% if card.unit %}<small> {{ card.unit }}</small>{% endif %}</div><div class="kpi-meta">{{ card.period or '当前有效事实' }}</div>{% endif %}
-    {% for evidence in card.evidence or card.facts or [] %}<small class="bizov-evidence">来源：{{ (evidence.product.source_file if evidence.product is defined else evidence.source_file) }}{% if (evidence.product.source_page if evidence.product is defined else evidence.source_page) %} · 第 {{ (evidence.product.source_page if evidence.product is defined else evidence.source_page) }} 页{% endif %}</small>{% endfor %}
+    {% else %}<div class="kpi-value bizov-fact-value">{{ card.value }}{% if card.unit %}<small> {{ card.unit }}</small>{% endif %}</div><div class="kpi-meta">{{ card.period or '当前信息' }}</div>{% endif %}
   </article>
 {% endfor %}
 </div>
 <section class="card bizov-matrix section-gap">
   <div class="card-head"><h2>产品矩阵</h2><span class="muted">产品、阶段、TRL、目标客户、状态</span></div>
   {% if overview.products %}<div class="table-wrap"><table class="data-table"><thead><tr><th>产品</th><th>阶段</th><th>TRL</th><th>目标客户</th><th>状态</th></tr></thead><tbody>
-  {% for item in overview.products %}<tr><td><b>{{ item.product.value }}</b><small class="bizov-evidence">来源：{{ item.product.source_file }}{% if item.product.source_page %} · 第 {{ item.product.source_page }} 页{% endif %}{% if item.product.source_locator %} · {{ item.product.source_locator }}{% endif %}</small></td><td>{{ item.stage.value if item.stage else '—' }}</td><td>{{ item.trl.value if item.trl else '—' }}</td><td>{{ item.target_customer.value if item.target_customer else '—' }}</td><td>{{ item.status.value if item.status else '—' }}</td></tr>{% endfor %}
-  </tbody></table></div>{% else %}<div class="empty-state">暂无可识别的产品矩阵证据，建议上传公司介绍或 BP。</div>{% endif %}
+  {% for item in overview.products %}<tr><td><b>{{ item.product.value }}</b></td><td>{{ item.stage.value if item.stage else '—' }}</td><td>{{ item.trl.value if item.trl else '—' }}</td><td>{{ item.target_customer.value if item.target_customer else '—' }}</td><td>{{ item.status.value if item.status else '—' }}</td></tr>{% endfor %}
+  </tbody></table></div>{% else %}<div class="empty-state">暂无可识别的产品信息，建议上传公司介绍或 BP。</div>{% endif %}
 </section>
 {% endblock %}

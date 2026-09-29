@@ -69,6 +69,8 @@ def test_dashboard_cards_are_data_driven_and_company_scoped(tmp_path: Path, monk
     assert 'data-dashboard-card="revenue"' in html
     assert 'data-dashboard-card="business_model"' not in html
     assert "工业材料供应商" in html
+    for marker in ("来源：", "可溯源", "依据：", "证据"):
+        assert marker not in html
 
     hidden = client.post("/api/dashboard/cards/revenue/toggle", json={
         "company_id": "acme", "hidden": True,

@@ -106,5 +106,8 @@ def test_business_overview_page_is_empty_before_first_parse(tmp_path: Path, monk
     webapp.init_db()
     response = webapp.app.test_client().get("/bizov?company_id=empty")
     assert response.status_code == 200
-    assert "暂无可识别的产品矩阵证据" in response.get_data(as_text=True)
-    assert "建议上传公司介绍或 BP" in response.get_data(as_text=True)
+    html = response.get_data(as_text=True)
+    assert "暂无可识别的产品信息" in html
+    assert "建议上传公司介绍或 BP" in html
+    for marker in ("来源：", "可溯源", "依据：", "证据"):
+        assert marker not in html
