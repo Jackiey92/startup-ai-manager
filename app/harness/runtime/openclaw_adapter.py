@@ -8,6 +8,7 @@ OpenClaw itself, so the runtime can be swapped later.
 from __future__ import annotations
 
 import atexit
+import base64
 import hashlib
 import json
 import os
@@ -32,6 +33,21 @@ _READONLY_TOOLS = [
 ]
 _GATEWAY_LOCK = Lock()
 _GATEWAY_PROCESSES: dict[str, tuple[subprocess.Popen, object]] = {}
+
+
+def _scope_session_id(company_id: str | None, thread_id: str | None, nonce: str) -> str:
+    """Encode trusted request scope into the OpenClaw session identity.
+
+    The resident Gateway has one process environment and cannot receive a new
+    ``SAM_THREAD_ID`` per request.  The plugin decodes this identity from its
+    trusted session manager context and applies it only to the short-lived
+    bridge child.  Model-supplied tool params never participate.
+    """
+    if company_id is None or thread_id is None:
+        return "oc-" + nonce
+    def part(value: str) -> str:
+        return base64.urlsafe_b64encode(str(value).encode("utf-8")).decode("ascii").rstrip("=")
+    return f"sam-scope.{part(company_id)}.{part(thread_id)}.{nonce}"
 
 
 def _local_parser_env(base: dict[str, str] | None = None) -> dict[str, str]:
@@ -321,7 +337,7 @@ class OpenClawAdapter(RuntimeProvider):
         cache_dir.mkdir(parents=True, exist_ok=True)
         env["XDG_CACHE_HOME"] = str(cache_dir)
         import uuid
-        session_id = "oc-" + uuid.uuid4().hex
+        session_id = _scope_session_id(company_id, thread_id, uuid.uuid4().hex)
         cmd = [self.config.node_bin, str(self.config.openclaw_entry), "agent",
                "--agent", self.config.agent_id, "--session-id", session_id, "--json",
                "--message", message, "--timeout", str(timeout)]

@@ -53,7 +53,7 @@ function errorForModel(error) {
 
 function validate(name, input) {
   if (!TOOL_NAMES.includes(name) || !input || typeof input !== "object" || Array.isArray(input)) throw new Error("bad request");
-  if (Object.prototype.hasOwnProperty.call(input, "company_id") || Object.prototype.hasOwnProperty.call(input, "thread_id")) throw new Error("scope arguments are not accepted");
+  if (["company_id", "thread_id", "project", "scope"].some(key => Object.prototype.hasOwnProperty.call(input, key))) throw new Error("scope arguments are not accepted");
   if (name === "sam_memory_read" && (typeof input.uri !== "string" || !input.uri.startsWith("viking://"))) throw new Error("bad request");
   if (name === "sam_memory_search" && (typeof input.query !== "string" || !input.query.trim())) throw new Error("bad request");
   if (name === "sam_file_get" && !/^[0-9a-f]{64}$/.test(input.file_hash || "")) throw new Error("bad request");
@@ -61,13 +61,54 @@ function validate(name, input) {
   return input;
 }
 
-function bridgeCall(name, input) {
+function decodeScopePart(value) {
+  try {
+    return Buffer.from(value, "base64url").toString("utf8");
+  } catch (_) {
+    return null;
+  }
+}
+
+function scopeFromSessionId(value) {
+  if (typeof value !== "string") return null;
+  const match = /^sam-scope\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)\./.exec(value);
+  if (!match) return null;
+  const companyId = decodeScopePart(match[1]);
+  const threadId = decodeScopePart(match[2]);
+  return companyId && threadId ? { companyId, threadId } : null;
+}
+
+function executionScope(handlerArgs) {
+  for (const value of handlerArgs) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const context = value.sessionManager ? value : (value.context?.sessionManager ? value.context : null);
+    if (!context) continue;
+    const manager = context.sessionManager;
+    let target = null;
+    try { target = manager && typeof manager.getSessionTarget === "function" ? manager.getSessionTarget() : null; } catch (_) {}
+    for (const candidate of [target?.sessionId, target?.sessionKey, context.sessionId, context.sessionKey]) {
+      const scope = scopeFromSessionId(candidate);
+      if (scope) return scope;
+    }
+  }
+  return null;
+}
+
+function bridgeCall(name, input, scope = null) {
   validate(name, input);
   const python = process.env.SAM_TOOL_BRIDGE_PYTHON || process.env.SAM_VENV_PYTHON || "python3";
   const cwd = process.env.SAM_PROJECT_ROOT || process.cwd();
   const timeout = Number(process.env.SAM_TOOL_BRIDGE_TIMEOUT_MS || 15000);
   return new Promise((resolve, reject) => {
-    const child = spawn(python, ["-m", "app.tool_bridge"], { cwd, env: { ...process.env }, stdio: ["pipe", "pipe", "pipe"] });
+    const env = { ...process.env };
+    // Scope comes from the trusted OpenClaw session, never from model params.
+    // The gateway process itself is long-lived, so these values must be set on
+    // each private bridge child rather than relied on as gateway startup env.
+    if (scope?.companyId && scope?.threadId) {
+      env.SAM_COMPANY_ID = scope.companyId;
+      env.SAM_THREAD_ID = scope.threadId;
+    }
+    const child = spawn(python, ["-m", "app.tool_bridge"], { cwd, env, stdio: ["pipe", "pipe", "pipe"] });
     let output = "";
     let errorOutput = "";
     const timer = setTimeout(() => { child.kill(); reject(new Error("tool timeout")); }, timeout);
@@ -122,9 +163,9 @@ function register(api) {
       parameters: schemas[name],
       inputSchema: schemas[name],
       optional: name === "sam_promote",
-      execute: async (...handlerArgs) => bridgeCall(name, extractParams(handlerArgs)),
+      execute: async (...handlerArgs) => bridgeCall(name, extractParams(handlerArgs), executionScope(handlerArgs)),
     });
   }
 }
 
-module.exports = { id: "sam-memory", name: "SAM memory tools", register, _private: { schemas, validate, bridgeCall, extractParams, toToolResult, TOOL_NAMES } };
+module.exports = { id: "sam-memory", name: "SAM memory tools", register, _private: { schemas, validate, bridgeCall, extractParams, toToolResult, executionScope, scopeFromSessionId, TOOL_NAMES } };
