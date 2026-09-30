@@ -26,6 +26,12 @@ def main() -> int:
         StagingStore(db_path=config.main_db), config=config,
         db_path=config.main_db, objects_dir=config.objects_dir,
     )
+    try:
+        adapter.reclaim_gateway_port()
+    except (RuntimeError, OSError) as exc:
+        raise SystemExit(
+            f"OpenClaw Gateway startup blocked on port {config.gateway_port}: {exc}"
+        ) from exc
     adapter.prepare_runtime()
     print(f"openclaw_runtime_prepared state={config.state_dir}")
     return 0

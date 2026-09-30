@@ -48,6 +48,14 @@ def test_environment_can_override_skill_map_and_model_names() -> None:
     assert config.model_api_key_env == "MODEL_KEY"
 
 
+def test_openclaw_gateway_port_has_explicit_env_alias() -> None:
+    config = RuntimeConfig.from_env(
+        project_root=ROOT,
+        env={"SAM_PROFILE": "local", "OPENCLAW_GATEWAY_PORT": "18791"},
+    )
+    assert config.gateway_port == 18791
+
+
 def test_local_memory_enforces_verified_2b_and_supports_search(tmp_path: Path) -> None:
     memory = LocalMemoryProvider(tmp_path)
     with pytest.raises(ValueError):

@@ -48,6 +48,8 @@ def test_agent_scope_is_injected_outside_prompt(tmp_path: Path):
     env = calls[-1][1]["env"]
     assert env["SAM_COMPANY_ID"] == "acme"
     assert env["SAM_THREAD_ID"] == "t1"
+    assert env["OPENCLAW_GATEWAY_PORT"] == "18790"
+    assert env["SAM_OPENCLAW_GATEWAY_PORT"] == "18790"
     assert env["SAM_ALLOW_PROMOTE"] == "0"
     assert "acme" not in calls[-1][0][calls[-1][0].index("--message") + 1]
 
@@ -112,8 +114,10 @@ def test_document_ingest_child_gets_local_proxy_bypass(tmp_path: Path, monkeypat
 def test_gateway_mode_starts_one_daemon_and_reuses_it(tmp_path: Path, monkeypatch):
     import app.harness.runtime.openclaw_adapter as adapter_module
 
+    monkeypatch.setenv("SAM_GUIDE_MODEL_API_KEY", "test-secret")
     agent_calls = []
     gateway_calls = []
+    gateway_envs = []
 
     class FakeProcess:
         pid = 43210
@@ -136,6 +140,7 @@ def test_gateway_mode_starts_one_daemon_and_reuses_it(tmp_path: Path, monkeypatc
 
     def fake_popen(command, **kwargs):
         gateway_calls.append(command)
+        gateway_envs.append(kwargs["env"])
         return FakeProcess()
 
     class ReadySocket:
@@ -165,6 +170,10 @@ def test_gateway_mode_starts_one_daemon_and_reuses_it(tmp_path: Path, monkeypatc
     adapter.run_agent_message("第二问")
     assert len(gateway_calls) == 1
     assert gateway_calls[0][gateway_calls[0].index("--port") + 1] == "18790"
+    assert gateway_envs[0]["OPENCLAW_GATEWAY_PORT"] == "18790"
+    assert gateway_envs[0]["SAM_HARNESS_ROOT"] == str(config.harness_root)
+    assert gateway_envs[0]["SAM_SKILL_ROOT"] == str(config.skill_root)
+    assert gateway_envs[0]["SAM_GUIDE_MODEL_API_KEY"] == "test-secret"
     assert all("--local" not in command for command in agent_calls)
     adapter_module._stop_gateways()
 

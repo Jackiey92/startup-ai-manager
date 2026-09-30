@@ -294,6 +294,8 @@ class OpenClawAdapter(RuntimeProvider):
         env["SAM_PROJECT_ROOT"] = str(self.config.project_root)
         env["SAM_HARNESS_ROOT"] = str(self.config.harness_root)
         env["SAM_SKILL_ROOT"] = str(self.config.skill_root)
+        env["OPENCLAW_GATEWAY_PORT"] = str(self.config.gateway_port)
+        env["SAM_OPENCLAW_GATEWAY_PORT"] = str(self.config.gateway_port)
         env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(self.config.project_root), env.get("PYTHONPATH", "")]))
         env["SAM_TOOL_PLUGIN_DIR"] = str(self.config.tool_plugin_dir)
         env["SAM_TOOL_BRIDGE_PYTHON"] = str(self.config.tool_bridge_python)
@@ -458,6 +460,14 @@ class OpenClawAdapter(RuntimeProvider):
                 time.sleep(0.1)
         _discard_gateway(key, process)
         raise TimeoutError("OpenClaw Gateway startup timed out")
+
+    def reclaim_gateway_port(self) -> None:
+        """Reclaim a previously owned Gateway before the web server starts.
+
+        Only a listener with a matching owner record and OpenClaw command line
+        is stopped; an unrelated process fails closed rather than being killed.
+        """
+        self._reclaim_or_reject_gateway_port()
 
     @property
     def _gateway_owner_path(self) -> Path:
