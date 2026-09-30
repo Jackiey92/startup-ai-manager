@@ -151,7 +151,7 @@ class RuntimeConfig:
                 bridge_python = _path(configured_root, manifest_bridge, venv_bin / "python", follow_symlinks=False)
         else:
             bridge_python = _path(configured_root, configured_bridge or manifest_bridge, venv_bin / "python", follow_symlinks=False)
-        agent_id = str(env.get("SAM_OPENCLAW_AGENT", runtime.get("agent_id", "sam-guide")))
+        agent_id = str(env.get("SAM_OPENCLAW_AGENT", runtime.get("agent_id", "sam-leader")))
         mapping = dict(skills.get("map", {"*": "document-ingest"}))
         raw_mapping = env.get("SAM_SKILL_MAP")
         if raw_mapping:

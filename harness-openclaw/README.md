@@ -13,7 +13,7 @@
 
 解析边界：`OpenClawAdapter.run_parse` 对 `document-ingest` 直接调用
 `skills/document-ingest/scripts/bridge`，这是本地确定性步骤，不要求主 Agent
-拥有 exec 或路径读写权限；解析完成后才由 `sam-guide` 基于 L2 证据生成指引。
+拥有 exec 或路径读写权限；解析完成后才由 `sam-leader`（显示名 SAM Leader）基于 L2 证据生成指引。
 每次启动 Agent 前，适配器会把 `SAM_SKILL_ROOT` 注入 OpenClaw 的
 `skills.load.extraDirs`，确保仓库自有 Skill 被发现。
 

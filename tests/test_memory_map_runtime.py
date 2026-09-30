@@ -76,7 +76,9 @@ def test_runtime_injects_token_plan_provider_into_existing_config(tmp_path: Path
     assert provider["api"] == "openai-completions"
     assert provider["baseUrl"] == "${SAM_GUIDE_MODEL_BASE_URL}"
     assert provider["apiKey"] == "${SAM_GUIDE_MODEL_API_KEY}"
-    assert generated["agents"]["entries"]["sam-guide"]["model"]["primary"] == "token-plan/${SAM_GUIDE_MODEL}"
+    assert generated["agents"]["entries"]["sam-leader"]["model"]["primary"] == "token-plan/${SAM_GUIDE_MODEL}"
+    assert "sam-guide" not in generated["agents"]["entries"]
+    assert generated["agents"]["defaults"]["models"]["token-plan/${SAM_GUIDE_MODEL}"]["params"]["enable_thinking"] is False
     assert "list" not in generated["agents"]
     env = calls[-1][1]["env"]
     assert env["SAM_GUIDE_MODEL_BASE_URL"].endswith("/compatible-mode/v1")

@@ -20,7 +20,7 @@ python -m venv .venv
 ## AI 导入引导（OpenClaw 主 Agent）
 
 `/api/upload` 与 `/api/import-guide` 的导入建议统一通过 OpenClaw 的
-`sam-guide` 主 Agent 编排；Python 网页层不再直连模型端点。主 Agent 会读取
+`sam-leader`（显示名 SAM Leader）主 Agent 编排；Python 网页层不再直连模型端点。主 Agent 会读取
 当前公司作用域内的解析证据与 L2 URI，并以结构化 JSON 返回引导结果。模型端点、
 模型名和密钥由 `sam-manifest.yaml`/profile 与运行环境注入，密钥不得写入仓库、
 `.coze` 或日志。

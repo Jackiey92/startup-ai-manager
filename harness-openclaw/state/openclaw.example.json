@@ -2,11 +2,14 @@
   "agents": {
     "defaults": {
       "model": { "primary": "token-plan/${SAM_GUIDE_MODEL}" },
+      "models": {
+        "token-plan/${SAM_GUIDE_MODEL}": { "params": { "enable_thinking": false } }
+      },
       "workspace": "${SAM_HARNESS_ROOT}"
     },
     "entries": {
-      "sam-guide": {
-        "name": "SAM Guide",
+      "sam-leader": {
+        "name": "SAM Leader",
         "workspace": "${SAM_HARNESS_ROOT}",
         "model": { "primary": "token-plan/${SAM_GUIDE_MODEL}" },
         "tools": {

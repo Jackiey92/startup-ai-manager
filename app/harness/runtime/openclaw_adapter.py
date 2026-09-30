@@ -374,6 +374,7 @@ class OpenClawAdapter(RuntimeProvider):
         self._ensure_plugin_mount()
         _ensure_plugin_defaults(config)
         _normalize_agent_entries(config)
+        _rename_legacy_agent(config)
         _ensure_agent_model_defaults(config)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -591,6 +592,13 @@ def _ensure_agent_model_defaults(config: dict) -> None:
         model = defaults.setdefault("model", {})
         if isinstance(model, dict):
             model.setdefault("primary", "token-plan/${SAM_GUIDE_MODEL}")
+        models = defaults.setdefault("models", {})
+        if isinstance(models, dict):
+            model_defaults = models.setdefault("token-plan/${SAM_GUIDE_MODEL}", {})
+            if isinstance(model_defaults, dict):
+                params = model_defaults.setdefault("params", {})
+                if isinstance(params, dict):
+                    params.setdefault("enable_thinking", False)
     entries = agents.get("list")
     if isinstance(entries, list):
         for entry in entries:
@@ -628,6 +636,23 @@ def _normalize_agent_entries(config: dict) -> None:
             name = str(entry.get("name", "agent")).strip().lower().replace(" ", "-")
             agent_id = name or "agent"
         entries.setdefault(agent_id, entry)
+
+
+def _rename_legacy_agent(config: dict) -> None:
+    """Migrate the old internal id while retaining user customizations."""
+    agents = config.get("agents")
+    if not isinstance(agents, dict):
+        return
+    entries = agents.get("entries")
+    if not isinstance(entries, dict):
+        return
+    legacy = entries.pop("sam-guide", None)
+    leader = entries.setdefault("sam-leader", {})
+    if isinstance(legacy, dict) and isinstance(leader, dict):
+        _merge_missing(leader, legacy)
+        leader["name"] = "SAM Leader"
+
+
 def _ensure_plugin_defaults(config: dict) -> None:
     plugins = config.setdefault("plugins", {})
     entries = plugins.setdefault("entries", {})

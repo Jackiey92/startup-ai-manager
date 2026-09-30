@@ -55,7 +55,7 @@ Startup AI Manager 不是在传统 ERP 上加一个聊天框，也不是又一�
 
 ## 技术底座
 
-- **Agent 运行时**：[OpenClaw](https://github.com/openclaw/openclaw) —— 已实际接入，`sam-guide` 是当前唯一的主 Agent；其插件工具提供受公司/线程范围约束的记忆与对话查询。
+- **Agent 运行时**：[OpenClaw](https://github.com/openclaw/openclaw) —— 已实际接入，`sam-leader`（显示名 SAM Leader）是当前唯一的主 Agent；其插件工具提供受公司/线程范围约束的记忆与对话查询。
 - **模型路由**：开发期默认经 Token Plan 的 OpenAI-compatible 路由使用 `deepseek-v4.1-flash`；模型名、端点与密钥均由环境变量/manifest 注入，可替换，仓库不保存密钥。
 - **记忆底座**：默认使用本地隔离实现；业务层仅依赖 `MemoryProvider`，可切换到 [OpenViking](https://github.com/volcengine/OpenViking) 适配器。当前原型不把一台外部 OV 服务描述为默认正在运行的依赖。
 - **公司事实层**：自研的事实/来源约束与派生结构，保持与记忆实现解耦。
@@ -94,7 +94,7 @@ Startup AI Manager 不是在传统 ERP 上加一个聊天框，也不是又一�
 
 - 上传资料后走**确定性本地解析**：Office 优先 Docling，PDF/图像优先 MinerU；首选引擎不可用时自动回退，并记录 warning。
 - 解析状态如实返回：成功解析并写入原始记忆层为 `parsed` / `stored_2a`；引擎不可用或损坏文件为 `parse_failed`，不会把空 manifest 伪装成成功。
-- `sam-guide` 主 Agent 异步基于已解析的正文片段和 L2 URI 生成导入建议；同一公司的并发请求单飞合并，未完成时返回可轮询的 `202 generating`。
+- `sam-leader` 主 Agent 异步基于已解析的正文片段和 L2 URI 生成导入建议；同一公司的并发请求单飞合并，未完成时返回可轮询的 `202 generating`。
 - 引导保留证据中的原始数值字面量与出处，不由模型自行换算单位；对同名、数值冲突的资料会提示口径待核。
 - 文档解析只产出带 locator 的 L2 证据。候选事实自动晋升/正向写入 verified 2b 仍是待完成事项。
 

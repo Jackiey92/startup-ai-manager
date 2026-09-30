@@ -43,7 +43,7 @@ class ImportGuideService:
     """Build bounded parse evidence and ask the configured OpenClaw agent.
 
     Import guidance deliberately has no model-vendor client.  The configured
-    RuntimeProvider starts the same ``sam-guide`` agent used by the rest of
+    RuntimeProvider starts the same ``sam-leader`` agent used by the rest of
     SAM, so tool scope and model routing remain in one place.
     """
 

@@ -31,9 +31,10 @@ def test_prepare_runtime_mounts_plugin_and_writes_fresh_9_6_shape(tmp_path: Path
     assert "openclaw_runtime_prepared" in result.stdout
     assert (state / "extensions" / "sam-memory").is_symlink()
     config = json.loads((state / "openclaw.json").read_text(encoding="utf-8"))
-    assert "sam-guide" in config["agents"]["entries"]
+    assert "sam-leader" in config["agents"]["entries"]
+    assert config["agents"]["entries"]["sam-leader"]["name"] == "SAM Leader"
     assert "list" not in config["agents"]
-    assert set(config["agents"]["entries"]["sam-guide"]["tools"]["allow"]) == {
+    assert set(config["agents"]["entries"]["sam-leader"]["tools"]["allow"]) == {
         "sam_memory_read",
         "sam_memory_search",
         "sam_file_get",
@@ -43,6 +44,7 @@ def test_prepare_runtime_mounts_plugin_and_writes_fresh_9_6_shape(tmp_path: Path
         "sam_thread_open",
     }
     assert "sam_promote" not in config["tools"]["allow"]
+    assert config["agents"]["defaults"]["models"]["token-plan/${SAM_GUIDE_MODEL}"]["params"]["enable_thinking"] is False
 
 
 def test_standard_startup_fails_before_flask_when_model_key_is_missing(tmp_path: Path) -> None:

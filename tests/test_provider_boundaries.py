@@ -21,6 +21,7 @@ def test_local_profile_injects_paths_and_skills() -> None:
     assert config.main_db == ROOT / "data" / "app.db"
     assert config.skill_for_format["pdf"] == "document-ingest"
     assert config.memory_provider == "local"
+    assert config.agent_id == "sam-leader"
     assert config.gateway_port == 18790
     assert config.gateway_port != 18789
 

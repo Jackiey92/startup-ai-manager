@@ -54,7 +54,7 @@ app.extensions["sam_memory_provider"] = memory_provider(RUNTIME_CONFIG)
 # Both parsing/consolidation and model guidance run outside the Flask request
 # thread.  The upload endpoint only stores the immutable original and creates
 # a durable parse-job row; clients observe actual parser stages via /inbox.
-_GUIDE_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="sam-guide")
+_GUIDE_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="sam-leader")
 _GUIDE_COORDINATOR = GuideJobCoordinator(
     _GUIDE_EXECUTOR, debounce_seconds=float(os.environ.get("SAM_GUIDE_DEBOUNCE", "3"))
 )
