@@ -164,6 +164,7 @@ def test_gateway_mode_starts_one_daemon_and_reuses_it(tmp_path: Path, monkeypatc
     adapter.run_agent_message("第一问")
     adapter.run_agent_message("第二问")
     assert len(gateway_calls) == 1
+    assert gateway_calls[0][gateway_calls[0].index("--port") + 1] == "18790"
     assert all("--local" not in command for command in agent_calls)
     adapter_module._stop_gateways()
 

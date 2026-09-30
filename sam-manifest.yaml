@@ -4,7 +4,9 @@ runtime:
   openclaw: 2026.9.6
   agent_id: sam-guide
   gateway_mode: gateway
-  gateway_port: 18789
+  # Keep the resident OpenClaw gateway separate from the Flask HTTP service.
+  # Flask remains on PORT=18789; the adapter launches the gateway on this port.
+  gateway_port: 18790
 skills:
   root: skills
   map:

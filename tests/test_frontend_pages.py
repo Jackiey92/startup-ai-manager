@@ -5,6 +5,7 @@ import sys
 
 from app.db.database import init_db as init_core_db
 from app.facts import ConsolidationService
+from app.ports import LocalMemoryProvider
 from app.storage import SourceFileStore
 
 
@@ -86,3 +87,29 @@ def test_detect_format_accepts_word_and_powerpoint() -> None:
     assert webapp.detect_format("legacy.ppt") == "ppt"
     assert webapp.detect_format("brief.docx") == "doc"
     assert webapp.detect_format("legacy.doc") == "doc"
+
+
+def test_chat_gateway_failure_is_logged_without_changing_502_contract(tmp_path: Path, monkeypatch, caplog) -> None:
+    db_path = tmp_path / "app.db"
+    init_core_db(db_path)
+    webapp = _webapp_module()
+    monkeypatch.setattr(webapp, "MAIN_DB", db_path)
+    monkeypatch.setattr(webapp, "OBJECTS_DIR", tmp_path / "objects")
+    webapp.app.extensions["sam_memory_provider"] = LocalMemoryProvider(tmp_path / "memory")
+    webapp.init_db()
+
+    class FailingAdapter:
+        def run_agent_message(self, *args, **kwargs):
+            raise RuntimeError("gateway port occupied")
+
+    monkeypatch.setattr(webapp, "runtime_provider", lambda *args, **kwargs: FailingAdapter())
+    client = webapp.app.test_client()
+    with caplog.at_level("ERROR", logger=webapp.app.logger.name):
+        response = client.post(
+            "/api/chat?company_id=empty",
+            json={"message": "请用中文回答"},
+        )
+    assert response.status_code == 502
+    assert response.get_json() == {"error": "agent failed"}
+    assert "api_chat agent execution failed" in caplog.text
+    assert "RuntimeError: gateway port occupied" in caplog.text

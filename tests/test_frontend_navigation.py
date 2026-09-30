@@ -10,7 +10,7 @@ def _webapp_module():
     return load()
 
 
-def test_navigation_has_four_grouped_entries_and_bizov_landing(tmp_path: Path, monkeypatch) -> None:
+def test_navigation_has_five_entries_and_bizov_landing(tmp_path: Path, monkeypatch) -> None:
     db_path = tmp_path / "app.db"
     init_db(db_path)
     webapp = _webapp_module()
@@ -26,8 +26,9 @@ def test_navigation_has_four_grouped_entries_and_bizov_landing(tmp_path: Path, m
     assert page.status_code == 200
     html = page.get_data(as_text=True)
     assert 'class="nav-groups"' in html
-    assert html.count("nav-primary") == 4
+    assert html.count("nav-primary") == 5
     assert "业务概览" in html and "上传中转区" in html
+    assert 'href="/chat"' in html
     assert 'class="nav-primary nav-disabled"' in html
     assert "日程" in html and "云盘" in html and "即将开放" in html
 

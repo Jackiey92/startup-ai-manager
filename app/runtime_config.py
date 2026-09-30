@@ -163,7 +163,10 @@ class RuntimeConfig:
         name_env = str(env.get("SAM_MODEL_NAME_ENV", model.get("model_env", "SAM_GUIDE_MODEL")))
         key_env = str(env.get("SAM_MODEL_API_KEY_ENV", model.get("api_key_env", "SAM_GUIDE_MODEL_API_KEY")))
         gateway_mode = str(env.get("SAM_OPENCLAW_MODE", runtime.get("gateway_mode", "gateway")))
-        gateway_port = int(env.get("SAM_OPENCLAW_GATEWAY_PORT", runtime.get("gateway_port", 18789)))
+        # The web service uses PORT (18789 in the demo).  Never fall back to
+        # that listener for the resident OpenClaw gateway when a custom
+        # manifest omits its explicit port.
+        gateway_port = int(env.get("SAM_OPENCLAW_GATEWAY_PORT", runtime.get("gateway_port", 18790)))
         return cls(
             configured_root, harness, node_bin, entry, venv_bin, state, config_path,
             _path(configured_root, env.get("SAM_DATA_ROOT", paths.get("data_root")), configured_root / "data"),

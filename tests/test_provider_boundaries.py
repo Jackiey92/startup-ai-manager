@@ -21,6 +21,8 @@ def test_local_profile_injects_paths_and_skills() -> None:
     assert config.main_db == ROOT / "data" / "app.db"
     assert config.skill_for_format["pdf"] == "document-ingest"
     assert config.memory_provider == "local"
+    assert config.gateway_port == 18790
+    assert config.gateway_port != 18789
 
 
 def test_cloud_profile_is_a_portable_path_overlay() -> None:

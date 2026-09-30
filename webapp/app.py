@@ -509,9 +509,12 @@ def api_chat():
             question, context_text=context_text, company_id=company_id,
             thread_id=thread_id, allow_promote=False, timeout=600,
         )
-    except (RuntimeError, OSError, subprocess.SubprocessError):
+        data = json.loads(raw)
+    except Exception:
+        # Keep the client-facing contract stable while preserving the actual
+        # gateway/model failure (including malformed envelopes) in Flask logs.
+        app.logger.exception("api_chat agent execution failed")
         return {"error": "agent failed"}, 502
-    data = json.loads(raw)
     answer = ""
     meta = data.get("meta") or {}
     answer = meta.get("finalAssistantVisibleText") or ""
