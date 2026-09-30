@@ -78,20 +78,24 @@ function scopeFromSessionId(value) {
   return companyId && threadId ? { companyId, threadId } : null;
 }
 
-function executionScope(handlerArgs) {
-  for (const value of handlerArgs) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
-    const context = value.sessionManager ? value : (value.context?.sessionManager ? value.context : null);
-    if (!context) continue;
-    const manager = context.sessionManager;
-    let target = null;
-    try { target = manager && typeof manager.getSessionTarget === "function" ? manager.getSessionTarget() : null; } catch (_) {}
-    for (const candidate of [target?.sessionId, target?.sessionKey, context.sessionId, context.sessionKey]) {
-      const scope = scopeFromSessionId(candidate);
-      if (scope) return scope;
-    }
-  }
-  return null;
+// Scope is captured at the trusted before_tool_call boundary and consumed by
+// the immediately following execute(toolCallId, ...). The Gateway process is
+// shared, so this map must never be treated as durable or session-global state.
+const pendingScopes = new Map();
+
+function rememberExecutionScope(event, context) {
+  const toolName = event?.toolName;
+  const callId = context?.toolCallId || event?.toolCallId;
+  if (!TOOL_NAMES.includes(toolName) || typeof callId !== "string" || !callId) return;
+  const scope = scopeFromSessionId(context?.sessionId || context?.sessionKey || event?.sessionId || event?.sessionKey);
+  if (scope) pendingScopes.set(callId, scope);
+}
+
+function takeExecutionScope(callId) {
+  if (typeof callId !== "string") return null;
+  const scope = pendingScopes.get(callId) || null;
+  pendingScopes.delete(callId);
+  return scope;
 }
 
 function bridgeCall(name, input, scope = null) {
@@ -156,6 +160,9 @@ function registerTool(api, spec) {
 }
 
 function register(api) {
+  if (typeof api?.on === "function") {
+    api.on("before_tool_call", (event, context) => rememberExecutionScope(event, context));
+  }
   for (const name of TOOL_NAMES) {
     registerTool(api, {
       name,
@@ -163,9 +170,9 @@ function register(api) {
       parameters: schemas[name],
       inputSchema: schemas[name],
       optional: name === "sam_promote",
-      execute: async (...handlerArgs) => bridgeCall(name, extractParams(handlerArgs), executionScope(handlerArgs)),
+      execute: async (...handlerArgs) => bridgeCall(name, extractParams(handlerArgs), takeExecutionScope(handlerArgs[0])),
     });
   }
 }
 
-module.exports = { id: "sam-memory", name: "SAM memory tools", register, _private: { schemas, validate, bridgeCall, extractParams, toToolResult, executionScope, scopeFromSessionId, TOOL_NAMES } };
+module.exports = { id: "sam-memory", name: "SAM memory tools", register, _private: { schemas, validate, bridgeCall, extractParams, toToolResult, rememberExecutionScope, takeExecutionScope, scopeFromSessionId, TOOL_NAMES } };

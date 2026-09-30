@@ -22,18 +22,23 @@ def _node(expression: str) -> object:
     return json.loads(result.stdout)
 
 
-def test_plugin_derives_scope_from_trusted_session_context_and_rejects_model_scope() -> None:
+def test_plugin_before_hook_derives_scope_once_and_rejects_model_scope() -> None:
     session_id = f"sam-scope.{_part('company-a')}.{_part('thread-7')}.nonce"
     expression = f"""
-const p = require({str(PLUGIN)!r})._private;
-const ctx = {{sessionManager: {{getSessionTarget: () => ({{sessionId: {session_id!r}}})}}}};
-const scope = p.executionScope(['call-1', {{}}, null, ctx]);
+const mod = require({str(PLUGIN)!r});
+const p = mod._private;
+let hook;
+mod.register({{on: (name, fn) => hook = fn, registerTool: () => {{}}}});
+hook({{toolName: 'sam_memory_map', toolCallId: 'call-1'}}, {{sessionId: {session_id!r}, toolCallId: 'call-1'}});
+const scope = p.takeExecutionScope('call-1');
+const consumed = p.takeExecutionScope('call-1');
 let rejected = false;
 try {{ p.validate('sam_memory_map', {{scope: 'company-a'}}); }} catch (_) {{ rejected = true; }}
-console.log(JSON.stringify({{scope, rejected}}));
+console.log(JSON.stringify({{scope, consumed, rejected}}));
 """
     assert _node(expression) == {
         "scope": {"companyId": "company-a", "threadId": "thread-7"},
+        "consumed": None,
         "rejected": True,
     }
 
@@ -46,4 +51,3 @@ const b = p.scopeFromSessionId({('sam-scope.' + _part('b') + '.' + _part('t2') +
 console.log(JSON.stringify({{a, b, different: a.companyId !== b.companyId && a.threadId !== b.threadId}}));
 """
     assert _node(expression)["different"] is True
-
