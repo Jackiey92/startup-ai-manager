@@ -113,3 +113,14 @@ def test_chat_gateway_failure_is_logged_without_changing_502_contract(tmp_path: 
     assert response.get_json() == {"error": "agent failed"}
     assert "api_chat agent execution failed" in caplog.text
     assert "RuntimeError: gateway port occupied" in caplog.text
+
+
+def test_chat_extracts_visible_text_from_openclaw_96_result_envelope() -> None:
+    webapp = _webapp_module()
+    assert webapp._agent_visible_text({
+        "status": "ok",
+        "result": {"payloads": [{"text": "你好，欢迎使用。"}]},
+    }) == "你好，欢迎使用。"
+    assert webapp._agent_visible_text({
+        "meta": {"finalAssistantVisibleText": "旧格式回复"},
+    }) == "旧格式回复"

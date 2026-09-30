@@ -444,6 +444,37 @@ def chat_page():
     return render_template("chat.html", **_page_context(company_id=_company_id()))
 
 
+def _agent_visible_text(data: object) -> str:
+    """Extract visible text from both legacy and 9.6 agent JSON envelopes."""
+    if not isinstance(data, dict):
+        return ""
+    envelopes: list[dict] = [data]
+    nested = data.get("result")
+    if isinstance(nested, dict):
+        envelopes.insert(0, nested)
+    for envelope in envelopes:
+        meta = envelope.get("meta")
+        if isinstance(meta, dict):
+            text = meta.get("finalAssistantVisibleText")
+            if isinstance(text, str) and text.strip():
+                return text
+        for key in ("final", "message", "text"):
+            text = envelope.get(key)
+            if isinstance(text, str) and text.strip():
+                return text
+        payloads = envelope.get("payloads")
+        if isinstance(payloads, list):
+            parts = [
+                item.get("text", "")
+                for item in payloads
+                if isinstance(item, dict) and isinstance(item.get("text"), str)
+            ]
+            answer = "".join(parts).strip()
+            if answer:
+                return answer
+    return ""
+
+
 @app.route("/api/chat", methods=["POST", "OPTIONS"])
 def api_chat():
     if request.method == "OPTIONS":
@@ -515,12 +546,7 @@ def api_chat():
         # gateway/model failure (including malformed envelopes) in Flask logs.
         app.logger.exception("api_chat agent execution failed")
         return {"error": "agent failed"}, 502
-    answer = ""
-    meta = data.get("meta") or {}
-    answer = meta.get("finalAssistantVisibleText") or ""
-    if not answer:
-        for pl in data.get("payloads", []):
-            answer += pl.get("text", "")
+    answer = _agent_visible_text(data)
     try:
         refs = [uri for uri in tools.navigation if uri.startswith("viking://")]
         runtime.append_event(session_id, "conversation", "action", {
