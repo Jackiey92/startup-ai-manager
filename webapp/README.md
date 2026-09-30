@@ -29,7 +29,7 @@ python -m venv .venv
 `SAM_GUIDE_MODEL_API_KEY` 并显式放行模型网络；网页应用本身不读取该密钥。
 
 `scripts/run.sh` 和 `tools/run-sam-isolated.sh` 会注入非敏感的 Token Plan
-默认路由（`SAM_GUIDE_MODEL_BASE_URL`、`SAM_GUIDE_MODEL=deepseek-v4.1-flash`）；密钥仍必须
+默认路由（`SAM_GUIDE_MODEL_BASE_URL`、`SAM_GUIDE_MODEL=qwen3.8-max`）；密钥仍必须
 由启动环境提供。运行时会把 `models.providers.token-plan` 和
 `token-plan/${SAM_GUIDE_MODEL}` 主模型补入缺少它们的旧 OpenClaw 状态文件。
 

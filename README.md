@@ -56,7 +56,7 @@ Startup AI Manager 不是在传统 ERP 上加一个聊天框，也不是又一�
 ## 技术底座
 
 - **Agent 运行时**：[OpenClaw](https://github.com/openclaw/openclaw) —— 已实际接入，`sam-leader`（显示名 SAM Leader）是当前唯一的主 Agent；其插件工具提供受公司/线程范围约束的记忆与对话查询。
-- **模型路由**：开发期默认经 Token Plan 的 OpenAI-compatible 路由使用 `deepseek-v4.1-flash`；模型名、端点与密钥均由环境变量/manifest 注入，可替换，仓库不保存密钥。
+- **模型路由**：开发期默认经 Token Plan 的 OpenAI-compatible 路由使用 `qwen3.8-max`；模型名、端点与密钥均由环境变量/manifest 注入，可替换，仓库不保存密钥。
 - **记忆底座**：默认使用本地隔离实现；业务层仅依赖 `MemoryProvider`，可切换到 [OpenViking](https://github.com/volcengine/OpenViking) 适配器。当前原型不把一台外部 OV 服务描述为默认正在运行的依赖。
 - **公司事实层**：自研的事实/来源约束与派生结构，保持与记忆实现解耦。
 
@@ -108,7 +108,7 @@ python3 -m venv .sam-isolated/venv
 .sam-isolated/venv/bin/pip install -r requirements.txt
 
 export SAM_GUIDE_MODEL_API_KEY='从你的安全环境注入'
-export SAM_GUIDE_MODEL=deepseek-v4.1-flash
+export SAM_GUIDE_MODEL=qwen3.8-max
 export SAM_VENV_BIN="$PWD/.sam-isolated/venv/bin"
 export SAM_TOOL_BRIDGE_PYTHON="$PWD/.sam-isolated/venv/bin/python"
 # 按本机 OpenClaw 安装位置设置 SAM_NODE_BIN 与 SAM_OPENCLAW_ENTRY。

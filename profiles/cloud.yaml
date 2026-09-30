@@ -1,6 +1,8 @@
 profile: cloud
 memory:
   provider: openviking
+model:
+  default_model: qwen3.8-max
 paths:
   project_root: /opt/sam/workspace
   harness_root: /opt/sam/workspace/harness-openclaw

@@ -27,6 +27,6 @@ if [[ -z "${SAM_GUIDE_MODEL_API_KEY:-}" ]]; then
   exit 2
 fi
 export SAM_GUIDE_MODEL_BASE_URL="${SAM_GUIDE_MODEL_BASE_URL:-https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1}"
-export SAM_GUIDE_MODEL="${SAM_GUIDE_MODEL:-deepseek-v4.1-flash}"
+export SAM_GUIDE_MODEL="${SAM_GUIDE_MODEL:-qwen3.8-max}"
 python3 scripts/prepare-openclaw-runtime.py
 exec python3 webapp/app.py

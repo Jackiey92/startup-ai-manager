@@ -1,6 +1,8 @@
 profile: local
 memory:
   provider: local
+model:
+  default_model: qwen3.8-max
 paths:
   project_root: .
   harness_root: harness-openclaw
