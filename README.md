@@ -107,8 +107,8 @@ cd startup-ai-manager
 python3 -m venv .sam-isolated/venv
 .sam-isolated/venv/bin/pip install -r requirements.txt
 
-export SAM_GUIDE_MODEL_API_KEY='从你的安全环境注入'
-export SAM_GUIDE_MODEL=qwen3.8-max
+export SAM_LEADER_MODEL_API_KEY='从你的安全环境注入'
+export SAM_LEADER_MODEL=qwen3.8-max
 export SAM_VENV_BIN="$PWD/.sam-isolated/venv/bin"
 export SAM_TOOL_BRIDGE_PYTHON="$PWD/.sam-isolated/venv/bin/python"
 # 按本机 OpenClaw 安装位置设置 SAM_NODE_BIN 与 SAM_OPENCLAW_ENTRY。

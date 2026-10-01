@@ -324,6 +324,10 @@ class OpenClawAdapter(RuntimeProvider):
         if self.config.model_base_url:
             env[self.config.model_base_url_env] = self.config.model_base_url
         env[self.config.model_name_env] = self.config.model_default
+        if self.config.model_api_key_env not in env and env.get("SAM_GUIDE_MODEL_API_KEY"):
+            # One-release compatibility for callers that still export the
+            # guide-prefixed secret; never log or synthesize the value.
+            env[self.config.model_api_key_env] = env["SAM_GUIDE_MODEL_API_KEY"]
         if self.config.openclaw_mode == "gateway":
             # The Gateway ownership fingerprint includes the effective model
             # configuration, so prepare the child environment first.
@@ -607,10 +611,10 @@ def _ensure_agent_model_defaults(config: dict) -> None:
     if isinstance(defaults, dict):
         model = defaults.setdefault("model", {})
         if isinstance(model, dict):
-            model.setdefault("primary", "token-plan/${SAM_GUIDE_MODEL}")
+            model.setdefault("primary", "token-plan/${SAM_LEADER_MODEL}")
         models = defaults.setdefault("models", {})
         if isinstance(models, dict):
-            model_defaults = models.setdefault("token-plan/${SAM_GUIDE_MODEL}", {})
+            model_defaults = models.setdefault("token-plan/${SAM_LEADER_MODEL}", {})
             if isinstance(model_defaults, dict):
                 params = model_defaults.setdefault("params", {})
                 if isinstance(params, dict):
@@ -621,14 +625,14 @@ def _ensure_agent_model_defaults(config: dict) -> None:
             if isinstance(entry, dict):
                 model = entry.setdefault("model", {})
                 if isinstance(model, dict):
-                    model.setdefault("primary", "token-plan/${SAM_GUIDE_MODEL}")
+                    model.setdefault("primary", "token-plan/${SAM_LEADER_MODEL}")
     entries_map = agents.get("entries")
     if isinstance(entries_map, dict):
         for entry in entries_map.values():
             if isinstance(entry, dict):
                 model = entry.setdefault("model", {})
                 if isinstance(model, dict):
-                    model.setdefault("primary", "token-plan/${SAM_GUIDE_MODEL}")
+                    model.setdefault("primary", "token-plan/${SAM_LEADER_MODEL}")
 
 
 def _normalize_agent_entries(config: dict) -> None:

@@ -1,9 +1,9 @@
 {
   "agents": {
     "defaults": {
-      "model": { "primary": "token-plan/${SAM_GUIDE_MODEL}" },
+      "model": { "primary": "token-plan/${SAM_LEADER_MODEL}" },
       "models": {
-        "token-plan/${SAM_GUIDE_MODEL}": { "params": { "enable_thinking": false } }
+        "token-plan/${SAM_LEADER_MODEL}": { "params": { "enable_thinking": false } }
       },
       "workspace": "${SAM_HARNESS_ROOT}"
     },
@@ -11,7 +11,7 @@
       "sam-leader": {
         "name": "SAM Leader",
         "workspace": "${SAM_HARNESS_ROOT}",
-        "model": { "primary": "token-plan/${SAM_GUIDE_MODEL}" },
+        "model": { "primary": "token-plan/${SAM_LEADER_MODEL}" },
         "tools": {
           "allow": [
             "sam_memory_read",
@@ -53,12 +53,12 @@
     "mode": "merge",
     "providers": {
       "token-plan": {
-        "baseUrl": "${SAM_GUIDE_MODEL_BASE_URL}",
-        "apiKey": "${SAM_GUIDE_MODEL_API_KEY}",
+        "baseUrl": "${SAM_LEADER_MODEL_BASE_URL}",
+        "apiKey": "${SAM_LEADER_MODEL_API_KEY}",
         "api": "openai-completions",
         "models": [
           {
-            "id": "${SAM_GUIDE_MODEL}",
+            "id": "${SAM_LEADER_MODEL}",
             "name": "SAM configured model",
             "contextWindow": 262144,
             "maxTokens": 131072

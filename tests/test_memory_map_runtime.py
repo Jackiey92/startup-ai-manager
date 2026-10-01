@@ -63,7 +63,7 @@ def test_runtime_injects_token_plan_provider_into_existing_config(tmp_path: Path
 
     config = RuntimeConfig.from_env(
         project_root=Path(__file__).parents[1],
-        env={"SAM_PROFILE": "local", "SAM_GUIDE_MODEL": "qwen3.8-max"},
+        env={"SAM_PROFILE": "local", "SAM_LEADER_MODEL": "qwen3.8-max"},
     )
     config_path = tmp_path / "e2e-state" / "openclaw.json"
     config_path.parent.mkdir(parents=True)
@@ -74,15 +74,15 @@ def test_runtime_injects_token_plan_provider_into_existing_config(tmp_path: Path
     generated = json.loads(config_path.read_text(encoding="utf-8"))
     provider = generated["models"]["providers"]["token-plan"]
     assert provider["api"] == "openai-completions"
-    assert provider["baseUrl"] == "${SAM_GUIDE_MODEL_BASE_URL}"
-    assert provider["apiKey"] == "${SAM_GUIDE_MODEL_API_KEY}"
-    assert generated["agents"]["entries"]["sam-leader"]["model"]["primary"] == "token-plan/${SAM_GUIDE_MODEL}"
+    assert provider["baseUrl"] == "${SAM_LEADER_MODEL_BASE_URL}"
+    assert provider["apiKey"] == "${SAM_LEADER_MODEL_API_KEY}"
+    assert generated["agents"]["entries"]["sam-leader"]["model"]["primary"] == "token-plan/${SAM_LEADER_MODEL}"
     assert "sam-guide" not in generated["agents"]["entries"]
-    assert generated["agents"]["defaults"]["models"]["token-plan/${SAM_GUIDE_MODEL}"]["params"]["enable_thinking"] is False
+    assert generated["agents"]["defaults"]["models"]["token-plan/${SAM_LEADER_MODEL}"]["params"]["enable_thinking"] is False
     assert "list" not in generated["agents"]
     env = calls[-1][1]["env"]
-    assert env["SAM_GUIDE_MODEL_BASE_URL"].endswith("/compatible-mode/v1")
-    assert env["SAM_GUIDE_MODEL"] == "qwen3.8-max"
+    assert env["SAM_LEADER_MODEL_BASE_URL"].endswith("/compatible-mode/v1")
+    assert env["SAM_LEADER_MODEL"] == "qwen3.8-max"
 
 
 def test_document_ingest_child_gets_local_proxy_bypass(tmp_path: Path, monkeypatch):
@@ -116,7 +116,7 @@ def test_document_ingest_child_gets_local_proxy_bypass(tmp_path: Path, monkeypat
 def test_gateway_mode_starts_one_daemon_and_reuses_it(tmp_path: Path, monkeypatch):
     import app.harness.runtime.openclaw_adapter as adapter_module
 
-    monkeypatch.setenv("SAM_GUIDE_MODEL_API_KEY", "test-secret")
+    monkeypatch.setenv("SAM_LEADER_MODEL_API_KEY", "test-secret")
     agent_calls = []
     gateway_calls = []
     gateway_envs = []
@@ -175,7 +175,7 @@ def test_gateway_mode_starts_one_daemon_and_reuses_it(tmp_path: Path, monkeypatc
     assert gateway_envs[0]["OPENCLAW_GATEWAY_PORT"] == "18790"
     assert gateway_envs[0]["SAM_HARNESS_ROOT"] == str(config.harness_root)
     assert gateway_envs[0]["SAM_SKILL_ROOT"] == str(config.skill_root)
-    assert gateway_envs[0]["SAM_GUIDE_MODEL_API_KEY"] == "test-secret"
+    assert gateway_envs[0]["SAM_LEADER_MODEL_API_KEY"] == "test-secret"
     assert all("--local" not in command for command in agent_calls)
     adapter_module._stop_gateways()
 
@@ -208,8 +208,8 @@ def test_gateway_fingerprint_binds_state_port_and_effective_model(tmp_path: Path
     config.state_dir.mkdir(parents=True)
     config.config_path.write_text("{}", encoding="utf-8")
     adapter = OpenClawAdapter(StagingStore(db_path=tmp_path / "missing.db"), config=config)
-    first = adapter._gateway_fingerprint({"SAM_GUIDE_MODEL": "deepseek-v4.1-flash"})
-    second = adapter._gateway_fingerprint({"SAM_GUIDE_MODEL": "another-model"})
+    first = adapter._gateway_fingerprint({"SAM_LEADER_MODEL": "deepseek-v4.1-flash"})
+    second = adapter._gateway_fingerprint({"SAM_LEADER_MODEL": "another-model"})
     assert first != second
 
 

@@ -34,7 +34,7 @@ memory:
 model:
   api: openai-completions
   base_url: https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1
-  base_url_env: SAM_GUIDE_MODEL_BASE_URL
-  model_env: SAM_GUIDE_MODEL
-  api_key_env: SAM_GUIDE_MODEL_API_KEY
+  base_url_env: SAM_LEADER_MODEL_BASE_URL
+  model_env: SAM_LEADER_MODEL
+  api_key_env: SAM_LEADER_MODEL_API_KEY
   default_model: qwen3.8-max

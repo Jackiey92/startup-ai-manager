@@ -9,8 +9,8 @@ ALLOW_MODEL_NETWORK=0
 
 # These non-secret values are inherited by the isolated child. The API key is
 # intentionally not synthesized or printed; callers provide it in the env.
-export SAM_GUIDE_MODEL_BASE_URL="${SAM_GUIDE_MODEL_BASE_URL:-https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1}"
-export SAM_GUIDE_MODEL="${SAM_GUIDE_MODEL:-qwen3.8-max}"
+export SAM_LEADER_MODEL_BASE_URL="${SAM_LEADER_MODEL_BASE_URL:-${SAM_GUIDE_MODEL_BASE_URL:-https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1}}"
+export SAM_LEADER_MODEL="${SAM_LEADER_MODEL:-${SAM_GUIDE_MODEL:-qwen3.8-max}}"
 
 for arg in "$@"; do
   case "$arg" in

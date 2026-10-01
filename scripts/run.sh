@@ -18,15 +18,19 @@ export SAM_SKILL_ROOT="${SAM_SKILL_ROOT:-$PROJECT_DIR/skills}"
 export SAM_TOOL_PLUGIN_DIR="${SAM_TOOL_PLUGIN_DIR:-$PROJECT_DIR/harness-openclaw/plugins/sam-memory}"
 # Token Plan routing is declarative; the API key is never given a default and
 # must come from the existing secret environment/file, never from source.
-if [[ -z "${SAM_GUIDE_MODEL_API_KEY:-}" && -r "${HOME}/.bl_tokenplan_key" ]]; then
-  SAM_GUIDE_MODEL_API_KEY="$(< "${HOME}/.bl_tokenplan_key")"
-  export SAM_GUIDE_MODEL_API_KEY
+if [[ -z "${SAM_LEADER_MODEL_API_KEY:-}" && -n "${SAM_GUIDE_MODEL_API_KEY:-}" ]]; then
+  SAM_LEADER_MODEL_API_KEY="$SAM_GUIDE_MODEL_API_KEY"
 fi
-if [[ -z "${SAM_GUIDE_MODEL_API_KEY:-}" ]]; then
-  echo "Missing SAM_GUIDE_MODEL_API_KEY; set it in the secret environment or ${HOME}/.bl_tokenplan_key" >&2
+if [[ -z "${SAM_LEADER_MODEL_API_KEY:-}" && -r "${HOME}/.bl_tokenplan_key" ]]; then
+  SAM_LEADER_MODEL_API_KEY="$(< "${HOME}/.bl_tokenplan_key")"
+  export SAM_LEADER_MODEL_API_KEY
+fi
+if [[ -z "${SAM_LEADER_MODEL_API_KEY:-}" ]]; then
+  echo "Missing SAM_LEADER_MODEL_API_KEY; set it in the secret environment or ${HOME}/.bl_tokenplan_key" >&2
   exit 2
 fi
-export SAM_GUIDE_MODEL_BASE_URL="${SAM_GUIDE_MODEL_BASE_URL:-https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1}"
-export SAM_GUIDE_MODEL="${SAM_GUIDE_MODEL:-qwen3.8-max}"
+export SAM_LEADER_MODEL_API_KEY
+export SAM_LEADER_MODEL_BASE_URL="${SAM_LEADER_MODEL_BASE_URL:-${SAM_GUIDE_MODEL_BASE_URL:-https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1}}"
+export SAM_LEADER_MODEL="${SAM_LEADER_MODEL:-${SAM_GUIDE_MODEL:-qwen3.8-max}}"
 python3 scripts/prepare-openclaw-runtime.py
 exec python3 webapp/app.py

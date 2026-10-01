@@ -159,9 +159,19 @@ class RuntimeConfig:
             if not isinstance(loaded, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in loaded.items()):
                 raise ValueError("SAM_SKILL_MAP must be a JSON object of format to skill names")
             mapping = loaded
-        base_url_env = str(env.get("SAM_MODEL_BASE_URL_ENV", model.get("base_url_env", "SAM_GUIDE_MODEL_BASE_URL")))
-        name_env = str(env.get("SAM_MODEL_NAME_ENV", model.get("model_env", "SAM_GUIDE_MODEL")))
-        key_env = str(env.get("SAM_MODEL_API_KEY_ENV", model.get("api_key_env", "SAM_GUIDE_MODEL_API_KEY")))
+        base_url_env = str(env.get("SAM_MODEL_BASE_URL_ENV", model.get("base_url_env", "SAM_LEADER_MODEL_BASE_URL")))
+        name_env = str(env.get("SAM_MODEL_NAME_ENV", model.get("model_env", "SAM_LEADER_MODEL")))
+        key_env = str(env.get("SAM_MODEL_API_KEY_ENV", model.get("api_key_env", "SAM_LEADER_MODEL_API_KEY")))
+        # Keep older deployments working while making the leader-scoped names
+        # canonical. A new variable always wins over its legacy counterpart.
+        legacy_envs = {
+            "SAM_LEADER_MODEL_BASE_URL": "SAM_GUIDE_MODEL_BASE_URL",
+            "SAM_LEADER_MODEL": "SAM_GUIDE_MODEL",
+            "SAM_LEADER_MODEL_API_KEY": "SAM_GUIDE_MODEL_API_KEY",
+        }
+        for current, legacy in legacy_envs.items():
+            if not env.get(current) and env.get(legacy):
+                env[current] = env[legacy]
         gateway_mode = str(env.get("SAM_OPENCLAW_MODE", runtime.get("gateway_mode", "gateway")))
         # The web service uses PORT (18789 in the demo).  Never fall back to
         # that listener for the resident OpenClaw gateway when a custom

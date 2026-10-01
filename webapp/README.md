@@ -26,12 +26,12 @@ python -m venv .venv
 `.coze` 或日志。
 
 开发期如需 Token Plan 验收，由 OpenClaw 运行环境注入
-`SAM_GUIDE_MODEL_API_KEY` 并显式放行模型网络；网页应用本身不读取该密钥。
+`SAM_LEADER_MODEL_API_KEY` 并显式放行模型网络；网页应用本身不读取该密钥。
 
 `scripts/run.sh` 和 `tools/run-sam-isolated.sh` 会注入非敏感的 Token Plan
-默认路由（`SAM_GUIDE_MODEL_BASE_URL`、`SAM_GUIDE_MODEL=qwen3.8-max`）；密钥仍必须
+默认路由（`SAM_LEADER_MODEL_BASE_URL`、`SAM_LEADER_MODEL=qwen3.8-max`）；密钥仍必须
 由启动环境提供。运行时会把 `models.providers.token-plan` 和
-`token-plan/${SAM_GUIDE_MODEL}` 主模型补入缺少它们的旧 OpenClaw 状态文件。
+`token-plan/${SAM_LEADER_MODEL}` 主模型补入缺少它们的旧 OpenClaw 状态文件。
 
 上传接口只等待本地解析和 2a 落库，成功后返回 `guide_status=queued`；导入指引在
 每公司单飞后台任务中生成。`/api/import-guide` 会复用正在生成的结果：完成时返回
@@ -45,7 +45,7 @@ python -m venv .venv
 默认 bwrap 运行使用 `--unshare-net`。只有经明确授权的模型调用验收才使用：
 
 ```bash
-SAM_GUIDE_MODEL_API_KEY="$(< ~/.bl_tokenplan_key)" \
+SAM_LEADER_MODEL_API_KEY="$(< ~/.bl_tokenplan_key)" \
   ./tools/run-sam-isolated.sh --allow-model-network
 ```
 
