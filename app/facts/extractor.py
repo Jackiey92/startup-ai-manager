@@ -20,8 +20,38 @@ class MetricSpec:
 METRICS: tuple[MetricSpec, ...] = (
     MetricSpec("营业收入", ("营业收入", "营收", "销售收入")),
     MetricSpec("净利润", ("净利润", "利润总额")),
-    MetricSpec("毛利率", ("毛利率",)),
+    MetricSpec("总资产", ("资产总额", "总资产")),
+    MetricSpec("净资产", ("所有者权益合计", "股东权益合计", "净资产")),
+    MetricSpec("毛利率", ("毛利率", "销售毛利率", "综合毛利率")),
+    MetricSpec("净利率", ("净利率", "销售净利率", "净利润率")),
+    MetricSpec("客户", ("前五大客户", "主要客户", "客户数量", "客户数", "客户")),
+    MetricSpec("供应商", ("前五大供应商", "主要供应商", "供应商数量", "供应商数", "供应商")),
+    MetricSpec("在手订单", ("在手订单金额", "在手订单", "现有订单")),
+    MetricSpec("新签订单", ("新签订单金额", "新签订单", "新增订单")),
+    MetricSpec("订单金额", ("订单总额", "订单金额", "订单额")),
+    # Keep related labels together for review; matching remains deterministic
+    # and chooses the longest matching alias when labels overlap.
+    MetricSpec("研发人员占比", ("研发人员占比", "研发人员比例", "研发人员占员工比例")),
+    MetricSpec("研发人员", ("研发人员数量", "研发人员人数", "研发人员数", "研发人员")),
+    MetricSpec("员工人数", ("员工人数", "员工总数", "员工数量", "人员总数", "人员数量", "在职员工")),
+    MetricSpec("重大合同", ("重大合同金额", "重大合同")),
+    MetricSpec("中标", ("中标金额", "中标项目数", "中标数量", "中标")),
+    MetricSpec("合同", ("合同金额", "合同总额", "合同数量", "合同")),
+    MetricSpec("产能", ("设计产能", "现有产能", "年产能", "产能")),
+    MetricSpec("产量", ("生产量", "实际产量", "年产量", "产量")),
+    MetricSpec("销量", ("销售量", "销售数量", "年销量", "销量")),
+    MetricSpec("研发费用率", ("研发费用率", "研发费率", "研发投入占比")),
+    MetricSpec("研发投入", ("研发投入金额", "研发投入", "研发支出")),
+    MetricSpec("研发费用", ("研发费用", "研发经费")),
+    MetricSpec("发明专利", ("发明专利数量", "发明专利数", "发明专利")),
+    MetricSpec("软件著作权", ("软件著作权数量", "软件著作权数", "计算机软件著作权", "软著数量")),
+    MetricSpec("专利", ("专利数量", "专利总数", "授权专利", "专利")),
+    MetricSpec("重大诉讼", ("重大诉讼案件数", "重大诉讼金额", "重大诉讼", "重大仲裁"), critical=True),
+    MetricSpec("对外担保", ("对外担保余额", "对外担保金额", "对外担保"), critical=True),
+    MetricSpec("抵押质押", ("抵押质押金额", "抵押及质押", "抵押担保", "质押担保", "抵押质押"), critical=True),
+    MetricSpec("风险", ("重大风险", "风险事项", "风险"), critical=True),
     MetricSpec("注册资本", ("注册资本",), critical=True),
+    MetricSpec("实收资本", ("实收资本", "实缴资本"), critical=True),
     MetricSpec("融资金额", ("融资金额", "融资额", "融资"), critical=True),
     MetricSpec("估值", ("估值", "投后估值", "投前估值"), critical=True),
     MetricSpec("股权比例", ("股权比例", "持股比例", "股份比例"), critical=True),
@@ -53,10 +83,15 @@ def _match_metric(label: Any) -> MetricSpec | None:
     text = str(label).strip()
     if not text:
         return None
-    for spec in METRICS:
-        if any(alias in text for alias in spec.aliases):
-            return spec
-    return None
+    # Prefer the most specific alias.  This keeps additive aliases such as
+    # ``净利润率`` from being captured by the pre-existing ``净利润`` prefix.
+    matches = [
+        (len(alias), spec)
+        for spec in METRICS
+        for alias in spec.aliases
+        if alias in text
+    ]
+    return max(matches, key=lambda item: item[0])[1] if matches else None
 
 
 def _value(value: Any) -> tuple[str, str, str | None] | None:
@@ -128,8 +163,21 @@ def _from_row(*, company_id: str, period: str, file_hash: str, page_no: int | No
     return results
 
 
+# Free text remains deliberately numeric-only.  Structured table cells may
+# safely carry names or descriptions (for example a major-customer company
+# name or a risk item), but extracting those unbounded values from prose would
+# swallow surrounding sentences.  Customer/supplier/contract/patent/risk
+# prose is therefore supported only when a numeric amount/count/rate follows
+# one of these explicit labels; descriptive values require a table row.
+_TEXT_LABELS = tuple(dict.fromkeys(
+    alias for spec in METRICS for alias in spec.aliases
+    if alias not in {"客户", "主要客户", "前五大客户", "供应商", "主要供应商", "前五大供应商",
+                     "合同", "重大合同", "中标", "专利", "发明专利", "软件著作权",
+                     "风险", "重大风险", "风险事项", "重大诉讼", "重大仲裁",
+                     "对外担保", "抵押及质押", "抵押担保", "质押担保", "抵押质押"}
+))
 _TEXT_VALUE = re.compile(
-    r"(?P<label>营业收入|营收|销售收入|净利润|利润总额|毛利率|注册资本|融资金额|融资额|融资|估值|投后估值|投前估值|股权比例|持股比例|股份比例|大额资金|大额付款|大额支出)"
+    rf"(?P<label>{'|'.join(map(re.escape, sorted(_TEXT_LABELS, key=len, reverse=True)))})"
     r"\s*(?:为|：|:)?\s*(?P<value>-?[0-9][0-9,]*(?:\.[0-9]+)?%?)"
 )
 
