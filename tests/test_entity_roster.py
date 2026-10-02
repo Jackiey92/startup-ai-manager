@@ -91,3 +91,20 @@ def test_declared_self_is_active_and_has_matching_priority(tmp_path: Path):
     assert repeated["id"] == declared["id"]
     with connect(db) as conn:
         assert conn.execute("SELECT COUNT(*) FROM entity_roster WHERE origin='declared'").fetchone()[0] == 1
+
+
+def test_vertical_key_value_table_header_is_scanned_as_data_not_field_name():
+    manifest = _manifest("b" * 64)
+    manifest["pages"][0]["tables"] = [{
+        "headers": ["公司名称", "未蓝科技股份有限公司"],
+        "rows": [["曾用名", "未蓝科技"], ["统一社会信用代码", "91330000987654321A"], ["股票代码", "688002"]],
+        "source_loc": {"page_no": 1, "locator": "docling:table/0@#/tables/0"},
+    }]
+    candidate = extract_roster_candidate(manifest, company_id="acme")
+    assert candidate is not None
+    assert candidate.entity_name == "未蓝科技股份有限公司"
+    assert candidate.aliases == ("未蓝科技",)
+    assert candidate.credit_code == "91330000987654321A"
+    assert candidate.stock_code == "688002"
+    assert candidate.source_page == 1
+    assert "row=0" in (candidate.source_span or "")

@@ -86,6 +86,21 @@ def _iter_cells(manifest: dict[str, Any]) -> Iterable[tuple[str, str, int | None
             if not isinstance(table, dict):
                 continue
             location = table.get("source_loc")
+            headers = table.get("headers")
+            # Some office parsers classify the first key/value row as the
+            # header.  Treat it as data only when the left cell is a known
+            # field label and the right cell is not another field label; a
+            # normal horizontal header such as 公司名称/统一社会信用代码 is
+            # intentionally left alone.
+            vertical_headers = (
+                isinstance(headers, list) and len(headers) == 2
+                and _field(str(headers[0])) is not None
+                and _field(str(headers[1])) is None
+            )
+            if vertical_headers:
+                yield str(headers[0]).strip(), str(headers[1]).strip(), page_no, _source_span(
+                    location, table_index=table_index, row_index=0, column=0,
+                )
             for row_index, row in enumerate(table.get("rows", []) or [], start=1):
                 if isinstance(row, dict):
                     for column, (label, value) in enumerate(row.items()):
@@ -97,8 +112,7 @@ def _iter_cells(manifest: dict[str, Any]) -> Iterable[tuple[str, str, int | None
                     continue
                 if not isinstance(row, list):
                     continue
-                headers = table.get("headers")
-                if isinstance(headers, list) and len(headers) == len(row):
+                if isinstance(headers, list) and len(headers) == len(row) and not vertical_headers:
                     for column, (label, value) in enumerate(zip(headers, row)):
                         label_text, value_text = str(label).strip(), str(value).strip()
                         if label_text and value_text:
