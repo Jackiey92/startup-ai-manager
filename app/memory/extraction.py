@@ -14,6 +14,7 @@ import json
 from typing import Any, Iterable
 
 from ..ports import MemoryProvider
+from ..source_map import render_mapping
 
 
 MEMORY_ROOT = "viking://user/default/memories/projects/10_startup_ai_manager"
@@ -49,25 +50,7 @@ class ExtractionMemoryService:
 
     @staticmethod
     def _markdown(manifest: dict[str, Any]) -> str:
-        lines = [f"# {manifest.get('filename', 'document')}", ""]
-        lines.append(f"- source_id: `{manifest.get('source_id', '')}`")
-        lines.append(f"- file_hash: `{manifest.get('file_hash', '')}`")
-        lines.append(f"- format: `{manifest.get('format', '')}`")
-        lines.append(f"- raw_bytes_external: `{manifest.get('parse_summary', {}).get('raw_bytes_external', False)}`")
-        lines.append(f"- full_text_external: `{manifest.get('parse_summary', {}).get('full_text_external', False)}`")
-        lines.append("")
-        for page in manifest.get("pages", []):
-            lines.append(f"## Page {page.get('page_no', '?')}")
-            for item in page.get("text_items", []):
-                loc = item.get("source_loc", {})
-                lines.append(f"- {item.get('text', '')} _(source: {loc.get('locator', '')})_")
-            for table in page.get("tables", []):
-                lines.append(f"- table rows: {len(table.get('rows', []))}; source: {table.get('source_loc', {}).get('locator', '')}")
-        if manifest.get("images"):
-            lines.extend(["", "## Embedded images"])
-            for image in manifest["images"]:
-                lines.append(f"- `{image.get('image_id')}`: `{image.get('local_path')}` _(source: {image.get('source_loc', {}).get('locator', '')})_")
-        return "\n".join(lines) + "\n"
+        return render_mapping(manifest)
 
     def ingest(self, company_id: str, manifest: dict[str, Any], *, document_markdown: str | None = None) -> ExtractionRecord:
         required = ("source_id", "filename", "format", "file_hash", "pages", "parse_summary")
@@ -79,12 +62,12 @@ class ExtractionMemoryService:
         source_id = _segment(manifest["source_id"])
         source_root = self._source_root(company_id, source_id)
         l2_manifest_uri = f"{source_root}/L2/manifest.json"
-        l2_document_uri = f"{source_root}/L2/extraction.md"
+        l2_document_uri = f"{source_root}/L2/mapping.md"
         l1_uri = f"{source_root}/L1/overview.md"
         l0_uri = f"{source_root}/L0/abstract.md"
         manifest_content = json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
         self.memory.put(l2_manifest_uri, manifest_content, metadata={"layer": "2a", "level": "L2", "source_id": source_id})
-        self.memory.put(l2_document_uri, document_markdown or self._markdown(manifest), metadata={"layer": "2a", "level": "L2", "source_id": source_id})
+        self.memory.put(l2_document_uri, document_markdown or self._markdown(manifest), metadata={"layer": "2a", "level": "L2", "kind": "mapping", "source_id": source_id})
         references = f"- L2 manifest: `{l2_manifest_uri}`\n- L2 extraction: `{l2_document_uri}`\n"
         l1 = f"# L1 Overview\n\nGenerated: {_now()}\n\nThis overview contains references only; facts remain in L2 until verified.\n\n{references}"
         l0 = f"# L0 Abstract\n\nGenerated: {_now()}\n\nSource: `{l1_uri}`\n\nEvidence remains at:\n{references}"

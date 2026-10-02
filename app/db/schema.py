@@ -133,6 +133,22 @@ CREATE INDEX IF NOT EXISTS idx_parse_jobs_company_status
 CREATE INDEX IF NOT EXISTS idx_parse_jobs_status
     ON parse_jobs(status, created_at);
 
+-- 2A controlled corrections. Original blobs and old rows remain immutable;
+-- active is the current projection and superseded rows are audit history.
+CREATE TABLE IF NOT EXISTS source_edits (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    file_hash       TEXT NOT NULL REFERENCES source_files(file_hash),
+    company_id      TEXT NOT NULL,
+    operation       TEXT NOT NULL CHECK(operation IN ('replace', 'remove')),
+    target_locator  TEXT NOT NULL,
+    replacement_text TEXT,
+    status          TEXT NOT NULL DEFAULT 'active',
+    supersedes_id   INTEGER REFERENCES source_edits(id),
+    created_at      TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_source_edits_current
+    ON source_edits(file_hash, company_id, target_locator, status, id);
+
 -- Company-scoped dashboard visibility only; this never deletes source data.
 CREATE TABLE IF NOT EXISTS dashboard_preferences (
     company_id   TEXT NOT NULL,
