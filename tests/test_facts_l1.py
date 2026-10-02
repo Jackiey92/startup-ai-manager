@@ -95,3 +95,22 @@ def test_income_alias_and_chinese_currency_units_are_literal_and_numeric():
     assert one("实现收入0.92亿元") == ("营业收入", "0.92", "亿元", "number")
     assert one("营业收入3.26亿元") == ("营业收入", "3.26", "亿元", "number")
     assert one("收入51000.00万元") == ("营业收入", "51000.00", "万元", "number")
+
+
+def test_subsidiary_self_blocks_use_subject_dimension_without_false_conflict(tmp_path: Path):
+    db, parent_file, parent_bridge = _pipeline(tmp_path, ["主公司有限公司营业收入3.26亿元"])
+    store = SourceFileStore(tmp_path / "objects", db)
+    child = store.put_bytes(b"child", original_name="子公司2024.xlsx")
+    StagingStore(db).save_manifest(_manifest(child.file_hash, [
+        "主公司有限公司全资子公司常州未蓝新能源有限公司收入0.92亿元",
+    ]))
+    child_bridge = EntityBridgeService(db).run(company_id="acme", file_hash=child.file_hash)
+    service = FactExtractionService(db)
+    service.extract(company_id="acme", file_hash=parent_file.file_hash, bridge_run_id=parent_bridge["id"])
+    child_run = service.extract(company_id="acme", file_hash=child.file_hash, bridge_run_id=child_bridge["id"])
+    assert child_run["todo_count"] == 0
+    facts = service.list_facts(company_id="acme")
+    assert {(fact["entity"], fact["attribute"], fact["value"], fact["unit"]) for fact in facts} == {
+        ("主公司有限公司", "营业收入", "3.26", "亿元"),
+        ("常州未蓝新能源有限公司", "营业收入", "0.92", "亿元"),
+    }

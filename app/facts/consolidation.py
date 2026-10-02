@@ -95,21 +95,21 @@ class ConsolidationService:
         return conn.execute(
             """
             SELECT * FROM facts
-            WHERE company_id=? AND attribute=? AND period=?
+            WHERE company_id=? AND entity=? AND attribute=? AND period=?
               AND superseded_by IS NULL AND valid_to IS NULL
             ORDER BY id DESC LIMIT 1
             """,
-            candidate.coordinate,
+            candidate.entity_coordinate,
         ).fetchone()
 
     def _open_todo(self, conn, candidate: ExtractedFact, *, existing, reason: str) -> int | None:
         duplicate = conn.execute(
             """
-            SELECT id FROM todos WHERE company_id=? AND metric=? AND period=?
+            SELECT id FROM todos WHERE company_id=? AND entity=? AND metric=? AND period=?
               AND candidate_value=? AND source_file=? AND reason=? AND status='open'
             LIMIT 1
             """,
-            (candidate.company_id, candidate.metric, candidate.period, candidate.value,
+            (candidate.company_id, candidate.entity or candidate.company_id, candidate.metric, candidate.period, candidate.value,
              candidate.source_file, reason),
         ).fetchone()
         if duplicate is not None:
@@ -118,12 +118,12 @@ class ConsolidationService:
         suggestion = self._suggest(candidate, existing_value, reason)
         cur = conn.execute(
             """
-            INSERT INTO todos(company_id,metric,period,candidate_value,candidate_value_type,
+            INSERT INTO todos(company_id,entity,metric,period,candidate_value,candidate_value_type,
                 candidate_unit,existing_value,reason,suggestion,status,related_fact_id,
                 source_file,source_page,source_span,created_at)
-            VALUES (?,?,?,?,?,?,?,?,?,'open',?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?,'open',?,?,?,?,?)
             """,
-            (candidate.company_id, candidate.metric, candidate.period, candidate.value,
+            (candidate.company_id, candidate.entity or candidate.company_id, candidate.metric, candidate.period, candidate.value,
              candidate.value_type, candidate.unit, existing_value, reason, suggestion,
              int(existing["id"]) if existing is not None else None, candidate.source_file,
              candidate.source_page, candidate.source_span, _now()),
@@ -150,7 +150,7 @@ class ConsolidationService:
                 source_file,source_page,source_span,valid_from,confidence,status,confirm_mode,created_at)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
-            (candidate.company_id, candidate.company_id, candidate.metric, candidate.period,
+            (candidate.company_id, candidate.entity or candidate.company_id, candidate.metric, candidate.period,
              candidate.value, candidate.value_type, candidate.unit, candidate.source_file,
              candidate.source_page, candidate.source_span, _now(), candidate.confidence,
              "verified", confirm_mode, _now()),
@@ -212,6 +212,7 @@ class ConsolidationService:
                         value=value, value_type=target["candidate_value_type"], unit=target["candidate_unit"],
                         source_file=target["source_file"], source_page=target["source_page"],
                         source_span=target["source_span"], confidence=1.0, critical=False,
+                        entity=target["entity"] or target["company_id"],
                     )
                     new_fact_id = self._insert_fact(conn, candidate, confirm_mode="manual")
                     if target["related_fact_id"] is not None:

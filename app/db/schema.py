@@ -88,6 +88,7 @@ CREATE INDEX IF NOT EXISTS idx_facts_coordinate
 CREATE TABLE IF NOT EXISTS todos (
     id                   INTEGER PRIMARY KEY AUTOINCREMENT,
     company_id           TEXT NOT NULL,
+    entity               TEXT NOT NULL DEFAULT '',
     metric               TEXT NOT NULL,
     period               TEXT NOT NULL,
     candidate_value      TEXT NOT NULL,

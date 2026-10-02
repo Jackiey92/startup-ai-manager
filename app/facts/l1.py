@@ -6,7 +6,7 @@ import re
 
 from ..db.database import connect
 from .consolidation import ConsolidationResult, ConsolidationService
-from .extractor import extract_block_facts, _period
+from .extractor import extract_block_facts, _period, period_from_text
 
 
 def _now() -> str:
@@ -47,7 +47,8 @@ class FactExtractionService:
         period = _period({"filename": filename})
         candidates = []
         for block in blocks:
-            candidates.extend(extract_block_facts(block, company_id=company_id, period=period))
+            block_period = period_from_text(block.get("content", ""), period)
+            candidates.extend(extract_block_facts(block, company_id=company_id, period=block_period))
         result: ConsolidationResult = self.consolidation.consolidate_candidates(candidates)
         with connect(self.db_path) as conn:
             conn.execute(
@@ -71,4 +72,3 @@ class FactExtractionService:
         if not confirm:
             raise PermissionError("write operation requires --confirm")
         return self.consolidation.resolve(todo_id, choose=choose)
-

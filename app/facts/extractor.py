@@ -74,10 +74,15 @@ class ExtractedFact:
     confidence: float
     critical: bool
     review_reason: str | None = None
+    entity: str | None = None
 
     @property
     def coordinate(self) -> tuple[str, str, str]:
         return self.company_id, self.metric, self.period
+
+    @property
+    def entity_coordinate(self) -> tuple[str, str, str, str]:
+        return self.company_id, self.entity or self.company_id, self.metric, self.period
 
 
 def _match_metric(label: Any) -> MetricSpec | None:
@@ -136,6 +141,11 @@ def _period(manifest: dict[str, Any]) -> str:
     filename = str(manifest.get("filename") or "")
     matched = re.search(r"((?:19|20)\d{2})(?:年度|年)?", filename)
     return matched.group(1) if matched else "unspecified"
+
+
+def period_from_text(text: str, fallback: str = "unspecified") -> str:
+    match = re.search(r"((?:19|20)\d{2})\s*(?:年度|年)", str(text or ""))
+    return match.group(1) if match else fallback
 
 
 def _page_rows(page: dict[str, Any]) -> Iterable[tuple[int, list[Any], dict[str, Any]]]:
@@ -233,10 +243,11 @@ def extract_block_facts(block: dict[str, Any], *, company_id: str, period: str =
             value_type=value_type, unit=unit, source_file=file_hash,
             source_page=block.get("source_page"), source_span=span,
             confidence=1.0, critical=spec.critical, review_reason=review_reason,
+            entity=block.get("subject") or company_id,
         ))
-    unique: dict[tuple[str, str, str, str], ExtractedFact] = {}
+    unique: dict[tuple[str, str, str, str, str], ExtractedFact] = {}
     for fact in results:
-        unique.setdefault((*fact.coordinate, fact.value), fact)
+        unique.setdefault((*fact.entity_coordinate, fact.value), fact)
     return list(unique.values())
 
 

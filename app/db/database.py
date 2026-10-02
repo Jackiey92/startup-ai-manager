@@ -26,6 +26,7 @@ def init_db(db_path: Path = DEFAULT_DB_PATH) -> None:
         if _classification_needs_rebuild(conn):
             _migrate_file_classifications(conn)
         _migrate_facts(conn)
+        _migrate_todos(conn)
         _migrate_entity_roster(conn)
         _migrate_entity_bridge(conn)
         conn.executescript(SCHEMA)
@@ -124,6 +125,12 @@ def _migrate_facts(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE facts ADD COLUMN period TEXT NOT NULL DEFAULT 'unspecified'")
     if "confirm_mode" not in columns:
         conn.execute("ALTER TABLE facts ADD COLUMN confirm_mode TEXT NOT NULL DEFAULT 'manual'")
+
+
+def _migrate_todos(conn: sqlite3.Connection) -> None:
+    columns = {str(row["name"]) for row in conn.execute("PRAGMA table_info(todos)").fetchall()}
+    if columns and "entity" not in columns:
+        conn.execute("ALTER TABLE todos ADD COLUMN entity TEXT NOT NULL DEFAULT ''")
 
 
 def _migrate_entity_roster(conn: sqlite3.Connection) -> None:
