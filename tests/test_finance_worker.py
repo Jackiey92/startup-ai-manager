@@ -38,10 +38,11 @@ class _FakeEmployee:
         return self.candidates
 
 
-def _candidate(metric="营业收入", value="3.26", unit="亿元", entity="主公司有限公司", period="2024", **extra):
+def _candidate(metric="营业收入", value="3.26", unit="亿元", entity="主公司有限公司", period="2024",
+               quote="主公司有限公司2024年度营业收入3.26亿元，净利润0.58亿元", **extra):
     return {"metric": metric, "value": value, "unit": unit, "entity": entity,
             "period": period, "source_page": 1, "source_span": "page=1; locator=text/0",
-            "quote": "主公司有限公司2024年度营业收入3.26亿元，净利润0.58亿元", **extra}
+            "quote": quote, **extra}
 
 
 def test_worker_candidate_passes_only_after_exact_provenance_verification(tmp_path: Path):
@@ -74,6 +75,42 @@ def test_worker_tampering_wrong_unit_entity_or_year_is_rejected(tmp_path: Path):
         assert FactExtractionService(db).list_facts(company_id="acme") == []
 
 
+def test_worker_keeps_parent_and_subsidiary_entities_separate(tmp_path: Path):
+    db, parent, parent_bridge = _setup(tmp_path)
+    child_text = "主公司有限公司全资子公司常州未蓝新能源有限公司收入0.92亿元"
+    store = SourceFileStore(tmp_path / "objects", db)
+    child = store.put_bytes(b"child-worker", original_name="子公司.xlsx")
+    StagingStore(db).save_manifest({
+        "file_hash": child.file_hash, "filename": "子公司.xlsx", "format": "xlsx",
+        "parse_summary": {"status": "parsed"},
+        "pages": [{"page_no": 1, "text_items": [{
+            "text": child_text, "source_loc": {"locator": "text/0"},
+        }], "tables": []}],
+    })
+    child_bridge = EntityBridgeService(db).run(company_id="acme", file_hash=child.file_hash)
+
+    class _RoutedEmployee:
+        def run(self, **kwargs):
+            if "子公司" in kwargs["text"]:
+                return [_candidate(value="0.92", entity="常州未蓝新能源有限公司", period="unspecified", quote=child_text)]
+            return [_candidate()]
+
+    service = FactExtractionService(db)
+    parent_run = service.extract(company_id="acme", file_hash=parent.file_hash,
+                                 bridge_run_id=parent_bridge["id"], use_worker=True,
+                                 worker=_RoutedEmployee())
+    child_run = service.extract(company_id="acme", file_hash=child.file_hash,
+                                bridge_run_id=child_bridge["id"], use_worker=True,
+                                worker=_RoutedEmployee())
+    assert parent_run["fact_count"] == child_run["fact_count"] == 1
+    facts = service.list_facts(company_id="acme")
+    assert {(item["entity"], item["value"], item["period"]) for item in facts} == {
+        ("主公司有限公司", "3.26", "2024"),
+        ("常州未蓝新能源有限公司", "0.92", "unspecified"),
+    }
+    assert service.list_todos(company_id="acme") == []
+
+
 def test_employee_runner_injected_scope_isolated_and_skill_loaded(tmp_path: Path):
     seen = []
     runner = EmployeeRunner(
@@ -92,7 +129,6 @@ def test_flask_internal_manager_entry_runs_in_process_and_rejects_external_scope
     init_db(tmp_path / "app.db")
     monkeypatch.setattr(webapp, "MAIN_DB", tmp_path / "app.db")
     monkeypatch.setenv("SAM_COMPANY_ID", "host-company")
-    monkeypatch.setenv("SAM_INTERNAL_TOKEN", "test-internal-token")
     seen = {}
 
     class _Service:
@@ -105,6 +141,18 @@ def test_flask_internal_manager_entry_runs_in_process_and_rejects_external_scope
 
     monkeypatch.setattr(webapp, "FactExtractionService", _Service)
     client = webapp.app.test_client()
+    missing = client.post(
+        "/api/internal/facts/extract", json={"file_hash": "hash"},
+        environ_overrides={"REMOTE_ADDR": "127.0.0.1"},
+    )
+    assert missing.status_code == 403
+    monkeypatch.setenv("SAM_INTERNAL_TOKEN", "test-internal-token")
+    wrong = client.post(
+        "/api/internal/facts/extract", json={"file_hash": "hash"},
+        headers={"X-SAM-Internal-Token": "wrong"},
+        environ_overrides={"REMOTE_ADDR": "127.0.0.1"},
+    )
+    assert wrong.status_code == 403
     response = client.post(
         "/api/internal/facts/extract",
         json={"file_hash": "hash", "company_id": "attacker"},
