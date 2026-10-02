@@ -17,6 +17,7 @@ sys.path.insert(0, str(ROOT))
 from app.db import init_db
 from app.entities import EntityBridgeService, EntityRosterService
 from app.facts import FactExtractionService
+from app.prose import ProseExtractionService
 from app.runtime_config import RuntimeConfig
 from app.source_map import SourceMapService
 
@@ -81,6 +82,13 @@ def _parser() -> argparse.ArgumentParser:
     decide_fact.add_argument("todo_id", type=int)
     decide_fact.add_argument("choose", help="candidate, existing, or an explicit value")
     decide_fact.add_argument("--confirm", action="store_true", help="confirm the fact decision")
+    prose = sub.add_parser("prose", help="R2 source-verified prose facts")
+    prose.add_argument("--company-id", dest="prose_company_id", help="host-injected company scope")
+    prose_sub = prose.add_subparsers(dest="prose_command", required=True)
+    prose_list = prose_sub.add_parser("list")
+    prose_list.add_argument("--entity")
+    prose_list.add_argument("--category")
+    prose_list.add_argument("--file-hash")
     return parser
 
 
@@ -90,7 +98,12 @@ def main(argv: list[str] | None = None) -> int:
     config = RuntimeConfig.from_env(project_root=ROOT)
     service = SourceMapService(config.main_db, objects_path=config.objects_dir)
     try:
-        if args.command == "facts":
+        if args.command == "prose":
+            company_id = getattr(args, "prose_company_id", None) or args.company_id
+            if not company_id: raise ValueError("company_id must be injected by the host")
+            result = ProseExtractionService(config.main_db).list(
+                company_id=company_id, entity=args.entity, category=args.category, file_hash=args.file_hash)
+        elif args.command == "facts":
             company_id = getattr(args, "facts_company_id", None) or args.company_id
             if not company_id:
                 raise ValueError("company_id must be injected by the host")

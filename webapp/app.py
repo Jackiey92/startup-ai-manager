@@ -22,6 +22,7 @@ from app.storage import SourceFileStore
 from app.db.database import init_db as init_core_db
 from app.classifier import ClassificationService
 from app.facts import ConsolidationService, FactExtractionService
+from app.prose import ProseExtractionService
 from app.entities import EntityBridgeService
 from app.guidance import GuideJobCoordinator, ImportGuideService, ModelUnavailable
 from app.harness.staging import StagingStore
@@ -236,6 +237,12 @@ def _parse_job_worker(job: dict, progress, cancel_event) -> None:
         # critical section; only verified candidates are retained in memory.
         bridge_run = EntityBridgeService(MAIN_DB).run(
             company_id=job["company_id"], file_hash=job["file_hash"],
+        )
+        # Prose has its own source verifier and is intentionally independent
+        # from finance consolidation: a bad prose candidate never blocks facts.
+        ProseExtractionService(MAIN_DB).extract(
+            company_id=job["company_id"], file_hash=job["file_hash"],
+            bridge_run_id=int(bridge_run["id"]), thread_id=f"parse-job:{job['job_id']}",
         )
         fact_service = FactExtractionService(MAIN_DB)
         prepared_facts = fact_service.prepare(
@@ -694,6 +701,15 @@ def api_facts():
     company_id = str(request.args.get("company_id") or os.environ.get("SAM_COMPANY_ID", "default"))
     file_hash = request.args.get("file_hash")
     return {"facts": consolidation_service().list_facts(company_id=company_id, file_hash=file_hash)}
+
+
+@app.route("/api/prose", methods=["GET"])
+def api_prose():
+    company_id = str(request.args.get("company_id") or os.environ.get("SAM_COMPANY_ID", "default"))
+    return {"prose": ProseExtractionService(MAIN_DB).list(
+        company_id=company_id, entity=request.args.get("entity"),
+        category=request.args.get("category"), file_hash=request.args.get("file_hash"),
+    )}
 
 
 def _internal_manager_authorized() -> bool:

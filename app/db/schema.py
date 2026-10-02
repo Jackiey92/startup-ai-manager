@@ -228,6 +228,26 @@ CREATE TABLE IF NOT EXISTS fact_runs (
 CREATE INDEX IF NOT EXISTS idx_fact_runs_company
     ON fact_runs(company_id, created_at DESC, id DESC);
 
+-- R2: source-verified human-readable L1 memory entries.
+CREATE TABLE IF NOT EXISTS prose_facts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id TEXT NOT NULL,
+    entity TEXT NOT NULL,
+    category TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK(kind IN ('fact','plan','opinion')),
+    source_speaker TEXT,
+    content TEXT NOT NULL,
+    source_file TEXT NOT NULL REFERENCES source_files(file_hash),
+    source_page INTEGER,
+    source_span TEXT,
+    quote TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','superseded')),
+    created_at TEXT NOT NULL,
+    superseded_by INTEGER REFERENCES prose_facts(id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_prose_facts_idempotent
+    ON prose_facts(company_id, entity, category, content, status);
+
 -- Company-scoped dashboard visibility only; this never deletes source data.
 CREATE TABLE IF NOT EXISTS dashboard_preferences (
     company_id   TEXT NOT NULL,

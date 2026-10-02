@@ -62,11 +62,7 @@ class EmployeeRunner:
                               timeout=self.timeout)
         else:
             runtime = self.runtime or runtime_provider(self.config, StagingStore(self.config.main_db))
-            prompt = (
-                "Load the supplied employee skill and return JSON only as "
-                '{"candidates":[{"metric":"...","value":"...","unit":null,'
-                '"entity":"...","period":"unspecified","quote":"..."}]}. '
-            )
+            prompt = "Load the supplied employee skill and return only its required JSON candidates/items payload."
             raw = runtime.run_agent_message(
                 prompt, context_text=skill_text + "\n\nBLOCK:\n" + text,
                 company_id=company_id, thread_id=thread_id, timeout=self.timeout,
