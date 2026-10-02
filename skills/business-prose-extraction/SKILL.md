@@ -11,3 +11,5 @@ substring from the supplied block. Use the block's subject as `entity`.
 Classify plans, targets, estimates, and intentions as `plan`; company claims,
 comparisons, or judgements as `opinion`. Both require `source_speaker` (for
 example `公司自称`). When uncertain, prefer `plan` or `opinion`, never `fact`.
+The backend, not the employee, groups accepted items into entity-scoped semantic
+folders and produces L1/L0 documents; never invent a folder summary or coordinate.
