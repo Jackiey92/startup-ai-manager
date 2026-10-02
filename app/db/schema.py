@@ -149,6 +149,27 @@ CREATE TABLE IF NOT EXISTS source_edits (
 CREATE INDEX IF NOT EXISTS idx_source_edits_current
     ON source_edits(file_hash, company_id, target_locator, status, id);
 
+-- 2.0 deterministic entity roster suggestions and review transitions.
+-- Rows are retained; superseded_by points to the next review state.
+CREATE TABLE IF NOT EXISTS entity_roster (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id    TEXT NOT NULL,
+    entity_name   TEXT NOT NULL,
+    entity_type   TEXT,
+    aliases       TEXT NOT NULL DEFAULT '[]',
+    credit_code   TEXT,
+    stock_code    TEXT,
+    status        TEXT NOT NULL DEFAULT 'suggested'
+                  CHECK(status IN ('suggested', 'active', 'rejected')),
+    source_file   TEXT NOT NULL REFERENCES source_files(file_hash),
+    source_page   INTEGER,
+    source_span   TEXT,
+    superseded_by INTEGER REFERENCES entity_roster(id),
+    created_at    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_entity_roster_current
+    ON entity_roster(company_id, status, superseded_by, id);
+
 -- Company-scoped dashboard visibility only; this never deletes source data.
 CREATE TABLE IF NOT EXISTS dashboard_preferences (
     company_id   TEXT NOT NULL,

@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.db import init_db
+from app.entities import EntityRosterService
 from app.runtime_config import RuntimeConfig
 from app.source_map import SourceMapService
 
@@ -33,6 +34,16 @@ def _parser() -> argparse.ArgumentParser:
         if name == "replace":
             command.add_argument("replacement_text")
         command.add_argument("--confirm", action="store_true", help="confirm an append-only source correction")
+    roster = sub.add_parser("roster", help="2.0 deterministic entity roster")
+    roster_sub = roster.add_subparsers(dest="roster_command", required=True)
+    list_command = roster_sub.add_parser("list")
+    list_command.add_argument("--status", choices=("suggested", "active", "rejected"))
+    suggest_command = roster_sub.add_parser("suggest")
+    suggest_command.add_argument("file_hash")
+    for name in ("confirm", "reject"):
+        transition = roster_sub.add_parser(name)
+        transition.add_argument("roster_id", type=int)
+        transition.add_argument("--confirm", action="store_true", help="confirm the review action")
     return parser
 
 
@@ -42,7 +53,19 @@ def main(argv: list[str] | None = None) -> int:
     config = RuntimeConfig.from_env(project_root=ROOT)
     service = SourceMapService(config.main_db, objects_path=config.objects_dir)
     try:
-        if args.command == "read-original":
+        if args.command == "roster":
+            if not args.company_id:
+                raise ValueError("company_id must be injected by the host")
+            roster_service = EntityRosterService(config.main_db)
+            if args.roster_command == "list":
+                result = roster_service.list(company_id=args.company_id, status=args.status)
+            elif args.roster_command == "suggest":
+                result = roster_service.suggest(company_id=args.company_id, file_hash=args.file_hash)
+            elif args.roster_command == "confirm":
+                result = roster_service.confirm(company_id=args.company_id, roster_id=args.roster_id, confirm=args.confirm)
+            else:
+                result = roster_service.reject(company_id=args.company_id, roster_id=args.roster_id, confirm=args.confirm)
+        elif args.command == "read-original":
             result = service.read_original(file_hash=args.file_hash)
         elif args.command == "read-map":
             if not args.company_id:
