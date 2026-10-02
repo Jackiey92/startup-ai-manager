@@ -5,6 +5,37 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_DIR"
 
+select_node24() {
+  local candidates=() candidate version major i
+  if [[ -n "${SAM_NODE_BIN:-}" ]]; then
+    candidates+=("$SAM_NODE_BIN")
+  else
+    shopt -s nullglob
+    local installed=("${HOME}/.local"/node-v*-linux-x64/bin/node)
+    shopt -u nullglob
+    for ((i=${#installed[@]}-1; i>=0; i--)); do
+      candidates+=("${installed[$i]}")
+    done
+    if command -v node >/dev/null 2>&1; then
+      candidates+=("$(command -v node)")
+    fi
+  fi
+  for candidate in "${candidates[@]}"; do
+    version="$("$candidate" --version 2>/dev/null || true)"
+    major="${version#v}"
+    major="${major%%.*}"
+    if [[ "$major" =~ ^[0-9]+$ ]] && (( major >= 24 )); then
+      export SAM_NODE_BIN="$candidate"
+      export PATH="$(dirname "$candidate"):$PATH"
+      return 0
+    fi
+  done
+  echo "Node.js >=24 is required for OpenClaw Gateway; set SAM_NODE_BIN to a compatible executable" >&2
+  exit 2
+}
+
+select_node24
+
 export HOST="${HOST:-0.0.0.0}"
 # Keep the browser-facing Flask service separate from the resident Gateway.
 # This is the canonical startup entry point: Flask 18789, Gateway 18790.

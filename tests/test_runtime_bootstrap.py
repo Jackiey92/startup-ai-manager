@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -83,9 +85,42 @@ def test_standard_startup_fails_before_flask_when_model_key_is_missing(tmp_path:
     env = os.environ.copy()
     env.pop("SAM_LEADER_MODEL_API_KEY", None)
     env["HOME"] = str(tmp_path)
+    env["SAM_NODE_BIN"] = str(_fake_node(tmp_path / "node24", "v24.21.0"))
     result = subprocess.run(
         ["bash", "scripts/run.sh"], cwd=ROOT, env=env,
         capture_output=True, text=True,
     )
     assert result.returncode == 2
     assert "Missing SAM_LEADER_MODEL_API_KEY" in result.stderr
+
+
+def _fake_node(path: Path, version: str) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"#!/bin/sh\necho {version}\n", encoding="utf-8")
+    path.chmod(0o755)
+    return path
+
+
+def test_runtime_prefers_local_node24_over_path_node22(tmp_path: Path) -> None:
+    from app.runtime_config import RuntimeConfig
+
+    node22 = _fake_node(tmp_path / "bin" / "node", "v22.23.3")
+    node24 = _fake_node(
+        tmp_path / ".local" / "node-v24.21.0-linux-x64" / "bin" / "node",
+        "v24.21.0",
+    )
+    config = RuntimeConfig.from_env(project_root=ROOT, env={
+        "HOME": str(tmp_path), "PATH": str(node22.parent), "SAM_PROFILE": "local",
+    })
+    assert config.node_bin == str(node24)
+
+
+def test_runtime_rejects_explicit_unsupported_node(tmp_path: Path) -> None:
+    from app.runtime_config import RuntimeConfig
+
+    node22 = _fake_node(tmp_path / "node22", "v22.23.3")
+    with pytest.raises(RuntimeError, match="Node.js >=24"):
+        RuntimeConfig.from_env(project_root=ROOT, env={
+            "HOME": str(tmp_path), "PATH": str(tmp_path),
+            "SAM_NODE_BIN": str(node22), "SAM_PROFILE": "local",
+        })

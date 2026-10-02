@@ -30,10 +30,24 @@ class EmployeeRunner:
 
     @staticmethod
     def _payload(raw: Any) -> list[dict[str, Any]]:
-        if isinstance(raw, str):
-            raw = json.loads(raw)
-        if isinstance(raw, dict):
+        try:
+            if isinstance(raw, str):
+                raw = json.loads(raw)
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise WorkerUnavailable("employee returned invalid JSON") from exc
+        if isinstance(raw, dict) and ("candidates" in raw or "items" in raw):
             raw = raw.get("candidates", raw.get("items"))
+        elif isinstance(raw, dict):
+            result = raw.get("result")
+            payloads = result.get("payloads") if isinstance(result, dict) else None
+            if not isinstance(payloads, list) or not payloads:
+                raise WorkerUnavailable("employee returned invalid OpenClaw envelope")
+            candidates: list[dict[str, Any]] = []
+            for payload in payloads:
+                if not isinstance(payload, dict) or not isinstance(payload.get("text"), str):
+                    raise WorkerUnavailable("employee returned invalid OpenClaw payload")
+                candidates.extend(EmployeeRunner._payload(payload["text"]))
+            return candidates
         if not isinstance(raw, list) or not all(isinstance(item, dict) for item in raw):
             raise WorkerUnavailable("employee returned invalid candidates")
         return raw

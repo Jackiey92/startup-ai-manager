@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from threading import Event
 
-from app.db import init_db
+import pytest
+
+from app.db import connect, init_db
 from app.entities import EntityBridgeService, EntityRosterService
-from app.employees import EmployeeRunner
+from app.employees import EmployeeRunner, WorkerUnavailable
 from app.facts import FactExtractionService
 from app.harness.staging import StagingStore
 from app.storage import SourceFileStore
@@ -123,6 +127,36 @@ def test_employee_runner_injected_scope_isolated_and_skill_loaded(tmp_path: Path
     assert all(item["skill_text"] for item in seen)
 
 
+def test_employee_runner_unwraps_openclaw_payload_envelope():
+    first = _candidate()
+    second = _candidate(metric="净利润", value="0.58")
+    runner = EmployeeRunner(runner=lambda **_kwargs: {
+        "status": "ok",
+        "result": {"payloads": [
+            {"text": json.dumps({"candidates": [first]}, ensure_ascii=False)},
+            {"text": json.dumps([second], ensure_ascii=False)},
+        ]},
+    })
+    assert runner.run(
+        skill="finance-fact-extraction", text="block", company_id="acme",
+    ) == [first, second]
+    direct = EmployeeRunner(runner=lambda **_kwargs: [first])
+    assert direct.run(
+        skill="finance-fact-extraction", text="block", company_id="acme",
+    ) == [first]
+
+
+@pytest.mark.parametrize("raw", [
+    {"status": "ok", "result": {"payloads": []}},
+    {"status": "ok", "result": {"payloads": [{"text": "not-json"}]}},
+    {"status": "ok", "result": {"payloads": [{"missing": "text"}]}},
+])
+def test_employee_runner_rejects_bad_openclaw_envelopes(raw):
+    runner = EmployeeRunner(runner=lambda **_kwargs: raw)
+    with pytest.raises(WorkerUnavailable):
+        runner.run(skill="finance-fact-extraction", text="block", company_id="acme")
+
+
 def test_flask_internal_manager_entry_runs_in_process_and_rejects_external_scope(tmp_path: Path, monkeypatch):
     import webapp.app as webapp
 
@@ -155,7 +189,7 @@ def test_flask_internal_manager_entry_runs_in_process_and_rejects_external_scope
     assert wrong.status_code == 403
     response = client.post(
         "/api/internal/facts/extract",
-        json={"file_hash": "hash", "company_id": "attacker"},
+        json={"file_hash": "hash", "bridge_run_id": 1, "company_id": "attacker"},
         headers={"X-SAM-Internal-Token": "test-internal-token"},
         environ_overrides={"REMOTE_ADDR": "127.0.0.1"},
     )
@@ -176,3 +210,63 @@ def test_cli_worker_flag_cannot_bypass_resident_manager(monkeypatch, capsys):
     monkeypatch.setattr(sam, "init_db", lambda: None)
     assert sam.main(["--company-id", "acme", "facts", "extract", "hash", "--use-worker"]) == 2
     assert "authenticated Flask internal endpoint" in capsys.readouterr().err
+
+
+def test_upload_worker_automatically_runs_bridge_worker_verify_and_commit(tmp_path: Path, monkeypatch):
+    import webapp.app as webapp
+
+    db, stored, _old_bridge = _setup(tmp_path)
+    with connect(db) as conn:
+        staging_id = int(conn.execute(
+            "SELECT id FROM parse_staging WHERE file_hash=? ORDER BY id DESC LIMIT 1",
+            (stored.file_hash,),
+        ).fetchone()["id"])
+    fake = _FakeEmployee([_candidate(), _candidate(metric="净利润", value="0.58")])
+    real_service = FactExtractionService
+
+    class _InProcessFactService(real_service):
+        def prepare(self, **kwargs):
+            kwargs["worker"] = fake
+            return super().prepare(**kwargs)
+
+    class _Adapter:
+        def run_parse(self, *_args, **_kwargs):
+            return staging_id
+
+    class _Classification:
+        def classify_parsed(self, **_kwargs):
+            return {"id": 1, "_created_for_parse": False}
+
+    class _Memory:
+        def __init__(self, _provider):
+            pass
+
+        def ingest(self, *_args, **_kwargs):
+            return None
+
+    class _Map:
+        def __init__(self, _provider):
+            pass
+
+        def rebuild_map(self, *_args, **_kwargs):
+            return None
+
+    monkeypatch.setattr(webapp, "MAIN_DB", db)
+    monkeypatch.setattr(webapp, "_PARSE_ADAPTER", _Adapter())
+    monkeypatch.setattr(webapp, "FactExtractionService", _InProcessFactService)
+    monkeypatch.setattr(webapp, "classification_service", lambda: _Classification())
+    monkeypatch.setattr(webapp, "ExtractionMemoryService", _Memory)
+    monkeypatch.setattr(webapp, "MapBuilder", _Map)
+    monkeypatch.setattr(webapp, "queue_import_guide", lambda *_args, **_kwargs: None)
+    progress = []
+    webapp._parse_job_worker(
+        {"job_id": "automatic-1", "file_hash": stored.file_hash,
+         "harness_format": "xlsx", "company_id": "acme"},
+        lambda **item: progress.append(item), Event(),
+    )
+    facts = real_service(db).list_facts(company_id="acme")
+    assert {(item["attribute"], item["value"], item["period"]) for item in facts} == {
+        ("营业收入", "3.26", "2024"), ("净利润", "0.58", "2024"),
+    }
+    assert real_service(db).list_todos(company_id="acme") == []
+    assert fake.calls and any(item.get("stage") == "consolidating" for item in progress)

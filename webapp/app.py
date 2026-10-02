@@ -22,6 +22,7 @@ from app.storage import SourceFileStore
 from app.db.database import init_db as init_core_db
 from app.classifier import ClassificationService
 from app.facts import ConsolidationService, FactExtractionService
+from app.entities import EntityBridgeService
 from app.guidance import GuideJobCoordinator, ImportGuideService, ModelUnavailable
 from app.harness.staging import StagingStore
 from app.memory import ExtractionMemoryService
@@ -194,6 +195,8 @@ def _parse_job_worker(job: dict, progress, cancel_event) -> None:
     staging = StagingStore(db_path=MAIN_DB)
     classification_id: int | None = None
     critical_started = False
+    fact_service: FactExtractionService | None = None
+    prepared_facts = None
     try:
         progress(stage="parsing", message="正在解析文档")
         # Cancellation can arrive while the worker is transitioning from
@@ -228,11 +231,26 @@ def _parse_job_worker(job: dict, progress, cancel_event) -> None:
         ExtractionMemoryService(app.extensions["sam_memory_provider"]).ingest(job["company_id"], payload)
         check_cancel()
 
+        # Normal uploads automatically traverse the entity bridge and the
+        # finance employee.  Model work happens before the short write-only
+        # critical section; only verified candidates are retained in memory.
+        bridge_run = EntityBridgeService(MAIN_DB).run(
+            company_id=job["company_id"], file_hash=job["file_hash"],
+        )
+        fact_service = FactExtractionService(MAIN_DB)
+        prepared_facts = fact_service.prepare(
+            company_id=job["company_id"], file_hash=job["file_hash"],
+            bridge_run_id=int(bridge_run["id"]), use_worker=True,
+            thread_id=f"parse-job:{job['job_id']}",
+        )
+        check_cancel()
+
         # Once this short local SQLite write starts, cancellation is rejected
         # by the API.  No engine/model call is made in the critical section.
         critical_started = True
         progress(stage="consolidating", message="正在写入事实", critical=True)
-        consolidation_service().consolidate_manifest(payload, company_id=job["company_id"])
+        fact_service.commit(prepared_facts)
+        prepared_facts = None
         progress(stage="consolidating", current=total or 0, total=total,
                  message="事实写入完成", critical_end=True)
         try:
@@ -247,7 +265,14 @@ def _parse_job_worker(job: dict, progress, cancel_event) -> None:
             # Guide generation is a follow-up; a model/runtime outage must not
             # turn a successfully parsed and consolidated upload into failed.
             app.logger.exception("import guide queue failed after parse job completion")
-    except (RuntimeError, OSError, subprocess.SubprocessError) as exc:
+    except Exception as exc:
+        if fact_service is not None and prepared_facts is not None:
+            try:
+                fact_service.abort(
+                    prepared_facts, status="canceled" if cancel_event.is_set() else "failed",
+                )
+            except Exception:
+                app.logger.exception("failed to close interrupted fact extraction run")
         if classification_id is not None and not critical_started:
             try:
                 classification_service().cancel_auto_content(
@@ -701,6 +726,11 @@ def api_internal_facts_extract():
     if thread_id is not None and not isinstance(thread_id, str):
         return {"error": "thread_id must be a string"}, 400
     try:
+        if bridge_run_id is None:
+            bridge_run = EntityBridgeService(MAIN_DB).run(
+                company_id=_company_id(), file_hash=file_hash,
+            )
+            bridge_run_id = int(bridge_run["id"])
         result = FactExtractionService(MAIN_DB).extract(
             company_id=_company_id(), file_hash=file_hash, bridge_run_id=bridge_run_id,
             use_worker=True, thread_id=thread_id,

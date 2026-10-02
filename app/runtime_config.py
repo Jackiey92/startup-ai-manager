@@ -8,6 +8,9 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import shutil
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -86,6 +89,52 @@ def _path(root: Path, value: str | None, default: Path, *, follow_symlinks: bool
     return Path(os.path.abspath(candidate))
 
 
+def _node_major(binary: str) -> int | None:
+    packaged = re.search(r"(?:^|/)node-v(\d+)(?:\.[^/]*)?-linux-x64/bin/node$", binary)
+    if packaged and Path(binary).is_file() and os.access(binary, os.X_OK):
+        return int(packaged.group(1))
+    try:
+        output = subprocess.check_output(
+            [binary, "--version"], text=True, timeout=5, stderr=subprocess.DEVNULL,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    match = re.match(r"v?(\d+)", output.strip())
+    return int(match.group(1)) if match else None
+
+
+def _select_node_bin(env: dict[str, str], runtime: dict[str, Any]) -> str:
+    """Select a real Node.js >=24 executable; never limp on with Node 22."""
+    explicit = env.get("SAM_NODE_BIN")
+    candidates: list[str] = []
+    if explicit:
+        candidates.append(explicit)
+    else:
+        home = Path(env.get("HOME", str(Path.home()))).expanduser()
+        candidates.extend(str(path) for path in sorted(
+            (home / ".local").glob("node-v*-linux-x64/bin/node"), reverse=True,
+        ))
+        configured = runtime.get("node_bin")
+        if configured:
+            candidates.append(str(configured))
+        system = shutil.which("node", path=env.get("PATH"))
+        if system:
+            candidates.append(system)
+    seen: set[str] = set()
+    detected: list[str] = []
+    for candidate in candidates:
+        resolved = shutil.which(candidate, path=env.get("PATH")) or candidate
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        major = _node_major(resolved)
+        detected.append(f"{resolved}={major if major is not None else 'unavailable'}")
+        if major is not None and major >= 24:
+            return resolved
+    detail = ", ".join(detected) if detected else "no node executable found"
+    raise RuntimeError(f"Node.js >=24 is required for OpenClaw Gateway ({detail})")
+
+
 @dataclass(frozen=True)
 class RuntimeConfig:
     project_root: Path
@@ -130,7 +179,7 @@ class RuntimeConfig:
         model = config.get("model", {})
         memory = config.get("memory", {})
         harness = _path(configured_root, env.get("SAM_HARNESS_ROOT", paths.get("harness_root")), configured_root / "harness-openclaw")
-        node_bin = env.get("SAM_NODE_BIN", runtime.get("node_bin", "node"))
+        node_bin = _select_node_bin(env, runtime)
         entry = _path(configured_root, env.get("SAM_OPENCLAW_ENTRY", paths.get("openclaw_entry")), configured_root / ".oc-runtime/node_modules/openclaw/openclaw.mjs", follow_symlinks=False)
         venv_bin = _path(configured_root, env.get("SAM_VENV_BIN", paths.get("venv_bin")), configured_root / ".venv/bin", follow_symlinks=False)
         state = _path(configured_root, env.get("SAM_OPENCLAW_STATE_DIR", paths.get("state_dir")), harness / "state")

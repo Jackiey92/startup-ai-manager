@@ -1,18 +1,25 @@
 """2B.a: extract facts only from completed self-attributed bridge blocks."""
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 import re
 
 from ..db.database import connect
 from .consolidation import ConsolidationResult, ConsolidationService
-from .extractor import extract_block_facts, _period, period_from_text
+from .extractor import ExtractedFact, extract_block_facts, _period, period_from_text
 from .verifier import verify_candidates
 from ..employees import EmployeeRunner, WorkerUnavailable
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+@dataclass(frozen=True)
+class PreparedFactExtraction:
+    run_id: int
+    candidates: tuple[ExtractedFact, ...]
 
 
 class FactExtractionService:
@@ -34,8 +41,10 @@ class FactExtractionService:
         with connect(self.db_path) as conn:
             return [dict(row) for row in conn.execute(sql, params).fetchall()]
 
-    def extract(self, *, company_id: str, file_hash: str, bridge_run_id: int | None = None,
-                use_worker: bool = False, worker=None, thread_id: str | None = None) -> dict:
+    def prepare(self, *, company_id: str, file_hash: str, bridge_run_id: int | None = None,
+                use_worker: bool = False, worker=None,
+                thread_id: str | None = None) -> PreparedFactExtraction:
+        """Run bounded extraction without writing any candidate to ``facts``."""
         if not company_id:
             raise ValueError("company_id must be injected by the host")
         blocks = self._blocks(company_id, file_hash, bridge_run_id)
@@ -63,16 +72,39 @@ class FactExtractionService:
                 except Exception:
                     pass
             candidates.extend(extract_block_facts(block, company_id=company_id, period=block_period))
-        result: ConsolidationResult = self.consolidation.consolidate_candidates(candidates)
+        return PreparedFactExtraction(run_id=run_id, candidates=tuple(candidates))
+
+    def commit(self, prepared: PreparedFactExtraction) -> dict:
+        """Apply a prepared batch in the short local-write critical section."""
+        result: ConsolidationResult = self.consolidation.consolidate_candidates(prepared.candidates)
         with connect(self.db_path) as conn:
             conn.execute(
                 """UPDATE fact_runs SET status='completed',candidate_count=?,fact_count=?,todo_count=?,
                    completed_at=? WHERE id=?""",
-                (len(candidates), len(result.verified_fact_ids), len(result.todo_ids), _now(), run_id),
+                (len(prepared.candidates), len(result.verified_fact_ids), len(result.todo_ids),
+                 _now(), prepared.run_id),
             )
             conn.commit()
-            row = conn.execute("SELECT * FROM fact_runs WHERE id=?", (run_id,)).fetchone()
+            row = conn.execute("SELECT * FROM fact_runs WHERE id=?", (prepared.run_id,)).fetchone()
         return dict(row)
+
+    def abort(self, prepared: PreparedFactExtraction, *, status: str = "canceled") -> None:
+        if status not in {"canceled", "failed"}:
+            raise ValueError("invalid fact extraction terminal status")
+        with connect(self.db_path) as conn:
+            conn.execute(
+                "UPDATE fact_runs SET status=?,completed_at=? WHERE id=? AND status='running'",
+                (status, _now(), prepared.run_id),
+            )
+            conn.commit()
+
+    def extract(self, *, company_id: str, file_hash: str, bridge_run_id: int | None = None,
+                use_worker: bool = False, worker=None, thread_id: str | None = None) -> dict:
+        prepared = self.prepare(
+            company_id=company_id, file_hash=file_hash, bridge_run_id=bridge_run_id,
+            use_worker=use_worker, worker=worker, thread_id=thread_id,
+        )
+        return self.commit(prepared)
 
     def list_facts(self, *, company_id: str, file_hash: str | None = None):
         return self.consolidation.list_facts(company_id=company_id, file_hash=file_hash)
