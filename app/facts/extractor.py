@@ -18,7 +18,7 @@ class MetricSpec:
 # may be extended without changing extraction flow.  ``critical`` is policy,
 # not a confidence score: any match is routed to a human todo on first sight.
 METRICS: tuple[MetricSpec, ...] = (
-    MetricSpec("营业收入", ("营业收入", "营收", "销售收入")),
+    MetricSpec("营业收入", ("营业收入", "销售收入", "营收", "收入")),
     MetricSpec("净利润", ("净利润", "利润总额")),
     MetricSpec("总资产", ("资产总额", "总资产")),
     MetricSpec("净资产", ("所有者权益合计", "股东权益合计", "净资产")),
@@ -110,6 +110,22 @@ def _value(value: Any) -> tuple[str, str, str | None] | None:
     return literal, "number", unit
 
 
+def _block_value(value: Any) -> tuple[str, str, str | None] | None:
+    """L1 value parser: split supported Chinese currency units, never convert."""
+    if value is None:
+        return None
+    literal = str(value).strip()
+    match = re.fullmatch(r"(?P<number>-?[0-9][0-9,]*(?:\.[0-9]+)?)(?P<unit>亿元|万元|元|%)?", literal)
+    if match is None:
+        return literal, "string", None
+    number = match.group("number")
+    try:
+        Decimal(number.replace(",", ""))
+    except InvalidOperation:
+        return literal, "string", match.group("unit")
+    return number, "number", match.group("unit")
+
+
 def _period(manifest: dict[str, Any]) -> str:
     explicit = manifest.get("period")
     if isinstance(explicit, str) and explicit.strip():
@@ -179,7 +195,7 @@ _TEXT_LABELS = tuple(dict.fromkeys(
 ))
 _TEXT_VALUE = re.compile(
     rf"(?P<label>{'|'.join(map(re.escape, sorted(_TEXT_LABELS, key=len, reverse=True)))})"
-    r"\s*(?:为|：|:)?\s*(?P<value>-?[0-9][0-9,]*(?:\.[0-9]+)?%?)"
+    r"\s*(?:为|：|:)?\s*(?P<value>-?[0-9][0-9,]*(?:\.[0-9]+)?(?:亿元|万元|元|%)?)"
 )
 
 
@@ -199,7 +215,7 @@ def extract_block_facts(block: dict[str, Any], *, company_id: str, period: str =
     pattern = re.compile(
         rf"(?P<label>{'|'.join(map(re.escape, aliases))})"
         r"\s*(?:为|是|：|:|=|/|=>)?\s*"
-        r"(?P<value>-?[0-9][0-9,]*(?:\.[0-9]+)?%?)"
+        r"(?P<value>-?[0-9][0-9,]*(?:\.[0-9]+)?(?:亿元|万元|元|%)?)"
     )
     file_hash = str(block.get("file_hash") or "")
     results: list[ExtractedFact] = []
@@ -208,7 +224,7 @@ def extract_block_facts(block: dict[str, Any], *, company_id: str, period: str =
     review_reason = "uncertain" if content_review or not block.get("source_page") or not span or "locator=missing" in str(span) else None
     for match in pattern.finditer(text):
         spec = _match_metric(match.group("label"))
-        parsed = _value(match.group("value"))
+        parsed = _block_value(match.group("value"))
         if spec is None or parsed is None:
             continue
         value, value_type, unit = parsed

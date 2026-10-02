@@ -7,6 +7,7 @@ import pytest
 from app.db import connect, init_db
 from app.entities import EntityBridgeService, EntityRosterService
 from app.facts import FactExtractionService
+from app.facts.extractor import extract_block_facts
 from app.harness.staging import StagingStore
 from app.storage import SourceFileStore
 
@@ -81,3 +82,16 @@ def test_fact_extraction_requires_host_company_scope(tmp_path: Path):
     db, stored, bridge = _pipeline(tmp_path, ["主公司有限公司营业收入 10"])
     with pytest.raises(ValueError):
         FactExtractionService(db).extract(company_id="", file_hash=stored.file_hash, bridge_run_id=bridge["id"])
+
+
+def test_income_alias_and_chinese_currency_units_are_literal_and_numeric():
+    def one(text):
+        fact = extract_block_facts({
+            "file_hash": "a" * 64, "content": text, "source_page": 1,
+            "source_span": "page=1; locator=text/0",
+        }, company_id="acme")[0]
+        return fact.metric, fact.value, fact.unit, fact.value_type
+
+    assert one("实现收入0.92亿元") == ("营业收入", "0.92", "亿元", "number")
+    assert one("营业收入3.26亿元") == ("营业收入", "3.26", "亿元", "number")
+    assert one("收入51000.00万元") == ("营业收入", "51000.00", "万元", "number")
