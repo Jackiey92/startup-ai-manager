@@ -14,6 +14,7 @@ from typing import Any
 
 from ..db.database import connect
 from ..source_map import _coord
+from .model_client import EntityAttributionModelClient
 
 
 def _now() -> str:
@@ -121,9 +122,22 @@ def classify_block(content: str, roster: list[dict[str, Any]]) -> tuple[str, str
     return "ambiguous", None, None
 
 
+def _validate_model_result(result: Any) -> dict[str, Any]:
+    if not isinstance(result, dict) or set(result) != {"label", "subject", "reason"}:
+        raise ValueError("invalid model classification shape")
+    if result["label"] not in {"self", "related", "foreign", "ambiguous"}:
+        raise ValueError("invalid model classification label")
+    if result["subject"] is not None and not isinstance(result["subject"], str):
+        raise ValueError("invalid model classification subject")
+    if not isinstance(result["reason"], str) or not result["reason"].strip():
+        raise ValueError("invalid model classification reason")
+    return result
+
+
 class EntityBridgeService:
-    def __init__(self, db_path):
+    def __init__(self, db_path, *, model_client=None):
         self.db_path = db_path
+        self.model_client = model_client
 
     def _manifest(self, file_hash: str) -> dict[str, Any]:
         with connect(self.db_path) as conn:
@@ -148,11 +162,24 @@ class EntityBridgeService:
             result.append(item)
         return result
 
-    def run(self, *, company_id: str, file_hash: str) -> dict[str, Any]:
+    @staticmethod
+    def _model_scope(roster: list[dict[str, Any]]) -> tuple[str | None, list[str]]:
+        """Expose only the host name/aliases, never the complete roster."""
+        declared = [row for row in roster if row.get("origin") == "declared" and row.get("entity_type") == "self"]
+        host = declared[0] if declared else next((row for row in roster if row.get("entity_type") == "self"), None)
+        if host is None:
+            return None, []
+        return host.get("entity_name"), list(host.get("aliases") or [])
+
+    def run(self, *, company_id: str, file_hash: str, use_model: bool = False) -> dict[str, Any]:
         if not company_id:
             raise ValueError("company_id must be injected by the host")
         manifest = self._manifest(file_hash)
         roster = self._roster(company_id)
+        model = self.model_client
+        if use_model and model is None:
+            model = EntityAttributionModelClient()
+        company_name, aliases = self._model_scope(roster)
         raw_blocks = _text_blocks(manifest)
         created = _now()
         with connect(self.db_path) as conn:
@@ -163,13 +190,29 @@ class EntityBridgeService:
             run_id = int(cur.lastrowid)
             for index, (block_type, content, page, span) in enumerate(raw_blocks):
                 classification, relation, subject = classify_block(content, roster)
+                reason = None
+                source = "deterministic"
+                if use_model and classification == "ambiguous":
+                    source = "model"
+                    try:
+                        result = _validate_model_result(model.classify(
+                            text=content, company_name=company_name, aliases=aliases
+                        ))
+                        classification = result["label"]
+                        subject = result["subject"]
+                        reason = result["reason"]
+                    except Exception:
+                        # Do not expose provider errors or allow a malformed
+                        # answer to weaken review safety.
+                        classification, subject, reason = "ambiguous", None, "model classification unavailable or invalid"
+                needs_review = 1 if classification == "ambiguous" else 0
                 conn.execute(
                     """INSERT INTO entity_bridge_blocks
                        (run_id,company_id,file_hash,block_index,block_type,content,source_page,source_span,
-                        classification,relation,subject,needs_review,status,created_at)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'pending',?)""",
+                       classification,relation,subject,reason,source,needs_review,status,created_at)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'pending',?)""",
                     (run_id, company_id, file_hash, index, block_type, content, page, span,
-                     classification, relation, subject, 1 if classification == "ambiguous" else 0, created),
+                     classification, relation, subject, reason, source, needs_review, created),
                 )
             conn.execute(
                 "UPDATE entity_bridge_runs SET status='completed',block_count=?,completed_at=? WHERE id=?",
@@ -210,7 +253,7 @@ class EntityBridgeService:
             if row is None:
                 raise KeyError(block_id)
             conn.execute(
-                "UPDATE entity_bridge_blocks SET decision=?,classification=?,needs_review=0,status='decided' WHERE id=?",
+                "UPDATE entity_bridge_blocks SET decision=?,classification=?,needs_review=0,source='human',status='decided' WHERE id=?",
                 (classification, classification, block_id),
             )
             conn.commit()

@@ -115,3 +115,48 @@ def test_subsidiary_is_self_but_customer_is_related_and_subject_prefix_is_trimme
     assert classify_block(
         "本公司主要客户为苏州星河半导体有限公司", roster
     ) == ("related", "客户", "苏州星河半导体有限公司")
+
+
+class _FakeModel:
+    def __init__(self, result=None, error=None):
+        self.result = result
+        self.error = error
+        self.calls = []
+
+    def classify(self, **payload):
+        self.calls.append(payload)
+        if self.error:
+            raise self.error
+        return self.result
+
+
+def test_use_model_only_classifies_ambiguous_and_records_model_source(tmp_path: Path):
+    db, stored, _ = _setup(tmp_path)
+    fake = _FakeModel({"label": "foreign", "subject": "远方科技有限公司", "reason": "named entity"})
+    run = EntityBridgeService(db, model_client=fake).run(
+        company_id="host", file_hash=stored.file_hash, use_model=True
+    )
+    rows = EntityBridgeService(db).list(company_id="host", run_id=run["id"])
+    assert len(fake.calls) == 3
+    assert set(fake.calls[0]) == {"text", "company_name", "aliases"}
+    modeled = [row for row in rows if row["source"] == "model"]
+    assert len(modeled) == 3
+    assert all(row["classification"] == "foreign" and row["needs_review"] == 0 for row in modeled)
+
+
+@pytest.mark.parametrize(
+    "result",
+    [None, {"label": "bogus", "subject": None, "reason": "bad"},
+     {"label": "self", "subject": 3, "reason": "bad"},
+     {"label": "self", "subject": "x", "reason": ""}],
+)
+def test_model_shape_errors_remain_ambiguous_and_reviewable(tmp_path: Path, result):
+    db, stored, _ = _setup(tmp_path)
+    fake = _FakeModel(result=result, error=RuntimeError("timeout") if result is None else None)
+    run = EntityBridgeService(db, model_client=fake).run(
+        company_id="host", file_hash=stored.file_hash, use_model=True
+    )
+    rows = EntityBridgeService(db).list(company_id="host", run_id=run["id"])
+    assert any(row["source"] == "model" and row["classification"] == "ambiguous"
+               and row["needs_review"] == 1 for row in rows)
+    assert all("timeout" not in (row["reason"] or "") for row in rows)

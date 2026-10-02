@@ -27,6 +27,7 @@ def init_db(db_path: Path = DEFAULT_DB_PATH) -> None:
             _migrate_file_classifications(conn)
         _migrate_facts(conn)
         _migrate_entity_roster(conn)
+        _migrate_entity_bridge(conn)
         conn.executescript(SCHEMA)
         conn.executemany(
             "INSERT OR IGNORE INTO modules(code,name,sort_order) VALUES (?,?,?)",
@@ -173,6 +174,17 @@ def _migrate_entity_roster(conn: sqlite3.Connection) -> None:
             """CREATE INDEX IF NOT EXISTS idx_entity_roster_current
                ON entity_roster(company_id, status, superseded_by, id)"""
         )
+
+
+def _migrate_entity_bridge(conn: sqlite3.Connection) -> None:
+    """Add audit fields to an existing 2.1.a bridge table."""
+    columns = {str(row["name"]) for row in conn.execute("PRAGMA table_info(entity_bridge_blocks)").fetchall()}
+    if not columns:
+        return
+    if "reason" not in columns:
+        conn.execute("ALTER TABLE entity_bridge_blocks ADD COLUMN reason TEXT")
+    if "source" not in columns:
+        conn.execute("ALTER TABLE entity_bridge_blocks ADD COLUMN source TEXT NOT NULL DEFAULT 'deterministic'")
 
 
 if __name__ == "__main__":

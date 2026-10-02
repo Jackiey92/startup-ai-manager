@@ -54,6 +54,7 @@ def _parser() -> argparse.ArgumentParser:
     bridge_sub = bridge.add_subparsers(dest="bridge_command", required=True)
     run_bridge = bridge_sub.add_parser("run")
     run_bridge.add_argument("file_hash")
+    run_bridge.add_argument("--use-model", action="store_true", help="classify only deterministic ambiguous blocks")
     list_bridge = bridge_sub.add_parser("list")
     list_bridge.add_argument("--run-id", type=int)
     ambiguous_bridge = bridge_sub.add_parser("ambiguous")
@@ -95,7 +96,7 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValueError("company_id must be injected by the host")
             bridge_service = EntityBridgeService(config.main_db)
             if args.bridge_command == "run":
-                result = bridge_service.run(company_id=company_id, file_hash=args.file_hash)
+                result = bridge_service.run(company_id=company_id, file_hash=args.file_hash, use_model=args.use_model)
             elif args.bridge_command == "list":
                 result = bridge_service.list(company_id=company_id, run_id=args.run_id)
             elif args.bridge_command == "ambiguous":
