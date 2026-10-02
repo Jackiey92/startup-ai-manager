@@ -23,13 +23,12 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _coord(loc: Any) -> str:
+def _coord(loc: Any, *, fallback_page: Any = None) -> str:
     """Render a stable, machine-readable coordinate, including missing data."""
-    if not isinstance(loc, dict):
-        return "page=?; locator=missing"
+    loc = loc if isinstance(loc, dict) else {}
     page = loc.get("page")
     if page is None:
-        page = loc.get("page_no", "?")
+        page = loc.get("page_no", fallback_page if fallback_page is not None else "?")
     locator = loc.get("locator") or loc.get("char_range")
     return f"page={page if page is not None else '?'}; locator={locator or 'missing'}"
 
@@ -96,7 +95,7 @@ def render_mapping(manifest: dict[str, Any], *, edits: list[dict[str, Any]] | No
     if not items:
         lines.append("暂无可解析正文。")
     for item in items:
-        loc = _coord(item.get("source_loc"))
+        loc = _coord(item.get("source_loc"), fallback_page=item.get("_page_no"))
         edit = active.get(loc)
         if edit and edit.get("operation") == "remove":
             lines.append(f"- ~~已移除原文片段~~ <!-- source: {loc}; correction: {edit['id']} -->")
