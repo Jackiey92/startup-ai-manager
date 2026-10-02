@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT))
 
 from app.db import init_db
 from app.entities import EntityBridgeService, EntityRosterService
+from app.facts import FactExtractionService
 from app.runtime_config import RuntimeConfig
 from app.source_map import SourceMapService
 
@@ -63,6 +64,19 @@ def _parser() -> argparse.ArgumentParser:
     decide_bridge.add_argument("block_id", type=int)
     decide_bridge.add_argument("classification", choices=("self", "related", "foreign"))
     decide_bridge.add_argument("--confirm", action="store_true", help="confirm the review decision")
+    facts = sub.add_parser("facts", help="2B.a deterministic fact extraction")
+    facts.add_argument("--company-id", dest="facts_company_id", help="host-injected company scope")
+    facts_sub = facts.add_subparsers(dest="facts_command", required=True)
+    extract_facts_cmd = facts_sub.add_parser("extract")
+    extract_facts_cmd.add_argument("file_hash")
+    list_facts_cmd = facts_sub.add_parser("list")
+    list_facts_cmd.add_argument("--file-hash")
+    todos_cmd = facts_sub.add_parser("todos")
+    todos_cmd.add_argument("--status", choices=("open", "resolved", "dismissed"), default="open")
+    decide_fact = facts_sub.add_parser("decide")
+    decide_fact.add_argument("todo_id", type=int)
+    decide_fact.add_argument("choose", help="candidate, existing, or an explicit value")
+    decide_fact.add_argument("--confirm", action="store_true", help="confirm the fact decision")
     return parser
 
 
@@ -72,7 +86,21 @@ def main(argv: list[str] | None = None) -> int:
     config = RuntimeConfig.from_env(project_root=ROOT)
     service = SourceMapService(config.main_db, objects_path=config.objects_dir)
     try:
-        if args.command == "roster":
+        if args.command == "facts":
+            company_id = getattr(args, "facts_company_id", None) or args.company_id
+            if not company_id:
+                raise ValueError("company_id must be injected by the host")
+            facts_service = FactExtractionService(config.main_db)
+            if args.facts_command == "extract":
+                result = facts_service.extract(company_id=company_id, file_hash=args.file_hash)
+            elif args.facts_command == "list":
+                result = facts_service.list_facts(company_id=company_id, file_hash=args.file_hash)
+            elif args.facts_command == "todos":
+                result = facts_service.list_todos(company_id=company_id, status=args.status)
+            else:
+                result = facts_service.decide(company_id=company_id, todo_id=args.todo_id,
+                                              choose=args.choose, confirm=args.confirm)
+        elif args.command == "roster":
             company_id = (getattr(args, "declare_company_id", None)
                           or getattr(args, "roster_company_id", None)
                           or args.company_id)

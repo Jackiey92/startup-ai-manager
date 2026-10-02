@@ -73,6 +73,7 @@ class ExtractedFact:
     source_span: str | None
     confidence: float
     critical: bool
+    review_reason: str | None = None
 
     @property
     def coordinate(self) -> tuple[str, str, str]:
@@ -180,6 +181,47 @@ _TEXT_VALUE = re.compile(
     rf"(?P<label>{'|'.join(map(re.escape, sorted(_TEXT_LABELS, key=len, reverse=True)))})"
     r"\s*(?:为|：|:)?\s*(?P<value>-?[0-9][0-9,]*(?:\.[0-9]+)?%?)"
 )
+
+
+def extract_block_facts(block: dict[str, Any], *, company_id: str, period: str = "unspecified") -> list[ExtractedFact]:
+    """Extract numeric candidates from one self-attributed bridge block.
+
+    The bridge has already filtered ownership.  This parser only recognizes
+    dictionary labels and preserves the literal value; it never converts
+    units or consults a model.
+    """
+    text = str(block.get("content") or "")
+    aliases = sorted(
+        (alias for spec in METRICS for alias in spec.aliases), key=len, reverse=True
+    )
+    if not text or not aliases:
+        return []
+    pattern = re.compile(
+        rf"(?P<label>{'|'.join(map(re.escape, aliases))})"
+        r"\s*(?:为|是|：|:|=|/|=>)?\s*"
+        r"(?P<value>-?[0-9][0-9,]*(?:\.[0-9]+)?%?)"
+    )
+    file_hash = str(block.get("file_hash") or "")
+    results: list[ExtractedFact] = []
+    span = block.get("source_span")
+    content_review = any(cue in text for cue in ("观点", "计划", "预计", "拟", "可能", "目标"))
+    review_reason = "uncertain" if content_review or not block.get("source_page") or not span or "locator=missing" in str(span) else None
+    for match in pattern.finditer(text):
+        spec = _match_metric(match.group("label"))
+        parsed = _value(match.group("value"))
+        if spec is None or parsed is None:
+            continue
+        value, value_type, unit = parsed
+        results.append(ExtractedFact(
+            company_id=company_id, metric=spec.metric, period=period, value=value,
+            value_type=value_type, unit=unit, source_file=file_hash,
+            source_page=block.get("source_page"), source_span=span,
+            confidence=1.0, critical=spec.critical, review_reason=review_reason,
+        ))
+    unique: dict[tuple[str, str, str, str], ExtractedFact] = {}
+    for fact in results:
+        unique.setdefault((*fact.coordinate, fact.value), fact)
+    return list(unique.values())
 
 
 def _from_text(*, company_id: str, period: str, file_hash: str, page_no: int | None,

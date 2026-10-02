@@ -35,6 +35,8 @@ def deterministic_suggestion(candidate: ExtractedFact, existing_value: str | Non
             f"「{candidate.metric}」属于重大指标。建议核验原件坐标后，"
             f"由负责人选择是否采用候选值 {candidate.value}。"
         )
+    if reason in {"uncertain", "anomaly"}:
+        return f"「{candidate.metric}」候选值需核对原件坐标和语义后再确认，系统不会自动写入。"
     return (
         f"检测到 {candidate.metric} 在期间 {candidate.period} 的候选值 {candidate.value} "
         f"与当前值 {existing_value} 不一致。建议先保留当前值，并核对候选原件坐标后人工决定。"
@@ -57,6 +59,10 @@ class ConsolidationService:
 
     def consolidate_manifest(self, manifest: dict, *, company_id: str) -> ConsolidationResult:
         candidates = extract_facts(manifest, company_id=company_id)
+        return self.consolidate_candidates(candidates)
+
+    def consolidate_candidates(self, candidates) -> ConsolidationResult:
+        """Consolidate already ownership-filtered L1 candidates."""
         verified: list[int] = []
         todos: list[int] = []
         duplicates: list[int] = []
@@ -64,8 +70,9 @@ class ConsolidationService:
             for candidate in candidates:
                 current = self._current_fact(conn, candidate)
                 if current is None:
-                    if candidate.critical:
-                        todo_id = self._open_todo(conn, candidate, existing=None, reason="critical_review")
+                    if candidate.critical or candidate.review_reason:
+                        reason = candidate.review_reason or "critical_review"
+                        todo_id = self._open_todo(conn, candidate, existing=None, reason=reason)
                         if todo_id is not None:
                             todos.append(todo_id)
                     else:

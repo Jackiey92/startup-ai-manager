@@ -211,6 +211,22 @@ CREATE INDEX IF NOT EXISTS idx_entity_bridge_blocks_run
 CREATE INDEX IF NOT EXISTS idx_entity_bridge_blocks_review
     ON entity_bridge_blocks(company_id, needs_review, status, id);
 
+-- 2B.a deterministic L1 extraction ledger.
+CREATE TABLE IF NOT EXISTS fact_runs (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id      TEXT NOT NULL,
+    file_hash       TEXT NOT NULL REFERENCES source_files(file_hash),
+    bridge_run_id   INTEGER REFERENCES entity_bridge_runs(id),
+    status          TEXT NOT NULL DEFAULT 'completed',
+    candidate_count INTEGER NOT NULL DEFAULT 0,
+    fact_count      INTEGER NOT NULL DEFAULT 0,
+    todo_count      INTEGER NOT NULL DEFAULT 0,
+    created_at      TEXT NOT NULL,
+    completed_at    TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_fact_runs_company
+    ON fact_runs(company_id, created_at DESC, id DESC);
+
 -- Company-scoped dashboard visibility only; this never deletes source data.
 CREATE TABLE IF NOT EXISTS dashboard_preferences (
     company_id   TEXT NOT NULL,
