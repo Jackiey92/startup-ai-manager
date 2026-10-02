@@ -17,7 +17,8 @@ def _manifest(file_hash: str) -> dict:
         "file_hash": file_hash, "pages": [{"page_no": 2, "text_items": [
             {"text": "原始段落", "source_loc": {"page": 2, "locator": "p2:0-4"}},
             {"text": "无坐标段落", "source_loc": {}},
-        ], "tables": []}],
+        ], "tables": [{"headers": ["指标", "值"], "rows": [["营收", "10"]],
+                         "source_loc": {"page_no": 2, "locator": "table:p2:r0"}}]}],
         "parse_summary": {"status": "parsed", "raw_bytes_external": False, "full_text_external": False},
     }
 
@@ -68,6 +69,16 @@ def test_remove_and_second_correction_supersede_only_same_coordinate(tmp_path: P
     with connect(db) as conn:
         rows = conn.execute("SELECT status,supersedes_id FROM source_edits ORDER BY id").fetchall()
     assert [(row["status"], row["supersedes_id"]) for row in rows] == [("superseded", None), ("active", first["id"])]
+
+
+def test_table_row_replace_and_remove_are_reflected_in_mapping(tmp_path: Path):
+    service, stored, _, _ = _service(tmp_path)
+    locator = "page=2; locator=table:p2:r0"
+    service.replace(file_hash=stored.file_hash, company_id="acme",
+                    target_locator=locator, replacement_text="营收 => 99", confirm=True)
+    assert "营收 => 99" in service.read_map(file_hash=stored.file_hash, company_id="acme")
+    service.remove(file_hash=stored.file_hash, company_id="acme", target_locator=locator, confirm=True)
+    assert "已移除原文行" in service.read_map(file_hash=stored.file_hash, company_id="acme")
 
 
 def test_company_scope_is_required_by_cli_write_surface(tmp_path: Path):

@@ -117,7 +117,13 @@ def render_mapping(manifest: dict[str, Any], *, edits: list[dict[str, Any]] | No
             values = " / ".join(str(v) for v in row["values"].values())
             if row["headers"]:
                 values = " / ".join(str(v) for v in row["headers"]) + " => " + values
-            lines.append(f"| {page_no} | {row_index} | {values.replace('|', '\\|')} | {_coord(row.get('loc'))} |")
+            loc = _coord(row.get("loc"), fallback_page=page_no)
+            edit = active.get(loc)
+            if edit and edit.get("operation") == "remove":
+                values = "~~已移除原文行~~"
+            elif edit and edit.get("operation") == "replace":
+                values = str(edit.get("replacement_text") or "")
+            lines.append(f"| {page_no} | {row_index} | {values.replace('|', '\\|')} | {loc} |")
     return "\n".join(lines) + "\n"
 
 
