@@ -159,9 +159,11 @@ CREATE TABLE IF NOT EXISTS entity_roster (
     aliases       TEXT NOT NULL DEFAULT '[]',
     credit_code   TEXT,
     stock_code    TEXT,
+    origin        TEXT NOT NULL DEFAULT 'extracted'
+                  CHECK(origin IN ('declared', 'extracted')),
     status        TEXT NOT NULL DEFAULT 'suggested'
                   CHECK(status IN ('suggested', 'active', 'rejected')),
-    source_file   TEXT NOT NULL REFERENCES source_files(file_hash),
+    source_file   TEXT REFERENCES source_files(file_hash),
     source_page   INTEGER,
     source_span   TEXT,
     superseded_by INTEGER REFERENCES entity_roster(id),

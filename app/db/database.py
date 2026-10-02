@@ -26,6 +26,7 @@ def init_db(db_path: Path = DEFAULT_DB_PATH) -> None:
         if _classification_needs_rebuild(conn):
             _migrate_file_classifications(conn)
         _migrate_facts(conn)
+        _migrate_entity_roster(conn)
         conn.executescript(SCHEMA)
         conn.executemany(
             "INSERT OR IGNORE INTO modules(code,name,sort_order) VALUES (?,?,?)",
@@ -122,6 +123,56 @@ def _migrate_facts(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE facts ADD COLUMN period TEXT NOT NULL DEFAULT 'unspecified'")
     if "confirm_mode" not in columns:
         conn.execute("ALTER TABLE facts ADD COLUMN confirm_mode TEXT NOT NULL DEFAULT 'manual'")
+
+
+def _migrate_entity_roster(conn: sqlite3.Connection) -> None:
+    """Add the declared/extracted provenance to an existing 2.0 roster."""
+    rows = conn.execute("PRAGMA table_info(entity_roster)").fetchall()
+    columns = {str(row["name"]): row for row in rows}
+    if columns and "origin" not in columns:
+        conn.execute("ALTER TABLE entity_roster ADD COLUMN origin TEXT NOT NULL DEFAULT 'extracted'")
+        rows = conn.execute("PRAGMA table_info(entity_roster)").fetchall()
+        columns = {str(row["name"]): row for row in rows}
+    source_file = columns.get("source_file")
+    if source_file is not None and bool(source_file["notnull"]):
+        # Early 2.0 created source_file NOT NULL, which made a host-declared
+        # self impossible to store without inventing a source. Preserve every
+        # row while relaxing only that constraint.
+        conn.execute("DROP INDEX IF EXISTS idx_entity_roster_current")
+        conn.executescript(
+            """
+            CREATE TABLE entity_roster_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                company_id TEXT NOT NULL,
+                entity_name TEXT NOT NULL,
+                entity_type TEXT,
+                aliases TEXT NOT NULL DEFAULT '[]',
+                credit_code TEXT,
+                stock_code TEXT,
+                origin TEXT NOT NULL DEFAULT 'extracted',
+                status TEXT NOT NULL DEFAULT 'suggested',
+                source_file TEXT REFERENCES source_files(file_hash),
+                source_page INTEGER,
+                source_span TEXT,
+                superseded_by INTEGER REFERENCES entity_roster_new(id),
+                created_at TEXT NOT NULL
+            );
+            """
+        )
+        conn.execute(
+            """INSERT INTO entity_roster_new
+               (id,company_id,entity_name,entity_type,aliases,credit_code,stock_code,origin,
+                status,source_file,source_page,source_span,superseded_by,created_at)
+               SELECT id,company_id,entity_name,entity_type,aliases,credit_code,stock_code,
+                      COALESCE(origin,'extracted'),status,source_file,source_page,source_span,
+                      superseded_by,created_at FROM entity_roster"""
+        )
+        conn.execute("DROP TABLE entity_roster")
+        conn.execute("ALTER TABLE entity_roster_new RENAME TO entity_roster")
+        conn.execute(
+            """CREATE INDEX IF NOT EXISTS idx_entity_roster_current
+               ON entity_roster(company_id, status, superseded_by, id)"""
+        )
 
 
 if __name__ == "__main__":

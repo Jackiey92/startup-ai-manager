@@ -76,3 +76,18 @@ def test_reject_is_confirmed_and_company_scope_is_required(tmp_path: Path):
     rejected = service.reject(company_id="acme", roster_id=suggested["id"], confirm=True)
     assert rejected["status"] == "rejected"
     assert service.list(company_id="other") == []
+
+
+def test_declared_self_is_active_and_has_matching_priority(tmp_path: Path):
+    service, stored, db = _service(tmp_path)
+    extracted = service.suggest(company_id="acme", file_hash=stored.file_hash)
+    declared = service.declare(company_id="acme", entity_name="杭州示例科技有限公司", aliases=("Example", "示例科技"))
+    assert extracted["origin"] == "extracted" and extracted["status"] == "suggested"
+    assert declared["origin"] == "declared" and declared["status"] == "active"
+    assert service.match_name(company_id="acme", name="Example")["id"] == declared["id"]
+    assert service.match_name(company_id="acme", name="杭州示例科技有限公司")["id"] == declared["id"]
+    # A repeated cover name does not create another self suggestion.
+    repeated = service.suggest(company_id="acme", file_hash=stored.file_hash)
+    assert repeated["id"] == declared["id"]
+    with connect(db) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM entity_roster WHERE origin='declared'").fetchone()[0] == 1

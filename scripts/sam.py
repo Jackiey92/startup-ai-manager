@@ -35,6 +35,7 @@ def _parser() -> argparse.ArgumentParser:
             command.add_argument("replacement_text")
         command.add_argument("--confirm", action="store_true", help="confirm an append-only source correction")
     roster = sub.add_parser("roster", help="2.0 deterministic entity roster")
+    roster.add_argument("--company-id", dest="roster_company_id", help="host-injected company scope")
     roster_sub = roster.add_subparsers(dest="roster_command", required=True)
     list_command = roster_sub.add_parser("list")
     list_command.add_argument("--status", choices=("suggested", "active", "rejected"))
@@ -44,6 +45,10 @@ def _parser() -> argparse.ArgumentParser:
         transition = roster_sub.add_parser(name)
         transition.add_argument("roster_id", type=int)
         transition.add_argument("--confirm", action="store_true", help="confirm the review action")
+    declare = roster_sub.add_parser("declare")
+    declare.add_argument("--company-id", dest="declare_company_id", required=True, help="host-injected company scope")
+    declare.add_argument("--name", required=True)
+    declare.add_argument("--aliases", default="", help="comma-separated aliases")
     return parser
 
 
@@ -54,17 +59,23 @@ def main(argv: list[str] | None = None) -> int:
     service = SourceMapService(config.main_db, objects_path=config.objects_dir)
     try:
         if args.command == "roster":
-            if not args.company_id:
+            company_id = (getattr(args, "declare_company_id", None)
+                          or getattr(args, "roster_company_id", None)
+                          or args.company_id)
+            if not company_id:
                 raise ValueError("company_id must be injected by the host")
             roster_service = EntityRosterService(config.main_db)
             if args.roster_command == "list":
-                result = roster_service.list(company_id=args.company_id, status=args.status)
+                result = roster_service.list(company_id=company_id, status=args.status)
             elif args.roster_command == "suggest":
-                result = roster_service.suggest(company_id=args.company_id, file_hash=args.file_hash)
+                result = roster_service.suggest(company_id=company_id, file_hash=args.file_hash)
             elif args.roster_command == "confirm":
-                result = roster_service.confirm(company_id=args.company_id, roster_id=args.roster_id, confirm=args.confirm)
+                result = roster_service.confirm(company_id=company_id, roster_id=args.roster_id, confirm=args.confirm)
+            elif args.roster_command == "reject":
+                result = roster_service.reject(company_id=company_id, roster_id=args.roster_id, confirm=args.confirm)
             else:
-                result = roster_service.reject(company_id=args.company_id, roster_id=args.roster_id, confirm=args.confirm)
+                result = roster_service.declare(company_id=company_id, entity_name=args.name,
+                                                aliases=args.aliases.split(","))
         elif args.command == "read-original":
             result = service.read_original(file_hash=args.file_hash)
         elif args.command == "read-map":

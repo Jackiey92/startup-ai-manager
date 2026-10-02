@@ -39,6 +39,7 @@ class RosterCandidate:
     source_file: str
     source_page: int | None
     source_span: str | None
+    origin: str = "extracted"
 
     def to_dict(self) -> dict[str, Any]:
         result = {
@@ -52,6 +53,7 @@ class RosterCandidate:
             "source_page": self.source_page,
             "source_span": self.source_span,
             "status": "suggested",
+            "origin": self.origin,
         }
         return result
 
@@ -182,6 +184,18 @@ class EntityRosterService:
             return None
         values = candidate.to_dict()
         with connect(self.db_path) as conn:
+            declared = conn.execute(
+                """SELECT * FROM entity_roster
+                   WHERE company_id=? AND origin='declared' AND status='active'
+                     AND superseded_by IS NULL
+                   ORDER BY id DESC LIMIT 1""",
+                (company_id,),
+            ).fetchone()
+            # A host-declared self is authoritative.  Do not create a second
+            # self suggestion when a registration cover repeats that name.
+            # A differently named structured entity may still be a subsidiary.
+            if declared is not None and declared["entity_name"].strip() == candidate.entity_name.strip():
+                return dict(declared)
             existing = conn.execute(
                 """SELECT * FROM entity_roster WHERE company_id=? AND entity_name=?
                    AND source_file=? AND superseded_by IS NULL
@@ -192,12 +206,12 @@ class EntityRosterService:
                 return dict(existing)
             cur = conn.execute(
                 """INSERT INTO entity_roster
-                   (company_id,entity_name,entity_type,aliases,credit_code,stock_code,status,
+                   (company_id,entity_name,entity_type,aliases,credit_code,stock_code,origin,status,
                     source_file,source_page,source_span,created_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (company_id, candidate.entity_name, candidate.entity_type,
                  json.dumps(list(candidate.aliases), ensure_ascii=False), candidate.credit_code,
-                 candidate.stock_code, "suggested", candidate.source_file, candidate.source_page,
+                 candidate.stock_code, "extracted", "suggested", candidate.source_file, candidate.source_page,
                  candidate.source_span, _now()),
             )
             conn.commit()
@@ -220,6 +234,60 @@ class EntityRosterService:
             row["aliases"] = json.loads(row["aliases"] or "[]")
         return rows
 
+    def declare(self, *, company_id: str, entity_name: str,
+                aliases: Iterable[str] = ()) -> dict[str, Any]:
+        """Record the host's authoritative self declaration as active.
+
+        This command intentionally has no CLI ``--confirm`` gate: the host
+        supplies the authenticated company scope and the explicit declaration
+        itself is the confirmation.  It remains append-only and cannot change
+        the source blob or any 2B fact.
+        """
+        if not company_id:
+            raise ValueError("company_id must be injected by the host")
+        name = str(entity_name or "").strip()
+        if not name:
+            raise ValueError("entity_name is required")
+        alias_values = tuple(dict.fromkeys(str(item).strip() for item in aliases if str(item).strip()))
+        with connect(self.db_path) as conn:
+            current = conn.execute(
+                """SELECT * FROM entity_roster
+                   WHERE company_id=? AND origin='declared' AND entity_name=?
+                     AND status='active' AND superseded_by IS NULL
+                   ORDER BY id DESC LIMIT 1""", (company_id, name),
+            ).fetchone()
+            if current is not None:
+                return dict(current)
+            previous = conn.execute(
+                """SELECT * FROM entity_roster WHERE company_id=? AND status='active'
+                   AND superseded_by IS NULL ORDER BY id DESC LIMIT 1""", (company_id,)
+            ).fetchone()
+            cur = conn.execute(
+                """INSERT INTO entity_roster
+                   (company_id,entity_name,entity_type,aliases,credit_code,stock_code,origin,status,
+                    source_file,source_page,source_span,created_at)
+                   VALUES (?,?,?,?,?,?,?,'active',NULL,NULL,NULL,?)""",
+                (company_id, name, "self", json.dumps(list(alias_values), ensure_ascii=False),
+                 None, None, "declared", _now()),
+            )
+            if previous is not None:
+                conn.execute("UPDATE entity_roster SET superseded_by=? WHERE id=?", (cur.lastrowid, previous["id"]))
+            conn.commit()
+            return dict(conn.execute("SELECT * FROM entity_roster WHERE id=?", (cur.lastrowid,)).fetchone())
+
+    def match_name(self, *, company_id: str, name: str) -> dict[str, Any] | None:
+        """Resolve an exact roster name/alias with declared self priority."""
+        needle = str(name or "").strip().casefold()
+        if not needle:
+            return None
+        rows = self.list(company_id=company_id)
+        rows.sort(key=lambda row: (0 if row.get("origin") == "declared" else 1, -int(row["id"])))
+        for row in rows:
+            names = [row.get("entity_name") or "", *row.get("aliases", [])]
+            if any(str(value).strip().casefold() == needle for value in names):
+                return row
+        return None
+
     def _transition(self, *, company_id: str, roster_id: int, status: str, confirm: bool) -> dict[str, Any]:
         if not company_id:
             raise ValueError("company_id must be injected by the host")
@@ -236,11 +304,11 @@ class EntityRosterService:
                 raise KeyError(roster_id)
             cur = conn.execute(
                 """INSERT INTO entity_roster
-                   (company_id,entity_name,entity_type,aliases,credit_code,stock_code,status,
+                   (company_id,entity_name,entity_type,aliases,credit_code,stock_code,origin,status,
                     source_file,source_page,source_span,created_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (row["company_id"], row["entity_name"], row["entity_type"], row["aliases"],
-                 row["credit_code"], row["stock_code"], status, row["source_file"],
+                 row["credit_code"], row["stock_code"], row["origin"], status, row["source_file"],
                  row["source_page"], row["source_span"], _now()),
             )
             conn.execute("UPDATE entity_roster SET superseded_by=? WHERE id=?", (cur.lastrowid, roster_id))
