@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.db import init_db
-from app.entities import EntityRosterService
+from app.entities import EntityBridgeService, EntityRosterService
 from app.runtime_config import RuntimeConfig
 from app.source_map import SourceMapService
 
@@ -49,6 +49,19 @@ def _parser() -> argparse.ArgumentParser:
     declare.add_argument("--company-id", dest="declare_company_id", required=True, help="host-injected company scope")
     declare.add_argument("--name", required=True)
     declare.add_argument("--aliases", default="", help="comma-separated aliases")
+    bridge = sub.add_parser("bridge", help="2.1.a deterministic entity attribution")
+    bridge.add_argument("--company-id", dest="bridge_company_id", help="host-injected company scope")
+    bridge_sub = bridge.add_subparsers(dest="bridge_command", required=True)
+    run_bridge = bridge_sub.add_parser("run")
+    run_bridge.add_argument("file_hash")
+    list_bridge = bridge_sub.add_parser("list")
+    list_bridge.add_argument("--run-id", type=int)
+    ambiguous_bridge = bridge_sub.add_parser("ambiguous")
+    ambiguous_bridge.add_argument("--run-id", type=int)
+    decide_bridge = bridge_sub.add_parser("decide")
+    decide_bridge.add_argument("block_id", type=int)
+    decide_bridge.add_argument("classification", choices=("self", "related", "foreign"))
+    decide_bridge.add_argument("--confirm", action="store_true", help="confirm the review decision")
     return parser
 
 
@@ -76,6 +89,20 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 result = roster_service.declare(company_id=company_id, entity_name=args.name,
                                                 aliases=args.aliases.split(","))
+        elif args.command == "bridge":
+            company_id = getattr(args, "bridge_company_id", None) or args.company_id
+            if not company_id:
+                raise ValueError("company_id must be injected by the host")
+            bridge_service = EntityBridgeService(config.main_db)
+            if args.bridge_command == "run":
+                result = bridge_service.run(company_id=company_id, file_hash=args.file_hash)
+            elif args.bridge_command == "list":
+                result = bridge_service.list(company_id=company_id, run_id=args.run_id)
+            elif args.bridge_command == "ambiguous":
+                result = bridge_service.ambiguous(company_id=company_id, run_id=args.run_id)
+            else:
+                result = bridge_service.decide(company_id=company_id, block_id=args.block_id,
+                                               classification=args.classification, confirm=args.confirm)
         elif args.command == "read-original":
             result = service.read_original(file_hash=args.file_hash)
         elif args.command == "read-map":

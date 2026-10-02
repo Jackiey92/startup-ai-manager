@@ -172,6 +172,42 @@ CREATE TABLE IF NOT EXISTS entity_roster (
 CREATE INDEX IF NOT EXISTS idx_entity_roster_current
     ON entity_roster(company_id, status, superseded_by, id);
 
+-- 2.1.a deterministic entity attribution runs and immutable source blocks.
+CREATE TABLE IF NOT EXISTS entity_bridge_runs (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id   TEXT NOT NULL,
+    file_hash    TEXT NOT NULL REFERENCES source_files(file_hash),
+    status       TEXT NOT NULL DEFAULT 'completed',
+    block_count  INTEGER NOT NULL DEFAULT 0,
+    created_at   TEXT NOT NULL,
+    completed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_entity_bridge_runs_company
+    ON entity_bridge_runs(company_id, created_at DESC, id DESC);
+
+CREATE TABLE IF NOT EXISTS entity_bridge_blocks (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id         INTEGER NOT NULL REFERENCES entity_bridge_runs(id),
+    company_id     TEXT NOT NULL,
+    file_hash      TEXT NOT NULL REFERENCES source_files(file_hash),
+    block_index    INTEGER NOT NULL,
+    block_type     TEXT NOT NULL CHECK(block_type IN ('text', 'table_row')),
+    content        TEXT NOT NULL,
+    source_page    INTEGER,
+    source_span    TEXT,
+    classification TEXT NOT NULL CHECK(classification IN ('self', 'related', 'foreign', 'ambiguous')),
+    relation       TEXT,
+    subject        TEXT,
+    needs_review   INTEGER NOT NULL DEFAULT 0 CHECK(needs_review IN (0, 1)),
+    decision       TEXT,
+    status         TEXT NOT NULL DEFAULT 'pending',
+    created_at     TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_entity_bridge_blocks_run
+    ON entity_bridge_blocks(run_id, block_index);
+CREATE INDEX IF NOT EXISTS idx_entity_bridge_blocks_review
+    ON entity_bridge_blocks(company_id, needs_review, status, id);
+
 -- Company-scoped dashboard visibility only; this never deletes source data.
 CREATE TABLE IF NOT EXISTS dashboard_preferences (
     company_id   TEXT NOT NULL,
