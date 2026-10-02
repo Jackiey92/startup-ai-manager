@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import hmac
 import os
 import subprocess
 import uuid
@@ -20,7 +21,7 @@ _sys.path.insert(0, str(_PROJECT_ROOT))
 from app.storage import SourceFileStore
 from app.db.database import init_db as init_core_db
 from app.classifier import ClassificationService
-from app.facts import ConsolidationService
+from app.facts import ConsolidationService, FactExtractionService
 from app.guidance import GuideJobCoordinator, ImportGuideService, ModelUnavailable
 from app.harness.staging import StagingStore
 from app.memory import ExtractionMemoryService
@@ -668,6 +669,45 @@ def api_facts():
     company_id = str(request.args.get("company_id") or os.environ.get("SAM_COMPANY_ID", "default"))
     file_hash = request.args.get("file_hash")
     return {"facts": consolidation_service().list_facts(company_id=company_id, file_hash=file_hash)}
+
+
+def _internal_manager_authorized() -> bool:
+    """Require both a deployment-provided token and a loopback caller."""
+    expected = os.environ.get("SAM_INTERNAL_TOKEN", "")
+    supplied = request.headers.get("X-SAM-Internal-Token", "")
+    if not expected or not supplied or not hmac.compare_digest(supplied, expected):
+        return False
+    return request.remote_addr in {"127.0.0.1", "::1"}
+
+
+@app.route("/api/internal/facts/extract", methods=["POST"])
+def api_internal_facts_extract():
+    """Resident-manager entry point for the worker-backed finance path.
+
+    This is deliberately not exposed as a CLI-to-model bypass: only the
+    long-lived Flask process may invoke ``use_worker=True``.  The host owns
+    company scope; request JSON cannot override it.
+    """
+    if not _internal_manager_authorized():
+        return {"error": "internal authorization required"}, 403
+    payload = request.get_json(silent=True) or {}
+    file_hash = payload.get("file_hash")
+    if not isinstance(file_hash, str) or not file_hash:
+        return {"error": "file_hash is required"}, 400
+    bridge_run_id = payload.get("bridge_run_id")
+    if bridge_run_id is not None and not isinstance(bridge_run_id, int):
+        return {"error": "bridge_run_id must be an integer"}, 400
+    thread_id = payload.get("thread_id")
+    if thread_id is not None and not isinstance(thread_id, str):
+        return {"error": "thread_id must be a string"}, 400
+    try:
+        result = FactExtractionService(MAIN_DB).extract(
+            company_id=_company_id(), file_hash=file_hash, bridge_run_id=bridge_run_id,
+            use_worker=True, thread_id=thread_id,
+        )
+    except (KeyError, ValueError) as exc:
+        return {"error": str(exc)}, 400
+    return {"run": result}
 
 
 @app.route("/api/todos", methods=["GET"])

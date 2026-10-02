@@ -69,7 +69,10 @@ def _parser() -> argparse.ArgumentParser:
     facts_sub = facts.add_subparsers(dest="facts_command", required=True)
     extract_facts_cmd = facts_sub.add_parser("extract")
     extract_facts_cmd.add_argument("file_hash")
-    extract_facts_cmd.add_argument("--use-worker", action="store_true", help="delegate candidate extraction to finance employee")
+    extract_facts_cmd.add_argument(
+        "--use-worker", action="store_true",
+        help="offline fake-runner tests only; real worker execution uses the Flask internal manager endpoint",
+    )
     list_facts_cmd = facts_sub.add_parser("list")
     list_facts_cmd.add_argument("--file-hash")
     todos_cmd = facts_sub.add_parser("todos")
@@ -93,8 +96,12 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValueError("company_id must be injected by the host")
             facts_service = FactExtractionService(config.main_db)
             if args.facts_command == "extract":
+                if args.use_worker:
+                    raise ValueError(
+                        "--use-worker is offline-test only; real worker execution must use the authenticated Flask internal endpoint"
+                    )
                 result = facts_service.extract(company_id=company_id, file_hash=args.file_hash,
-                                               use_worker=args.use_worker)
+                                               use_worker=False)
             elif args.facts_command == "list":
                 result = facts_service.list_facts(company_id=company_id, file_hash=args.file_hash)
             elif args.facts_command == "todos":

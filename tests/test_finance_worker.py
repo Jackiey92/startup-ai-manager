@@ -84,3 +84,47 @@ def test_employee_runner_injected_scope_isolated_and_skill_loaded(tmp_path: Path
     runner.run(skill="finance-fact-extraction", text="y", company_id="acc-two", thread_id="t2")
     assert [(item["scope"]["company_id"], item["scope"]["thread_id"]) for item in seen] == [("acc-one", "t1"), ("acc-two", "t2")]
     assert all(item["skill_text"] for item in seen)
+
+
+def test_flask_internal_manager_entry_runs_in_process_and_rejects_external_scope(tmp_path: Path, monkeypatch):
+    import webapp.app as webapp
+
+    init_db(tmp_path / "app.db")
+    monkeypatch.setattr(webapp, "MAIN_DB", tmp_path / "app.db")
+    monkeypatch.setenv("SAM_COMPANY_ID", "host-company")
+    monkeypatch.setenv("SAM_INTERNAL_TOKEN", "test-internal-token")
+    seen = {}
+
+    class _Service:
+        def __init__(self, db):
+            seen["db"] = db
+
+        def extract(self, **kwargs):
+            seen.update(kwargs)
+            return {"status": "completed", "fact_count": 1}
+
+    monkeypatch.setattr(webapp, "FactExtractionService", _Service)
+    client = webapp.app.test_client()
+    response = client.post(
+        "/api/internal/facts/extract",
+        json={"file_hash": "hash", "company_id": "attacker"},
+        headers={"X-SAM-Internal-Token": "test-internal-token"},
+        environ_overrides={"REMOTE_ADDR": "127.0.0.1"},
+    )
+    assert response.status_code == 200
+    assert seen["company_id"] == "host-company"
+    assert seen["use_worker"] is True
+    denied = client.post(
+        "/api/internal/facts/extract", json={"file_hash": "hash"},
+        headers={"X-SAM-Internal-Token": "test-internal-token"},
+        environ_overrides={"REMOTE_ADDR": "10.0.0.8"},
+    )
+    assert denied.status_code == 403
+
+
+def test_cli_worker_flag_cannot_bypass_resident_manager(monkeypatch, capsys):
+    from scripts import sam
+
+    monkeypatch.setattr(sam, "init_db", lambda: None)
+    assert sam.main(["--company-id", "acme", "facts", "extract", "hash", "--use-worker"]) == 2
+    assert "authenticated Flask internal endpoint" in capsys.readouterr().err
