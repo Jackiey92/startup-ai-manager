@@ -63,6 +63,25 @@ def test_worker_candidate_passes_only_after_exact_provenance_verification(tmp_pa
     assert fake.calls[0]["company_id"] == "acme"
 
 
+def test_worker_human_quote_without_machine_coordinates_is_backfilled(tmp_path: Path):
+    db, stored, bridge = _setup(tmp_path)
+    candidate = _candidate(
+        period="2024年度",
+        quote="主公司有限公司 2024年度 营业收入3.26亿元，净利润0.58亿元",
+    )
+    candidate["source_page"] = 999
+    candidate["source_span"] = "employee-invented-coordinate"
+    run = FactExtractionService(db).extract(
+        company_id="acme", file_hash=stored.file_hash, bridge_run_id=bridge["id"],
+        use_worker=True, worker=_FakeEmployee([candidate]),
+    )
+    fact = FactExtractionService(db).list_facts(company_id="acme")[0]
+    assert run["fact_count"] == 1
+    assert (fact["period"], fact["source_page"], fact["source_span"]) == (
+        "2024", 1, "page=1; locator=text/0",
+    )
+
+
 def test_worker_tampering_wrong_unit_entity_or_year_is_rejected(tmp_path: Path):
     for candidate in (
         _candidate(unit="万元"),
@@ -70,6 +89,7 @@ def test_worker_tampering_wrong_unit_entity_or_year_is_rejected(tmp_path: Path):
         _candidate(entity="其他公司有限公司"),
         _candidate(period="2023"),
         _candidate(value="9.99"),
+        _candidate(quote="完全不在原文中的片段"),
     ):
         db, stored, bridge = _setup(tmp_path)
         fake = _FakeEmployee([candidate])

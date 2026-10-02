@@ -65,8 +65,7 @@ class EmployeeRunner:
             prompt = (
                 "Load the supplied employee skill and return JSON only as "
                 '{"candidates":[{"metric":"...","value":"...","unit":null,'
-                '"entity":"...","period":"unspecified","source_span":"...",'
-                '"source_page":null,"quote":"..."}]}.'
+                '"entity":"...","period":"unspecified","quote":"..."}]}. '
             )
             raw = runtime.run_agent_message(
                 prompt, context_text=skill_text + "\n\nBLOCK:\n" + text,
