@@ -7,6 +7,8 @@ import re
 from ..db.database import connect
 from .consolidation import ConsolidationResult, ConsolidationService
 from .extractor import extract_block_facts, _period, period_from_text
+from .verifier import verify_candidates
+from ..employees import EmployeeRunner, WorkerUnavailable
 
 
 def _now() -> str:
@@ -32,7 +34,8 @@ class FactExtractionService:
         with connect(self.db_path) as conn:
             return [dict(row) for row in conn.execute(sql, params).fetchall()]
 
-    def extract(self, *, company_id: str, file_hash: str, bridge_run_id: int | None = None) -> dict:
+    def extract(self, *, company_id: str, file_hash: str, bridge_run_id: int | None = None,
+                use_worker: bool = False, worker=None, thread_id: str | None = None) -> dict:
         if not company_id:
             raise ValueError("company_id must be injected by the host")
         blocks = self._blocks(company_id, file_hash, bridge_run_id)
@@ -46,8 +49,19 @@ class FactExtractionService:
             filename = blocks[0].get("original_name", "") if blocks else ""
         period = _period({"filename": filename})
         candidates = []
+        employee = worker or (EmployeeRunner() if use_worker else None)
         for block in blocks:
             block_period = period_from_text(block.get("content", ""), period)
+            if use_worker:
+                try:
+                    proposed = employee.run(skill="finance-fact-extraction", text=block.get("content", ""),
+                                            company_id=company_id, thread_id=thread_id)
+                    candidates.extend(verify_candidates(proposed, [block], company_id=company_id))
+                    continue
+                except WorkerUnavailable:
+                    pass
+                except Exception:
+                    pass
             candidates.extend(extract_block_facts(block, company_id=company_id, period=block_period))
         result: ConsolidationResult = self.consolidation.consolidate_candidates(candidates)
         with connect(self.db_path) as conn:

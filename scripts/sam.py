@@ -69,6 +69,7 @@ def _parser() -> argparse.ArgumentParser:
     facts_sub = facts.add_subparsers(dest="facts_command", required=True)
     extract_facts_cmd = facts_sub.add_parser("extract")
     extract_facts_cmd.add_argument("file_hash")
+    extract_facts_cmd.add_argument("--use-worker", action="store_true", help="delegate candidate extraction to finance employee")
     list_facts_cmd = facts_sub.add_parser("list")
     list_facts_cmd.add_argument("--file-hash")
     todos_cmd = facts_sub.add_parser("todos")
@@ -92,7 +93,8 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValueError("company_id must be injected by the host")
             facts_service = FactExtractionService(config.main_db)
             if args.facts_command == "extract":
-                result = facts_service.extract(company_id=company_id, file_hash=args.file_hash)
+                result = facts_service.extract(company_id=company_id, file_hash=args.file_hash,
+                                               use_worker=args.use_worker)
             elif args.facts_command == "list":
                 result = facts_service.list_facts(company_id=company_id, file_hash=args.file_hash)
             elif args.facts_command == "todos":
