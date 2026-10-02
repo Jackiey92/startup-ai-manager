@@ -84,7 +84,7 @@ def test_related_foreign_and_ambiguous_are_distinct_and_decision_requires_confir
     related = next(row for row in rows if "子公司" in row["content"])
     foreign = next(row for row in rows if row["content"].startswith("远方科技有限公司"))
     assert (related["classification"], related["relation"], related["subject"]) == (
-        "related", "子公司", "远方科技有限公司"
+        "self", "子公司", "远方科技有限公司"
     )
     assert foreign["classification"] == "foreign"
     unknown = [row for row in rows if row["classification"] == "ambiguous"]
@@ -104,3 +104,14 @@ def test_company_scope_is_required_for_bridge_writes(tmp_path: Path):
         EntityBridgeService(db).run(company_id="", file_hash=stored.file_hash)
     with connect(db) as conn:
         assert conn.execute("SELECT COUNT(*) FROM entity_bridge_runs").fetchone()[0] == 0
+
+
+def test_subsidiary_is_self_but_customer_is_related_and_subject_prefix_is_trimmed():
+    roster = [{"entity_name": "主公司有限公司", "aliases": [], "credit_code": None,
+               "stock_code": None, "status": "active", "superseded_by": None}]
+    assert classify_block(
+        "公司全资子公司常州未蓝新能源有限公司营业收入20", roster
+    ) == ("self", "全资子公司", "常州未蓝新能源有限公司")
+    assert classify_block(
+        "本公司主要客户为苏州星河半导体有限公司", roster
+    ) == ("related", "客户", "苏州星河半导体有限公司")

@@ -20,9 +20,10 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-_RELATIONS = (
-    "控股子公司", "全资子公司", "子公司", "关联公司", "关联方", "合作方",
-    "合作伙伴", "供应商", "客户", "投资方", "被投资方", "参股公司",
+_SUBSIDIARY_RELATIONS = ("并表子公司", "控股子公司", "全资子公司", "子公司")
+_RELATED_RELATIONS = (
+    "关联公司", "关联方", "合作方", "合作伙伴", "供应商", "客户",
+    "投资方", "被投资方", "参股公司",
 )
 _ENTITY_NAME = re.compile(r"[\u4e00-\u9fffA-Za-z0-9·（）()_-]{2,40}(?:有限公司|有限责任公司|股份有限公司|集团公司|集团)")
 
@@ -89,7 +90,8 @@ def classify_block(content: str, roster: list[dict[str, Any]]) -> tuple[str, str
     text = str(content or "")
     tokens = _roster_tokens(roster)
     own = next(((token, row) for token, row in tokens if token.casefold() in text.casefold()), None)
-    relation = next((term for term in _RELATIONS if term in text), None)
+    subsidiary_relation = next((term for term in _SUBSIDIARY_RELATIONS if term in text), None)
+    relation = subsidiary_relation or next((term for term in _RELATED_RELATIONS if term in text), None)
     if relation:
         # A relationship sentence is related even when the counterpart is not
         # yet in the roster; the subject is the longest structured company
@@ -105,7 +107,9 @@ def classify_block(content: str, roster: list[dict[str, Any]]) -> tuple[str, str
             subject_match = _ENTITY_NAME.search(text)
             subject = subject_match.group(0) if subject_match else (own[0] if own else None)
         if subject:
-            return "related", relation, subject
+            subject = re.sub(r"^(?:为|向|对|与|及|至|跟|和)", "", subject)
+        if subject:
+            return ("self" if subsidiary_relation else "related"), relation, subject
     if own:
         return "self", None, own[0]
     # A named company asserting its own metric, without a relationship cue,
