@@ -26,7 +26,7 @@ from app.ov_navigation import OVNavigationService
 from app.entities import EntityBridgeService
 from app.guidance import GuideJobCoordinator, ImportGuideService, ModelUnavailable
 from app.harness.staging import StagingStore
-from app.memory import ExtractionMemoryService
+from app.memory import ExtractionMemoryService, add_parsed_resource
 from app.memory_map import MapBuilder, MemoryMapTools
 from app.conversation_store import ConversationStore, deterministic_summary
 from app.context_assembler import ContextAssembler
@@ -234,11 +234,12 @@ def _parse_job_worker(job: dict, progress, cancel_event) -> None:
         # Source bytes are imported into OV's semantic namespace exactly once;
         # the employee/skill chooses the folder from parsed content.
         try:
-            stored = SourceFileStore(RUNTIME_CONFIG.objects_dir, MAIN_DB).get(job["file_hash"])
-            extraction.memory.add_resource(
-                str(RUNTIME_CONFIG.objects_dir / stored.storage_path),
+            # OV's local runtime does not parse PDF bytes.  Preserve the
+            # immutable PDF in SAM's object store, but ingest MinerU's parsed
+            # page markdown so OV can build L2/L1/L0 navigation.
+            add_parsed_resource(
+                extraction.memory, payload,
                 parent=f"viking://resources/{extraction.classify_folder(payload, skills_root=RUNTIME_CONFIG.skill_root)}",
-                wait=True,
             )
         except Exception:
             app.logger.exception("OV resource import deferred after extraction")

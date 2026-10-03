@@ -11,12 +11,21 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
 import json
+import tempfile
 from typing import Any, Iterable
 
 from ..ports import MemoryProvider
 from ..source_map import render_mapping
 from ..memory_paths import MEMORY_ROOT
 from ..classifier.semantic_folders import classify as classify_folder
+
+
+def add_parsed_resource(memory: MemoryProvider, manifest: dict[str, Any], *, parent: str) -> None:
+    """Ingest parser markdown, never the immutable source bytes, into OV."""
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".md") as handle:
+        handle.write(render_mapping(manifest))
+        handle.flush()
+        memory.add_resource(handle.name, parent=parent, wait=True)
 
 
 
@@ -52,6 +61,10 @@ class ExtractionMemoryService:
     @staticmethod
     def _markdown(manifest: dict[str, Any]) -> str:
         return render_mapping(manifest)
+
+    def render_document(self, manifest: dict[str, Any]) -> str:
+        """Return parser output suitable for OV resource ingestion."""
+        return self._markdown(manifest)
 
     def ingest(self, company_id: str, manifest: dict[str, Any], *, document_markdown: str | None = None) -> ExtractionRecord:
         required = ("source_id", "filename", "format", "file_hash", "pages", "parse_summary")
