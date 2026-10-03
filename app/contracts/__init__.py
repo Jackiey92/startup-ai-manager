@@ -16,6 +16,13 @@ from .phase0 import (
     validate_tool_arguments,
     validate_tool_manifest,
 )
+from .phase2 import (
+    GRAY_ROLE,
+    ToolSearchSurface,
+    finalize_agent_tool_availability,
+    load_phase1_registry,
+    load_tool_search_surface,
+)
 
 __all__ = [
     "ContractError",
@@ -32,4 +39,9 @@ __all__ = [
     "validate_schema",
     "validate_tool_arguments",
     "validate_tool_manifest",
+    "GRAY_ROLE",
+    "ToolSearchSurface",
+    "finalize_agent_tool_availability",
+    "load_phase1_registry",
+    "load_tool_search_surface",
 ]
