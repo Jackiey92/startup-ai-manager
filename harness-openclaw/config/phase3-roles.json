@@ -5,7 +5,9 @@
     "business_analyst": {
       "enabled": true,
       "runtime": "openclaw-unified-employee-runtime",
-      "skills": [],
+      "skills": [
+        "business-prose-extraction"
+      ],
       "tools": [
         "sam_conversation_read",
         "sam_memory_map",
@@ -38,15 +40,14 @@
       "prohibited_write_zones": [
         "ledger_r1"
       ],
-      "skill_gap": [
-        "no accepted Phase 1 business skill; tools-only pending review"
-      ]
+      "skill_gap": []
     },
     "file_processor": {
       "enabled": true,
       "runtime": "openclaw-unified-employee-runtime",
       "skills": [
-        "document-ingest"
+        "document-ingest",
+        "document-classifier"
       ],
       "tools": [
         "sam_conversation_read",
@@ -132,7 +133,9 @@
     "legal_analyst": {
       "enabled": true,
       "runtime": "openclaw-unified-employee-runtime",
-      "skills": [],
+      "skills": [
+        "legal-document-analysis"
+      ],
       "tools": [
         "sam_conversation_read",
         "sam_memory_map",
@@ -165,9 +168,7 @@
       "prohibited_write_zones": [
         "ledger_r1"
       ],
-      "skill_gap": [
-        "no accepted Phase 1 legal skill; tools-only pending review"
-      ]
+      "skill_gap": []
     }
   },
   "catalog": "harness-openclaw/tool-registry/manifest.json",

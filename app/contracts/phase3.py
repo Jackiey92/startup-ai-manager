@@ -19,19 +19,16 @@ from .phase2 import load_phase1_registry
 
 UNIFIED_RUNTIME = "openclaw-unified-employee-runtime"
 ROLE_SKILLS: dict[str, tuple[str, ...]] = {
-    "file_processor": ("document-ingest",),
+    "file_processor": ("document-ingest", "document-classifier"),
     "finance_analyst": ("finance-fact-extraction",),
-    # Phase 1 rejected these two skill files (missing/invalid frontmatter).
-    # Do not silently invent a skill: the roles remain enabled with their
-    # authorized memory tools and wait for a separately reviewed skill.
-    "legal_analyst": (),
-    "business_analyst": (),
+    "legal_analyst": ("legal-document-analysis",),
+    "business_analyst": ("business-prose-extraction",),
 }
 ROLE_SKILL_GAPS: dict[str, tuple[str, ...]] = {
     "file_processor": (),
     "finance_analyst": (),
-    "legal_analyst": ("no accepted Phase 1 legal skill; tools-only pending review",),
-    "business_analyst": ("no accepted Phase 1 business skill; tools-only pending review",),
+    "legal_analyst": (),
+    "business_analyst": (),
 }
 
 HANDOFF_VERSION = "phase3.v1"

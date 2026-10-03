@@ -14,6 +14,7 @@ from app.facts.l1 import normalize_finance_text
 from app.facts.verifier import verify_candidate
 from app.harness.staging import StagingStore
 from app.storage import SourceFileStore
+from tests.entity_employee import FixtureEntityEmployee
 
 
 def _setup(tmp_path: Path):
@@ -30,7 +31,7 @@ def _setup(tmp_path: Path):
         }], "tables": []}],
     })
     EntityRosterService(db).declare(company_id="acme", entity_name="主公司有限公司")
-    run = EntityBridgeService(db).run(company_id="acme", file_hash=stored.file_hash)
+    run = EntityBridgeService(db, employee=FixtureEntityEmployee()).run(company_id="acme", file_hash=stored.file_hash)
     return db, stored, run
 
 
@@ -152,7 +153,7 @@ def test_docx_emits_unresolved_when_employee_candidates_fail_verification(tmp_pa
         }], "tables": []}],
     })
     EntityRosterService(db).declare(company_id="acme", entity_name="主公司有限公司")
-    bridge = EntityBridgeService(db).run(company_id="acme", file_hash=stored.file_hash)
+    bridge = EntityBridgeService(db, employee=FixtureEntityEmployee()).run(company_id="acme", file_hash=stored.file_hash)
     invalid = _candidate(quote="模型臆造的引用")
     run = FactExtractionService(db).extract(
         company_id="acme", file_hash=stored.file_hash, bridge_run_id=bridge["id"],
@@ -184,7 +185,7 @@ def test_worker_keeps_parent_and_subsidiary_entities_separate(tmp_path: Path):
             "text": child_text, "source_loc": {"locator": "text/0"},
         }], "tables": []}],
     })
-    child_bridge = EntityBridgeService(db).run(company_id="acme", file_hash=child.file_hash)
+    child_bridge = EntityBridgeService(db, employee=FixtureEntityEmployee()).run(company_id="acme", file_hash=child.file_hash)
 
     class _RoutedEmployee:
         def run(self, **kwargs):
@@ -348,6 +349,13 @@ def test_upload_worker_automatically_runs_bridge_worker_verify_and_commit(tmp_pa
         def classify_parsed(self, **_kwargs):
             return {"id": 1, "_created_for_parse": False}
 
+    class _EntityEmployee:
+        def attribute_block(self, **_kwargs):
+            return {"label": "self", "subject": "主公司有限公司", "relation": None, "reason": "fixture"}
+
+        def classify_document(self, **_kwargs):
+            return {"folder": "财务"}
+
     class _Memory:
         def __init__(self, _provider):
             pass
@@ -366,6 +374,7 @@ def test_upload_worker_automatically_runs_bridge_worker_verify_and_commit(tmp_pa
     monkeypatch.setattr(webapp, "_PARSE_ADAPTER", _Adapter())
     monkeypatch.setattr(webapp, "FactExtractionService", _InProcessFactService)
     monkeypatch.setattr(webapp, "classification_service", lambda: _Classification())
+    monkeypatch.setattr(webapp, "semantic_employee", lambda: _EntityEmployee())
     monkeypatch.setattr(webapp, "ExtractionMemoryService", _Memory)
     monkeypatch.setattr(webapp, "MapBuilder", _Map)
     monkeypatch.setattr(webapp, "queue_import_guide", lambda *_args, **_kwargs: None)

@@ -1,43 +1,13 @@
-"""Content-first, deterministic classification for 2A source files.
-
-Classification is navigation metadata, not a fact write.  A parsed manifest is
-the primary evidence; filename matching is only available as a low-confidence
-fallback for files that could not be parsed.  Every decision is retained in an
-append-only SQLite ledger so a human correction never changes the original
-object or erases the automatic result.
-"""
+"""Append-only classification ledger backed by the document employee."""
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Iterable
+from typing import Any
 
-from .file_classifier import CoarseResult, FileClassifier
+from .file_classifier import CoarseResult
 from ..db.database import connect
-
-
-# These are deliberately document-content terms rather than filename hints.
-# A module needs at least two distinct indicators, avoiding a classification
-# based on one accidental mention (for example, an HR roster containing a
-# "sales" job title).
-CONTENT_HINTS: dict[str, tuple[str, ...]] = {
-    "finance": (
-        "利润表", "资产负债表", "现金流", "现金流量", "营业收入", "净利润",
-        "毛利率", "应收账款", "货币资金", "财务费用", "资产", "负债",
-    ),
-    "sales": (
-        "客户名称", "客户", "订单", "订单金额", "发货", "回款", "报价",
-        "销售额", "商机", "合同编号", "收款",
-    ),
-    "marketing": (
-        "线索", "渠道", "投放", "营销", "市场活动", "广告", "转化率",
-        "campaign", "lead", "channel",
-    ),
-    "hr": (
-        "员工", "薪酬", "工资", "岗位", "入职", "离职", "社保", "考勤",
-        "人力", "花名册", "基本工资", "绩效",
-    ),
-}
+from ..employees import SemanticDecisionUnavailable, SemanticEmployee
 
 
 @dataclass(frozen=True)
@@ -77,52 +47,39 @@ def manifest_text(manifest: dict[str, Any]) -> str:
     return "\n".join(values).lower()
 
 
-def classify_content(manifest: dict[str, Any]) -> ContentResult:
-    text = manifest_text(manifest)
-    scores: dict[str, tuple[str, ...]] = {}
-    for module, terms in CONTENT_HINTS.items():
-        hits = tuple(term for term in terms if term.lower() in text)
-        scores[module] = hits
-    ranked = sorted(scores.items(), key=lambda item: (-len(item[1]), item[0]))
-    if not ranked or len(ranked[0][1]) < 2:
+def classify_content(manifest: dict[str, Any], *, employee: SemanticEmployee | None = None,
+                     company_id: str = "default", thread_id: str | None = None) -> ContentResult:
+    """Ask the employee for classification; no keyword or filename fallback."""
+    if employee is None:
         return ContentResult(None, None, 0.0, ())
-    winner, hits = ranked[0]
-    runner_up = len(ranked[1][1]) if len(ranked) > 1 else 0
-    if len(hits) == runner_up:
+    try:
+        result = employee.classify_document(
+            text=manifest_text(manifest), company_id=company_id, thread_id=thread_id,
+        )
+    except (SemanticDecisionUnavailable, OSError, TypeError, ValueError):
         return ContentResult(None, None, 0.0, ())
-    # A deterministic score represents evidence coverage, not model belief.
-    confidence = min(0.95, 0.55 + 0.1 * len(hits))
-    return ContentResult(winner, _content_doc_type(winner, hits), confidence, hits)
-
-
-def _content_doc_type(module: str, hits: Iterable[str]) -> str | None:
-    terms = set(hits)
-    if module == "sales":
-        if "订单" in terms or "订单金额" in terms:
-            return "sales_order"
-        if "发货" in terms:
-            return "delivery"
-        if "回款" in terms or "收款" in terms:
-            return "payment"
-        if "客户" in terms or "客户名称" in terms:
-            return "customer"
-    if module == "marketing":
-        if "线索" in terms or "lead" in terms:
-            return "lead"
-        if "渠道" in terms or "channel" in terms:
-            return "channel"
-        if "市场活动" in terms or "campaign" in terms:
-            return "campaign"
-        if "投放" in terms or "广告" in terms:
-            return "ad_spend"
-    return None
+    module = result.get("module")
+    doc_type = result.get("doc_type")
+    confidence = result.get("confidence", 0.0)
+    try:
+        confidence = float(confidence)
+    except (TypeError, ValueError):
+        confidence = 0.0
+    matched = result.get("matched_terms") or ()
+    return ContentResult(
+        module if isinstance(module, str) and module.strip() else None,
+        doc_type if isinstance(doc_type, str) and doc_type.strip() else None,
+        max(0.0, min(1.0, confidence)),
+        tuple(item for item in matched if isinstance(item, str)),
+    )
 
 
 class ClassificationService:
     """Append-only classification ledger with company-scoped current views."""
 
-    def __init__(self, db_path) -> None:
+    def __init__(self, db_path, *, employee: SemanticEmployee | None = None) -> None:
         self._db_path = db_path
+        self._employee = employee
 
     def _conn(self):
         return connect(self._db_path)
@@ -140,7 +97,7 @@ class ClassificationService:
 
     def classify_parsed(self, *, file_hash: str, company_id: str, manifest: dict[str, Any]) -> dict[str, Any]:
         """Record an effective content classification, preserving human choices."""
-        result = classify_content(manifest)
+        result = classify_content(manifest, employee=self._employee, company_id=company_id)
         with self._conn() as conn:
             current = self._current(conn, file_hash=file_hash, company_id=company_id)
             if current is not None and current["classified_by"] == "human":
@@ -152,7 +109,7 @@ class ClassificationService:
             row_id = self._insert(
                 conn, file_hash=file_hash, company_id=company_id, module=result.module,
                 doc_type=result.doc_type, confidence=result.confidence, status="auto",
-                classified_by="auto", basis="content",
+                classified_by="employee" if self._employee is not None else "auto", basis="content",
             )
             conn.commit()
             row = dict(conn.execute("SELECT * FROM file_classifications WHERE id=?", (row_id,)).fetchone())
@@ -164,7 +121,11 @@ class ClassificationService:
 
     def classify_name_fallback(self, *, file_hash: str, company_id: str, original_name: str) -> dict[str, Any] | None:
         """Record a filename-only preliminary label only when no current row exists."""
-        guess = FileClassifier.guess(original_name)
+        # Kept as an append-only compatibility projection. A name alone is
+        # never a business decision; content classification must be supplied
+        # by the document employee after parsing.
+        del original_name
+        guess = CoarseResult(None, None, 0.0)
         with self._conn() as conn:
             current = self._current(conn, file_hash=file_hash, company_id=company_id)
             if current is not None:
@@ -190,7 +151,7 @@ class ClassificationService:
                 """UPDATE file_classifications
                    SET status='canceled'
                  WHERE id=? AND file_hash=? AND company_id=?
-                   AND status='auto' AND basis='content' AND classified_by='auto'""",
+                   AND status='auto' AND basis='content' AND classified_by IN ('auto', 'employee')""",
                 (classification_id, file_hash, company_id),
             )
             conn.commit()

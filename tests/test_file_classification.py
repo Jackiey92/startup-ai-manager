@@ -9,6 +9,25 @@ import pytest
 from app.classifier import ClassificationService, classify_content
 from app.db.database import init_db
 from app.storage import SourceFileStore
+from app.classifier.semantic_folders import classify as classify_folder
+
+
+class _ClassificationEmployee:
+    def classify_document(self, *, text: str, **_):
+        rules = (
+            ("finance", ("利润", "收入", "资产", "现金流")),
+            ("sales", ("客户", "订单", "发货")),
+            ("hr", ("员工", "岗位", "工资", "薪酬")),
+            ("marketing", ("渠道", "投放", "广告", "转化率")),
+        )
+        module, terms = max(rules, key=lambda item: sum(token in text for token in item[1]))
+        count = sum(token in text for token in terms)
+        return {"module": module if count >= 2 else None, "confidence": 0.8 if count >= 2 else 0.0}
+
+
+def test_classification_paths_fail_closed_without_an_employee():
+    assert classify_content(_manifest("营业收入 净利润" )).module is None
+    assert classify_folder(text="营业收入 净利润") == "unclassified"
 
 
 def _manifest(*texts: str) -> dict:
@@ -25,7 +44,7 @@ def ledger(tmp_path: Path):
     db_path = tmp_path / "app.db"
     init_db(db_path)
     store = SourceFileStore(tmp_path / "objects", db_path)
-    service = ClassificationService(db_path)
+    service = ClassificationService(db_path, employee=_ClassificationEmployee())
     return store, service
 
 
@@ -54,7 +73,7 @@ def test_content_wins_when_filename_claims_sales(ledger) -> None:
     ],
 )
 def test_content_modules_are_deterministic(text: str, module: str) -> None:
-    assert classify_content(_manifest(text)).module == module
+    assert classify_content(_manifest(text), employee=_ClassificationEmployee()).module == module
 
 
 def test_insufficient_content_stays_unclassified(ledger) -> None:

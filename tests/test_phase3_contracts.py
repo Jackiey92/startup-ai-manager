@@ -41,12 +41,12 @@ def test_four_role_matrix_is_generated_from_phase1_and_uses_one_runtime() -> Non
     assert {item["runtime"] for item in config["roles"].values()} == {
         "openclaw-unified-employee-runtime",
     }
-    assert config["roles"]["file_processor"]["skills"] == ["document-ingest"]
+    assert config["roles"]["file_processor"]["skills"] == ["document-ingest", "document-classifier"]
     assert config["roles"]["finance_analyst"]["skills"] == ["finance-fact-extraction"]
-    assert config["roles"]["legal_analyst"]["skills"] == []
-    assert config["roles"]["business_analyst"]["skills"] == []
-    assert "no accepted Phase 1 legal skill" in config["roles"]["legal_analyst"]["skill_gap"][0]
-    assert "no accepted Phase 1 business skill" in config["roles"]["business_analyst"]["skill_gap"][0]
+    assert config["roles"]["legal_analyst"]["skills"] == ["legal-document-analysis"]
+    assert config["roles"]["business_analyst"]["skills"] == ["business-prose-extraction"]
+    assert config["roles"]["legal_analyst"]["skill_gap"] == []
+    assert config["roles"]["business_analyst"]["skill_gap"] == []
     assert all("ledger_r1" not in role["write_zones"] for role in config["roles"].values())
 
 

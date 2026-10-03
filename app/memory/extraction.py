@@ -19,6 +19,7 @@ from ..ports import MemoryProvider
 from ..source_map import render_mapping
 from ..memory_paths import MEMORY_ROOT
 from ..classifier.semantic_folders import classify as classify_folder
+from ..employees import SemanticEmployee
 
 
 def parsed_resource_uri(parent: str, resource_name: str) -> str:
@@ -130,9 +131,14 @@ class ExtractionMemoryService:
             exact_resource_uri, abstract_uri, overview_uri,
         )
 
-    def classify_folder(self, manifest: dict[str, Any], *, skills_root: str = "skills") -> str:
+    def classify_folder(self, manifest: dict[str, Any], *, skills_root: str = "skills",
+                        employee: SemanticEmployee | None = None,
+                        company_id: str = "default", thread_id: str | None = None) -> str:
         text = self._markdown(manifest)
-        return classify_folder(text=text, skills_root=skills_root)
+        return classify_folder(
+            text=text, skills_root=skills_root, employee=employee,
+            company_id=company_id, thread_id=thread_id,
+        )
 
 
 class ConflictScanner:

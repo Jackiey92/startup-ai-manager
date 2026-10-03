@@ -8,18 +8,30 @@ from app.memory import add_parsed_resource
 from app.classifier.semantic_folders import classify
 from app.ports import LocalMemoryProvider
 from app.storage import SourceFileStore
+from tests.entity_employee import FixtureEntityEmployee
+
+
+class _FolderEmployee:
+    def classify_document(self, *, text: str, **_):
+        if "利润" in text or "收入" in text or "现金流" in text:
+            return {"folder": "财务"}
+        if "技术" in text or "产品" in text or "研发" in text:
+            return {"folder": "技术与产品"}
+        if "客户" in text or "市场" in text or "销售" in text:
+            return {"folder": "客户与市场"}
+        return {"folder": "法务"}
 
 
 def _narrative_manifest(file_hash: str) -> dict:
-    text = (
-        "主公司有限公司2024年合并口径营业收入3.26亿元，净利润0.58亿元，"
-        "毛利率31.50%，全资子公司常州未蓝新能源有限公司营业收入0.92亿元、"
-        "净利润0.07亿元、总资产1.35亿元"
-    )
+    text = "主公司有限公司2024年合并口径营业收入3.26亿元，净利润0.58亿元，毛利率31.50%"
+    subsidiary = "全资子公司常州未蓝新能源有限公司营业收入0.92亿元、净利润0.07亿元、总资产1.35亿元"
     return {
         "file_hash": file_hash, "filename": "财务.pdf", "format": "pdf",
         "parse_summary": {"status": "parsed"},
-        "pages": [{"page_no": 1, "text_items": [{"text": text, "source_loc": {"locator": "text/0"}}], "tables": []}],
+        "pages": [{"page_no": 1, "text_items": [
+            {"text": text, "source_loc": {"locator": "text/0"}},
+            {"text": subsidiary, "source_loc": {"locator": "text/1"}},
+        ], "tables": []}],
     }
 
 
@@ -40,7 +52,7 @@ def test_declared_company_api_and_narrative_parent_child_facts(tmp_path: Path, m
 
     stored = SourceFileStore(tmp_path / "objects", db).put_bytes(b"pdf", original_name="财务.pdf")
     StagingStore(db).save_manifest(_narrative_manifest(stored.file_hash))
-    bridge = EntityBridgeService(db).run(company_id="acme", file_hash=stored.file_hash)
+    bridge = EntityBridgeService(db, employee=FixtureEntityEmployee()).run(company_id="acme", file_hash=stored.file_hash)
     result = FactExtractionService(db).extract(
         company_id="acme", file_hash=stored.file_hash, bridge_run_id=bridge["id"],
     )
@@ -85,7 +97,8 @@ def test_declared_upload_fixture_reaches_all_four_semantic_folders(tmp_path: Pat
             "parse_summary": {"status": "parsed", "raw_bytes_external": False, "full_text_external": False},
             "pages": [{"page_no": 1, "text_items": [{"text": text}], "tables": []}],
         }
-        folder = classify(text=text, skills_root=Path(__file__).parents[1] / "skills")
+        folder = classify(text=text, employee=_FolderEmployee(),
+                          skills_root=Path(__file__).parents[1] / "skills")
         assert folder == expected
         _result, target = add_parsed_resource(
             memory, manifest, parent=f"viking://resources/{folder}",

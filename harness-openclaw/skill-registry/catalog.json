@@ -3,12 +3,36 @@
   "scan_root": "skills",
   "skills": [
     {
+      "skill_id": "business-prose-extraction",
+      "name": "business-prose-extraction",
+      "description": "Extract business analysis evidence and unresolved handoffs.",
+      "version": "1.1.0",
+      "source": "business-prose-extraction/SKILL.md",
+      "content_sha256": "6a7e59a03963c51da613942c8e09836534fde13dc74e85ef730482a9213f91e3",
+      "roles": [
+        "business_analyst"
+      ],
+      "visibility": "workspace"
+    },
+    {
+      "skill_id": "document-classifier",
+      "name": "document-classifier",
+      "description": "Classify parsed documents and attribute evidence blocks by meaning.",
+      "version": "1.1.0",
+      "source": "document-classifier/SKILL.md",
+      "content_sha256": "c22c751e82fb02579c72d274071370d046e8d026cb7f482d4df946c1c4873860",
+      "roles": [
+        "file_processor"
+      ],
+      "visibility": "workspace"
+    },
+    {
       "skill_id": "document-ingest",
       "name": "document-ingest",
       "description": "Ingest PDF, DOC/DOCX, XLS/XLSX and PPT/PPTX into local L2 evidence with provenance.",
       "version": "unversioned",
       "source": "document-ingest/SKILL.md",
-      "content_sha256": "41e72c6509d1ca63a574bafb6f26ca3f1590e7e37aaace5ad5331ae338bda1d6",
+      "content_sha256": "095d58651b5bb0cc339c7ff5275c1e10559550bf8085dd1a3c61debbebe06d4c",
       "roles": [
         "file_processor"
       ],
@@ -18,25 +42,26 @@
       "skill_id": "finance-fact-extraction",
       "name": "finance-fact-extraction",
       "description": "Extract finance fact candidates without changing digits or units.",
-      "version": "unversioned",
+      "version": "1.1.0",
       "source": "finance-fact-extraction/SKILL.md",
-      "content_sha256": "559797d15cb0d1ffef7fc1cd1c3b6c0e8d211bb80d623ab5d3eaa7657a2e6fad",
+      "content_sha256": "3f08df21e0cb2600a083194f31a1ff543c2e15f6eda4ee062dec90197d6cd0a6",
       "roles": [
         "finance_analyst"
       ],
       "visibility": "workspace"
-    }
-  ],
-  "rejected": [
-    {
-      "kind": "skill",
-      "path": "business-prose-extraction/SKILL.md",
-      "error": "skill document must start with frontmatter"
     },
     {
-      "kind": "skill",
-      "path": "document-classifier/SKILL.md",
-      "error": "frontmatter.description must be a non-empty string"
+      "skill_id": "legal-document-analysis",
+      "name": "legal-document-analysis",
+      "description": "Extract legally relevant evidence, obligations, and unresolved review items.",
+      "version": "1.0.0",
+      "source": "legal-document-analysis/SKILL.md",
+      "content_sha256": "5d9a5647fe80175464e177b86ece763684c834102f03e8f08857c665e1388dbe",
+      "roles": [
+        "legal_analyst"
+      ],
+      "visibility": "workspace"
     }
-  ]
+  ],
+  "rejected": []
 }

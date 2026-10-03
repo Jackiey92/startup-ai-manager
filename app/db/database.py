@@ -193,6 +193,52 @@ def _migrate_entity_bridge(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE entity_bridge_blocks ADD COLUMN reason TEXT")
     if "source" not in columns:
         conn.execute("ALTER TABLE entity_bridge_blocks ADD COLUMN source TEXT NOT NULL DEFAULT 'deterministic'")
+    definition = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='entity_bridge_blocks'"
+    ).fetchone()
+    if definition and "'employee'" not in str(definition[0]):
+        # SQLite cannot alter a CHECK constraint. Rebuild only this bridge
+        # audit table so employee provenance is representable for existing
+        # databases; the immutable source objects and R1 tables are untouched.
+        conn.execute("DROP INDEX IF EXISTS idx_entity_bridge_blocks_run")
+        conn.execute("DROP INDEX IF EXISTS idx_entity_bridge_blocks_review")
+        conn.executescript(
+            """
+            CREATE TABLE entity_bridge_blocks_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_id INTEGER NOT NULL REFERENCES entity_bridge_runs(id),
+                company_id TEXT NOT NULL,
+                file_hash TEXT NOT NULL REFERENCES source_files(file_hash),
+                block_index INTEGER NOT NULL,
+                block_type TEXT NOT NULL CHECK(block_type IN ('text', 'table_row')),
+                content TEXT NOT NULL,
+                source_page INTEGER,
+                source_span TEXT,
+                classification TEXT NOT NULL CHECK(classification IN ('self', 'related', 'foreign', 'ambiguous')),
+                relation TEXT,
+                subject TEXT,
+                reason TEXT,
+                source TEXT NOT NULL DEFAULT 'deterministic'
+                    CHECK(source IN ('deterministic', 'employee', 'model', 'human')),
+                needs_review INTEGER NOT NULL DEFAULT 0 CHECK(needs_review IN (0, 1)),
+                decision TEXT,
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            INSERT INTO entity_bridge_blocks_new
+                (id,run_id,company_id,file_hash,block_index,block_type,content,source_page,source_span,
+                 classification,relation,subject,reason,source,needs_review,decision,status,created_at)
+            SELECT id,run_id,company_id,file_hash,block_index,block_type,content,source_page,source_span,
+                   classification,relation,subject,reason,source,needs_review,decision,status,created_at
+            FROM entity_bridge_blocks;
+            DROP TABLE entity_bridge_blocks;
+            ALTER TABLE entity_bridge_blocks_new RENAME TO entity_bridge_blocks;
+            CREATE INDEX IF NOT EXISTS idx_entity_bridge_blocks_run
+                ON entity_bridge_blocks(run_id, block_index);
+            CREATE INDEX IF NOT EXISTS idx_entity_bridge_blocks_review
+                ON entity_bridge_blocks(company_id, needs_review, status, id);
+            """
+        )
 
 
 if __name__ == "__main__":

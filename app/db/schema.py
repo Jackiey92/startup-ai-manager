@@ -201,7 +201,7 @@ CREATE TABLE IF NOT EXISTS entity_bridge_blocks (
     subject        TEXT,
     reason         TEXT,
     source         TEXT NOT NULL DEFAULT 'deterministic'
-                   CHECK(source IN ('deterministic', 'model', 'human')),
+                   CHECK(source IN ('deterministic', 'employee', 'model', 'human')),
     needs_review   INTEGER NOT NULL DEFAULT 0 CHECK(needs_review IN (0, 1)),
     decision       TEXT,
     status         TEXT NOT NULL DEFAULT 'pending',

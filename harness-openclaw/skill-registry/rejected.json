@@ -1,12 +1,1 @@
-[
-  {
-    "kind": "skill",
-    "path": "business-prose-extraction/SKILL.md",
-    "error": "skill document must start with frontmatter"
-  },
-  {
-    "kind": "skill",
-    "path": "document-classifier/SKILL.md",
-    "error": "frontmatter.description must be a non-empty string"
-  }
-]
+[]

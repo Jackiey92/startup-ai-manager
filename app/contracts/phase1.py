@@ -23,8 +23,10 @@ from .phase0 import (
 
 SKILL_ROLE_DEFAULTS = {
     "document-ingest": ["file_processor"],
+    "document-classifier": ["file_processor"],
     "finance-fact-extraction": ["finance_analyst"],
     "business-prose-extraction": ["business_analyst"],
+    "legal-document-analysis": ["legal_analyst"],
 }
 
 

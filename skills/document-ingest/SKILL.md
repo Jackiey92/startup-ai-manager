@@ -64,6 +64,12 @@ destination and may pass a RuntimeProvider-managed path. Raw source bytes and
 full extracted text stay local by default; do not send them to a model. Only
 explicitly approved metadata/summary may leave the machine.
 
+Classification and entity names are semantic outputs of the employee using the
+document-classifier skill. Preserve every text item and source locator,
+including bullets, headings, relationship sentences and table cells; do not
+apply filename keywords, company-name suffix regexes, or a hard-coded folder
+default in the ingestion path.
+
 MinerU online-service deployments must retain the project's required
 "Powered by MinerU" attribution and license notices. This local bridge does
 not expose MinerU as an online service.

@@ -10,6 +10,7 @@ from app.facts import FactExtractionService
 from app.facts.extractor import extract_block_facts
 from app.harness.staging import StagingStore
 from app.storage import SourceFileStore
+from tests.entity_employee import FixtureEntityEmployee
 
 
 def _manifest(file_hash: str, text: list[str]) -> dict:
@@ -37,7 +38,7 @@ def _pipeline(tmp_path: Path, text: list[str], name="年报2025.xlsx"):
     manifest = _manifest(stored.file_hash, text)
     StagingStore(db).save_manifest(manifest)
     EntityRosterService(db).declare(company_id="acme", entity_name="主公司有限公司")
-    bridge = EntityBridgeService(db).run(company_id="acme", file_hash=stored.file_hash)
+    bridge = EntityBridgeService(db, employee=FixtureEntityEmployee()).run(company_id="acme", file_hash=stored.file_hash)
     return db, stored, bridge
 
 
@@ -118,7 +119,7 @@ def test_subsidiary_self_blocks_use_subject_dimension_without_false_conflict(tmp
     StagingStore(db).save_manifest(_manifest(child.file_hash, [
         "主公司有限公司全资子公司常州未蓝新能源有限公司收入0.92亿元",
     ]))
-    child_bridge = EntityBridgeService(db).run(company_id="acme", file_hash=child.file_hash)
+    child_bridge = EntityBridgeService(db, employee=FixtureEntityEmployee()).run(company_id="acme", file_hash=child.file_hash)
     service = FactExtractionService(db)
     service.extract(company_id="acme", file_hash=parent_file.file_hash, bridge_run_id=parent_bridge["id"])
     child_run = service.extract(company_id="acme", file_hash=child.file_hash, bridge_run_id=child_bridge["id"])

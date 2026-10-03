@@ -1,27 +1,30 @@
-"""Light classification for sales files based on filename keywords."""
+"""Compatibility adapter for employee-owned document classification."""
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+from app.employees import SemanticDecisionUnavailable, SemanticEmployee
 
-@dataclass
+
+@dataclass(frozen=True)
 class ClassInfo:
-    module: str
-    doc_type: str
+    module: str | None
+    doc_type: str | None
     confidence: float
 
 
-SALES_HINTS = [
-    ("sales_order", ["订单", "合同", "协议", "order", "contract"]),
-    ("payment", ["回款", "收款", "台账", "payment", "ledger"]),
-    ("customer", ["客户", "customer"]),
-    ("delivery", ["发货", "验收", "delivery"]),
-]
-
-
-def classify(filename: str) -> ClassInfo:
-    name = filename.lower()
-    for doc_type, hints in SALES_HINTS:
-        if any(h.lower() in name for h in hints):
-            return ClassInfo(module="sales", doc_type=doc_type, confidence=0.75)
-    return ClassInfo(module="sales", doc_type="unclassified", confidence=0.3)
+def classify(filename: str, *, employee: SemanticEmployee | None = None,
+             company_id: str = "default") -> ClassInfo:
+    """Classify parsed content through the employee, never a filename hint."""
+    del filename
+    if employee is None:
+        return ClassInfo(None, None, 0.0)
+    try:
+        result = employee.classify_document(text="", company_id=company_id)
+    except (SemanticDecisionUnavailable, OSError, TypeError, ValueError):
+        return ClassInfo(None, None, 0.0)
+    try:
+        confidence = float(result.get("confidence", 0.0))
+    except (TypeError, ValueError):
+        confidence = 0.0
+    return ClassInfo(result.get("module"), result.get("doc_type"), confidence)

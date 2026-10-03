@@ -36,6 +36,7 @@ from app.config_sync import sync_agent_config, CONFIG_FILES
 from app.ports import MemoryUnavailable
 from app.providers import memory_provider, runtime_provider
 from app.runtime_config import RuntimeConfig
+from app.employees import EmployeeRunner, SemanticEmployee
 from app.runtime_memory import RuntimeWorkingMemory
 from app.upload_status import parse_result_status
 from app.parse_jobs import ParseJobCanceled, ParseJobManager
@@ -79,7 +80,14 @@ def now() -> str:
 
 def classification_service() -> ClassificationService:
     """Return the company-scoped 2A navigation-label ledger."""
-    return ClassificationService(MAIN_DB)
+    return ClassificationService(
+        MAIN_DB, employee=SemanticEmployee(EmployeeRunner(config=RUNTIME_CONFIG)),
+    )
+
+
+def semantic_employee() -> SemanticEmployee:
+    """Build the generic file employee used by classification and attribution."""
+    return SemanticEmployee(EmployeeRunner(config=RUNTIME_CONFIG))
 
 
 def consolidation_service() -> ConsolidationService:
@@ -249,6 +257,7 @@ def _parse_job_worker(job: dict, progress, cancel_event) -> None:
         # Content-derived classification and 2A memory are independent of the
         # 2B transaction.  Keep them outside the short critical section so a
         # slow provider write does not make the stop button appear hung.
+        employee = semantic_employee()
         classification = classification_service().classify_parsed(
             file_hash=job["file_hash"], company_id=job["company_id"], manifest=payload,
         )
@@ -257,7 +266,9 @@ def _parse_job_worker(job: dict, progress, cancel_event) -> None:
         extraction = ExtractionMemoryService(app.extensions["sam_memory_provider"])
         classify_folder = getattr(extraction, "classify_folder", None)
         resource_folder = (
-            classify_folder(payload, skills_root=RUNTIME_CONFIG.skill_root)
+            classify_folder(payload, skills_root=RUNTIME_CONFIG.skill_root,
+                            employee=employee, company_id=job["company_id"],
+                            thread_id=f"parse-job:{job['job_id']}")
             if callable(classify_folder)
             else classify_resource_folder(
                 text=json.dumps(payload, ensure_ascii=False),
@@ -322,8 +333,9 @@ def _parse_job_worker(job: dict, progress, cancel_event) -> None:
         # Normal uploads automatically traverse the entity bridge and the
         # finance employee.  Model work happens before the short write-only
         # critical section; only verified candidates are retained in memory.
-        bridge_run = EntityBridgeService(MAIN_DB).run(
+        bridge_run = EntityBridgeService(MAIN_DB, employee=employee).run(
             company_id=job["company_id"], file_hash=job["file_hash"],
+            thread_id=f"parse-job:{job['job_id']}",
         )
         fact_service = FactExtractionService(MAIN_DB)
         budget(600)
@@ -842,8 +854,9 @@ def api_internal_facts_extract():
         return {"error": "thread_id must be a string"}, 400
     try:
         if bridge_run_id is None:
-            bridge_run = EntityBridgeService(MAIN_DB).run(
+            bridge_run = EntityBridgeService(MAIN_DB, employee=semantic_employee()).run(
                 company_id=_company_id(), file_hash=file_hash,
+                thread_id=thread_id,
             )
             bridge_run_id = int(bridge_run["id"])
         result = FactExtractionService(MAIN_DB).extract(

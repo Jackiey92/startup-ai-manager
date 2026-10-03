@@ -1,6 +1,11 @@
 ---
 name: finance-fact-extraction
 description: Extract finance fact candidates without changing digits or units.
+version: 1.1.0
+metadata:
+  sam:
+    roles: [finance_analyst]
+    visibility: workspace
 ---
 
 # 财务事实提炼员工技能
@@ -16,3 +21,18 @@ description: Extract finance fact candidates without changing digits or units.
 如果原文不足以形成可逐字核验的候选，必须返回空 `candidates`，并附
 `unresolved` 说明卡点；不要用常识补数字、实体、期间或单位。示例：
 `{"candidates": [], "unresolved": {"reason": "missing_source_grounding", "blocking": "..."}}`。
+
+## Semantic finance knowledge
+
+Recognize equivalent wording by meaning rather than requiring a fixed alias:
+revenue/sales income/operating income, net profit/profit attributable to
+owners, gross margin, cash and equivalents, accounts receivable, total assets,
+operating cash flow, R&D spend, registered capital, financing, customers,
+suppliers, orders, capacity and litigation. Keep the employee's chosen metric
+label and quote; the application must not rebuild an alias table.
+
+For consolidated reporting, separately identify the host's consolidated scope,
+a subsidiary's standalone scope, and related/foreign entities. The employee
+decides consolidation from report language and evidence; a backend relationship
+word list is not authoritative. Keep parent and subsidiary facts as separate
+entity records and preserve the relationship in the candidate.

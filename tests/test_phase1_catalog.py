@@ -16,12 +16,10 @@ def test_skill_catalog_matches_generated_artifact_and_records_rejections():
     catalog = build_skill_catalog(ROOT / "skills")
     artifact = json.loads((ROOT / "harness-openclaw/skill-registry/catalog.json").read_text())
     assert catalog == artifact
-    assert {item["path"] for item in catalog["rejected"]} == {
-        "business-prose-extraction/SKILL.md",
-        "document-classifier/SKILL.md",
-    }
+    assert catalog["rejected"] == []
     assert {item["name"] for item in catalog["skills"]} == {
-        "document-ingest", "finance-fact-extraction",
+        "business-prose-extraction", "document-classifier", "document-ingest",
+        "finance-fact-extraction", "legal-document-analysis",
     }
 
 

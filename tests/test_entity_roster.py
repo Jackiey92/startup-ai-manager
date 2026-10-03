@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from app.db import connect, init_db
-from app.entities.roster import EntityRosterService, extract_roster_candidate
+from app.entities.roster import EntityRosterService
 from app.harness.staging import StagingStore
 from app.storage import SourceFileStore
 
@@ -36,24 +36,46 @@ def _service(tmp_path: Path):
     return EntityRosterService(db), stored, db
 
 
-def test_extracts_structured_roster_with_coordinates_and_no_prose_guess():
-    candidate = extract_roster_candidate(_manifest("a" * 64, prose=True), company_id="acme")
+class _RosterEmployee:
+    def __init__(self, result=None):
+        self.result = result if result is not None else {
+            "entity_name": "杭州示例科技有限公司", "entity_type": "self",
+            "aliases": ["示例科技"], "credit_code": "91330000123456789X",
+            "stock_code": "688001", "source_page": 1,
+            "source_span": "docling:table/0;row=1;col=0",
+        }
+
+    def roster_candidate(self, **_):
+        return self.result
+
+
+def test_employee_extracts_roster_with_coordinates_and_aliases(tmp_path: Path):
+    service, stored, _ = _service(tmp_path)
+    service.employee = _RosterEmployee()
+    candidate = service.suggest(company_id="acme", file_hash=stored.file_hash)
     assert candidate is not None
-    assert candidate.entity_name == "杭州示例科技有限公司"
-    assert candidate.credit_code == "91330000123456789X"
-    assert candidate.source_file == "a" * 64
-    assert candidate.source_page == 1
-    assert "docling:table/0" in (candidate.source_span or "")
+    assert candidate["entity_name"] == "杭州示例科技有限公司"
+    assert candidate["credit_code"] == "91330000123456789X"
+    assert candidate["source_file"] == stored.file_hash
+    assert candidate["source_page"] == 1
+    assert "docling:table/0" in candidate["source_span"]
 
 
-def test_empty_structured_cover_does_not_guess_name_from_prose():
-    manifest = _manifest("a" * 64, prose=True)
-    manifest["pages"][0]["tables"] = []
-    assert extract_roster_candidate(manifest, company_id="acme") is None
+def test_empty_employee_output_does_not_guess_name_from_prose(tmp_path: Path):
+    service, stored, _ = _service(tmp_path)
+    service.employee = _RosterEmployee({})
+    assert service.suggest(company_id="acme", file_hash=stored.file_hash) is None
+
+
+def test_roster_suggest_requires_employee(tmp_path: Path):
+    service, stored, _ = _service(tmp_path)
+    with pytest.raises(ValueError, match="employee is required"):
+        service.suggest(company_id="acme", file_hash=stored.file_hash)
 
 
 def test_suggest_is_idempotent_and_review_transitions_are_append_only(tmp_path: Path):
     service, stored, db = _service(tmp_path)
+    service.employee = _RosterEmployee()
     first = service.suggest(company_id="acme", file_hash=stored.file_hash)
     second = service.suggest(company_id="acme", file_hash=stored.file_hash)
     assert first["id"] == second["id"]
@@ -70,6 +92,7 @@ def test_suggest_is_idempotent_and_review_transitions_are_append_only(tmp_path: 
 
 def test_reject_is_confirmed_and_company_scope_is_required(tmp_path: Path):
     service, stored, _ = _service(tmp_path)
+    service.employee = _RosterEmployee()
     suggested = service.suggest(company_id="acme", file_hash=stored.file_hash)
     with pytest.raises(ValueError):
         service.reject(company_id="", roster_id=suggested["id"], confirm=True)
@@ -80,6 +103,7 @@ def test_reject_is_confirmed_and_company_scope_is_required(tmp_path: Path):
 
 def test_declared_self_is_active_and_has_matching_priority(tmp_path: Path):
     service, stored, db = _service(tmp_path)
+    service.employee = _RosterEmployee()
     extracted = service.suggest(company_id="acme", file_hash=stored.file_hash)
     declared = service.declare(company_id="acme", entity_name="杭州示例科技有限公司", aliases=("Example", "示例科技"))
     assert extracted["origin"] == "extracted" and extracted["status"] == "suggested"
@@ -93,18 +117,33 @@ def test_declared_self_is_active_and_has_matching_priority(tmp_path: Path):
         assert conn.execute("SELECT COUNT(*) FROM entity_roster WHERE origin='declared'").fetchone()[0] == 1
 
 
-def test_vertical_key_value_table_header_is_scanned_as_data_not_field_name():
-    manifest = _manifest("b" * 64)
-    manifest["pages"][0]["tables"] = [{
-        "headers": ["公司名称", "未蓝科技股份有限公司"],
-        "rows": [["曾用名", "未蓝科技"], ["统一社会信用代码", "91330000987654321A"], ["股票代码", "688002"]],
-        "source_loc": {"page_no": 1, "locator": "docling:table/0@#/tables/0"},
-    }]
-    candidate = extract_roster_candidate(manifest, company_id="acme")
-    assert candidate is not None
-    assert candidate.entity_name == "未蓝科技股份有限公司"
-    assert candidate.aliases == ("未蓝科技",)
-    assert candidate.credit_code == "91330000987654321A"
-    assert candidate.stock_code == "688002"
-    assert candidate.source_page == 1
-    assert "row=0" in (candidate.source_span or "")
+def test_employee_roster_path_preserves_vertical_table_coordinates(tmp_path: Path):
+    service, stored, _ = _service(tmp_path)
+    service.employee = _RosterEmployee({
+        "entity_name": "未蓝科技股份有限公司", "aliases": ["未蓝科技"],
+        "credit_code": "91330000987654321A", "stock_code": "688002",
+        "source_page": 1, "source_span": "docling:table/0;row=0;col=0",
+    })
+    row = service.suggest(company_id="acme", file_hash=stored.file_hash)
+    assert row["entity_name"] == "未蓝科技股份有限公司"
+    assert json.loads(row["aliases"]) == ["未蓝科技"]
+    assert row["source_page"] == 1
+    assert "row=0" in row["source_span"]
+
+
+def test_roster_suggestion_can_be_supplied_by_the_employee(tmp_path: Path):
+    service, stored, _ = _service(tmp_path)
+
+    class Employee:
+        def roster_candidate(self, **_):
+            return {
+                "entity_name": "员工识别有限公司", "entity_type": "self",
+                "aliases": ["员工识别"], "source_page": 1,
+                "source_span": "page=1; locator=employee",
+            }
+
+    service.employee = Employee()
+    row = service.suggest(company_id="acme", file_hash=stored.file_hash)
+    assert row["entity_name"] == "员工识别有限公司"
+    assert row["origin"] == "extracted"
+    assert row["source_span"] == "page=1; locator=employee"

@@ -5,11 +5,12 @@ from pathlib import Path
 import pytest
 
 from app.db import connect, init_db
-from app.entities.bridge import EntityBridgeService, classify_block
+from app.entities.bridge import EntityBridgeService
 from app.entities.roster import EntityRosterService
 from app.harness.staging import StagingStore
 from app.storage import SourceFileStore
 from app.facts import FactExtractionService
+from tests.entity_employee import FixtureEntityEmployee
 
 
 def _manifest(file_hash: str) -> dict:
@@ -51,20 +52,9 @@ def _setup(tmp_path: Path):
     return db, stored, declared
 
 
-def test_classification_prefers_longest_active_roster_name_and_keeps_unknown_ambiguous():
-    roster = [
-        {"entity_name": "主公司", "aliases": [], "credit_code": None, "stock_code": None,
-         "status": "active", "superseded_by": None},
-        {"entity_name": "主公司有限公司", "aliases": [], "credit_code": None, "stock_code": None,
-         "status": "active", "superseded_by": None},
-    ]
-    assert classify_block("主公司有限公司营业收入100", roster) == ("self", None, "主公司有限公司")
-    assert classify_block("没有公司名称的说明", roster)[0] == "ambiguous"
-
-
 def test_run_splits_text_and_table_and_classifies_with_coordinates(tmp_path: Path):
     db, stored, _ = _setup(tmp_path)
-    blocks = EntityBridgeService(db).run(company_id="host", file_hash=stored.file_hash)
+    blocks = EntityBridgeService(db, employee=FixtureEntityEmployee()).run(company_id="host", file_hash=stored.file_hash)
     assert blocks["status"] == "completed"
     service = EntityBridgeService(db)
     rows = service.list(company_id="host", run_id=blocks["id"])
@@ -79,13 +69,13 @@ def test_run_splits_text_and_table_and_classifies_with_coordinates(tmp_path: Pat
 
 def test_related_foreign_and_ambiguous_are_distinct_and_decision_requires_confirm(tmp_path: Path):
     db, stored, _ = _setup(tmp_path)
-    run = EntityBridgeService(db).run(company_id="host", file_hash=stored.file_hash)
+    run = EntityBridgeService(db, employee=FixtureEntityEmployee()).run(company_id="host", file_hash=stored.file_hash)
     service = EntityBridgeService(db)
     rows = service.list(company_id="host", run_id=run["id"])
     related = next(row for row in rows if "子公司" in row["content"])
     foreign = next(row for row in rows if row["content"].startswith("远方科技有限公司"))
     assert (related["classification"], related["relation"], related["subject"]) == (
-        "self", "子公司", "远方科技有限公司"
+        "related", "子公司", "远方科技有限公司"
     )
     assert foreign["classification"] == "foreign"
     unknown = [row for row in rows if row["classification"] == "ambiguous"]
@@ -102,20 +92,15 @@ def test_related_foreign_and_ambiguous_are_distinct_and_decision_requires_confir
 def test_company_scope_is_required_for_bridge_writes(tmp_path: Path):
     db, stored, _ = _setup(tmp_path)
     with pytest.raises(ValueError):
-        EntityBridgeService(db).run(company_id="", file_hash=stored.file_hash)
+        EntityBridgeService(db, employee=FixtureEntityEmployee()).run(company_id="", file_hash=stored.file_hash)
     with connect(db) as conn:
         assert conn.execute("SELECT COUNT(*) FROM entity_bridge_runs").fetchone()[0] == 0
 
 
-def test_subsidiary_is_self_but_customer_is_related_and_subject_prefix_is_trimmed():
-    roster = [{"entity_name": "主公司有限公司", "aliases": [], "credit_code": None,
-               "stock_code": None, "status": "active", "superseded_by": None}]
-    assert classify_block(
-        "公司全资子公司常州未蓝新能源有限公司营业收入20", roster
-    ) == ("self", "全资子公司", "常州未蓝新能源有限公司")
-    assert classify_block(
-        "本公司主要客户为苏州星河半导体有限公司", roster
-    ) == ("related", "客户", "苏州星河半导体有限公司")
+def test_bridge_requires_employee_or_explicit_compatibility_model(tmp_path: Path):
+    db, stored, _ = _setup(tmp_path)
+    with pytest.raises(ValueError, match="employee is required"):
+        EntityBridgeService(db).run(company_id="host", file_hash=stored.file_hash)
 
 
 def test_bullet_subject_inheritance_preserves_parent_child_and_stops_at_heading(tmp_path: Path):
@@ -146,7 +131,7 @@ def test_bullet_subject_inheritance_preserves_parent_child_and_stops_at_heading(
     StagingStore(db).save_manifest(manifest)
     # Deliberately realistic registration: no generic "公司"/"本公司" alias.
     EntityRosterService(db).declare(company_id="acme", entity_name="主公司有限公司", aliases=("主企",))
-    bridge = EntityBridgeService(db).run(company_id="acme", file_hash=stored.file_hash)
+    bridge = EntityBridgeService(db, employee=FixtureEntityEmployee()).run(company_id="acme", file_hash=stored.file_hash)
     rows = EntityBridgeService(db).list(company_id="acme", run_id=bridge["id"])
     parent = [row for row in rows if row["content"].startswith("• 2024年营业收入")][0]
     child = [row for row in rows if row["content"].startswith("• 营业收入0.92")][0]
@@ -192,10 +177,10 @@ def test_use_model_only_classifies_ambiguous_and_records_model_source(tmp_path: 
         company_id="host", file_hash=stored.file_hash, use_model=True
     )
     rows = EntityBridgeService(db).list(company_id="host", run_id=run["id"])
-    assert len(fake.calls) == 3
+    assert len(fake.calls) == 5
     assert set(fake.calls[0]) == {"text", "company_name", "aliases"}
     modeled = [row for row in rows if row["source"] == "model"]
-    assert len(modeled) == 3
+    assert len(modeled) == 5
     assert all(row["classification"] == "foreign" and row["needs_review"] == 0 for row in modeled)
 
 
@@ -215,3 +200,25 @@ def test_model_shape_errors_remain_ambiguous_and_reviewable(tmp_path: Path, resu
     assert any(row["source"] == "model" and row["classification"] == "ambiguous"
                and row["needs_review"] == 1 for row in rows)
     assert all("timeout" not in (row["reason"] or "") for row in rows)
+
+
+def test_employee_path_owns_entity_attribution_and_preserves_source_blocks(tmp_path: Path):
+    db, stored, _ = _setup(tmp_path)
+
+    class Employee:
+        def __init__(self):
+            self.calls = []
+
+        def attribute_block(self, **payload):
+            self.calls.append(payload)
+            return {"label": "self", "subject": "员工判定主体", "relation": None, "reason": "semantic"}
+
+    employee = Employee()
+    run = EntityBridgeService(db, employee=employee).run(
+        company_id="host", file_hash=stored.file_hash, thread_id="employee-session",
+    )
+    rows = EntityBridgeService(db).list(company_id="host", run_id=run["id"])
+    assert employee.calls
+    assert all(row["source"] == "employee" for row in rows)
+    assert all(row["subject"] == "员工判定主体" for row in rows)
+    assert employee.calls[0]["company_id"] == "host"

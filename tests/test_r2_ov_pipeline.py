@@ -8,6 +8,18 @@ from app.harness.staging import StagingStore
 from app.memory import add_parsed_resource
 from app.ports import LocalMemoryProvider
 from app.storage import SourceFileStore
+from tests.entity_employee import FixtureEntityEmployee
+
+
+class _FolderEmployee:
+    def classify_document(self, *, text: str, **_):
+        if "利润" in text or "收入" in text or "现金流" in text:
+            return {"folder": "财务"}
+        if "技术" in text or "产品" in text or "研发" in text:
+            return {"folder": "技术与产品"}
+        if "客户" in text or "市场" in text or "销售" in text:
+            return {"folder": "客户与市场"}
+        return {"folder": "法务"}
 
 
 class TextOnlyOV(LocalMemoryProvider):
@@ -62,7 +74,7 @@ def test_r2_pipeline_imports_resource_and_verifies_finance_facts(tmp_path: Path)
         "pages": [{"page_no": 1, "text_items": [{"text": text, "source_loc": {"locator": "text/0"}}], "tables": []}],
     })
     EntityRosterService(db).declare(company_id="acme", entity_name="主公司有限公司")
-    bridge = EntityBridgeService(db).run(company_id="acme", file_hash=stored.file_hash)
+    bridge = EntityBridgeService(db, employee=FixtureEntityEmployee()).run(company_id="acme", file_hash=stored.file_hash)
     # Empty employee output is an unresolved manager handoff; no code-side
     # extractor is allowed to guess facts when the employee has no conclusion.
     class EmptyEmployee:
@@ -73,7 +85,7 @@ def test_r2_pipeline_imports_resource_and_verifies_finance_facts(tmp_path: Path)
         use_worker=True, worker=EmptyEmployee(),
     )
     memory = TextOnlyOV(tmp_path / "ov")
-    folder = classify(text=text, skills_root=Path(__file__).parents[1] / "skills")
+    folder = classify(text=text, employee=_FolderEmployee(), skills_root=Path(__file__).parents[1] / "skills")
     # The original PDF is deliberately not sent to OV: raw bytes yield no
     # overview.  The parsed markdown is the only resource input.
     source_path = objects / stored.storage_path
