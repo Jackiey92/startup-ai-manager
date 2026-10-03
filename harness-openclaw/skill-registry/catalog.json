@@ -8,7 +8,7 @@
       "description": "Ingest PDF, DOC/DOCX, XLS/XLSX and PPT/PPTX into local L2 evidence with provenance.",
       "version": "unversioned",
       "source": "document-ingest/SKILL.md",
-      "content_sha256": "f90a67e84375b1a529e94d871e4dfe67c0f1904eec2d84b5d46d098d4b9fff33",
+      "content_sha256": "41e72c6509d1ca63a574bafb6f26ca3f1590e7e37aaace5ad5331ae338bda1d6",
       "roles": [
         "file_processor"
       ],

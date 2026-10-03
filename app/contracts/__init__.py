@@ -23,6 +23,17 @@ from .phase2 import (
     load_phase1_registry,
     load_tool_search_surface,
 )
+from .phase3 import (
+    HandoffChain,
+    build_phase3_role_matrix,
+    classify_stalled,
+    mark_claim_unverified,
+    new_user_claim,
+    stalled_threshold,
+    validate_handoff_artifact,
+    validate_role_matrix,
+    verify_claim,
+)
 
 __all__ = [
     "ContractError",
@@ -44,4 +55,13 @@ __all__ = [
     "finalize_agent_tool_availability",
     "load_phase1_registry",
     "load_tool_search_surface",
+    "HandoffChain",
+    "build_phase3_role_matrix",
+    "classify_stalled",
+    "mark_claim_unverified",
+    "new_user_claim",
+    "stalled_threshold",
+    "validate_handoff_artifact",
+    "validate_role_matrix",
+    "verify_claim",
 ]

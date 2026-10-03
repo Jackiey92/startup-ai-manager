@@ -74,3 +74,30 @@ The skill directory is mounted from `skills/document-ingest` under the
 manifest's skill root. The OpenClaw skill mapping for `pdf`, `docx`, `xlsx`,
 and `pptx` points here. RuntimeProvider supplies the root and task transport;
 no Windows or host-specific path is embedded in this skill.
+
+## Tool Search usage (Phase 3)
+
+Use the native tools-mode controls in this order, with an English query:
+
+1. `tool_search({"query":"parse an uploaded document"})`.
+2. Take the exact returned business tool `sam_document_ingest`; do not invent
+   an `openclaw:<plugin>:<tool>` prefix and do not pass a control name as an id.
+3. `tool_describe({"id":"sam_document_ingest"})` to read the schema.
+4. `tool_call({"id":"sam_document_ingest","args":{"file_hash":"<64 lowercase hex>","format":"pdf"}})`.
+
+The call arguments are exactly `file_hash` and `format`. Never send an empty
+object, `path`, `source_path`, shell text, or a host filesystem path. The
+runtime injects the source object and confines output to `runtime_outbox` and
+`l2_staging`; this skill does not write facts, OV, or 2B data.
+
+Few-shot correction:
+
+```json
+{"query":"parse an uploaded PDF into L2 evidence"}
+{"id":"sam_document_ingest"}
+{"id":"sam_document_ingest","args":{"file_hash":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","format":"pdf"}}
+```
+
+`{"id":"tool_call","args":{}}` and
+`{"id":"sam_document_ingest","args":{"path":"/etc/passwd"}}` are invalid;
+stop and repeat search/describe instead of guessing.

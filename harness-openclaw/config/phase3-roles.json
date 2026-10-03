@@ -1,0 +1,265 @@
+{
+  "phase": "phase3",
+  "runtime": "openclaw-unified-employee-runtime",
+  "roles": {
+    "business_analyst": {
+      "enabled": true,
+      "runtime": "openclaw-unified-employee-runtime",
+      "skills": [],
+      "tools": [
+        "sam_conversation_read",
+        "sam_memory_map",
+        "sam_memory_read",
+        "sam_memory_search",
+        "sam_thread_list",
+        "sam_thread_open"
+      ],
+      "toolExecutionAllow": [
+        "sam_conversation_read",
+        "sam_memory_map",
+        "sam_memory_read",
+        "sam_memory_search",
+        "sam_thread_list",
+        "sam_thread_open"
+      ],
+      "read_zones": [
+        "l2_staging",
+        "ov_resources",
+        "runtime_outbox"
+      ],
+      "write_zones": [
+        "facts_2b"
+      ],
+      "prohibited_roles": [
+        "file_processor",
+        "finance_analyst",
+        "legal_analyst"
+      ],
+      "prohibited_write_zones": [
+        "ledger_r1"
+      ],
+      "skill_gap": [
+        "no accepted Phase 1 business skill; tools-only pending review"
+      ]
+    },
+    "file_processor": {
+      "enabled": true,
+      "runtime": "openclaw-unified-employee-runtime",
+      "skills": [
+        "document-ingest"
+      ],
+      "tools": [
+        "sam_conversation_read",
+        "sam_document_ingest",
+        "sam_file_get",
+        "sam_memory_map",
+        "sam_memory_read",
+        "sam_memory_search",
+        "sam_thread_list",
+        "sam_thread_open"
+      ],
+      "toolExecutionAllow": [
+        "sam_conversation_read",
+        "sam_document_ingest",
+        "sam_file_get",
+        "sam_memory_map",
+        "sam_memory_read",
+        "sam_memory_search",
+        "sam_thread_list",
+        "sam_thread_open"
+      ],
+      "read_zones": [
+        "l2_staging",
+        "ov_resources",
+        "raw_objects",
+        "runtime_outbox"
+      ],
+      "write_zones": [
+        "l2_staging",
+        "ov_resources",
+        "runtime_outbox"
+      ],
+      "prohibited_roles": [
+        "business_analyst",
+        "finance_analyst",
+        "legal_analyst"
+      ],
+      "prohibited_write_zones": [
+        "ledger_r1"
+      ],
+      "skill_gap": []
+    },
+    "finance_analyst": {
+      "enabled": true,
+      "runtime": "openclaw-unified-employee-runtime",
+      "skills": [
+        "finance-fact-extraction"
+      ],
+      "tools": [
+        "sam_conversation_read",
+        "sam_memory_map",
+        "sam_memory_read",
+        "sam_memory_search",
+        "sam_thread_list",
+        "sam_thread_open"
+      ],
+      "toolExecutionAllow": [
+        "sam_conversation_read",
+        "sam_memory_map",
+        "sam_memory_read",
+        "sam_memory_search",
+        "sam_thread_list",
+        "sam_thread_open"
+      ],
+      "read_zones": [
+        "l2_staging",
+        "ov_resources",
+        "runtime_outbox"
+      ],
+      "write_zones": [
+        "facts_2b"
+      ],
+      "prohibited_roles": [
+        "business_analyst",
+        "file_processor",
+        "legal_analyst"
+      ],
+      "prohibited_write_zones": [
+        "ledger_r1"
+      ],
+      "skill_gap": []
+    },
+    "legal_analyst": {
+      "enabled": true,
+      "runtime": "openclaw-unified-employee-runtime",
+      "skills": [],
+      "tools": [
+        "sam_conversation_read",
+        "sam_memory_map",
+        "sam_memory_read",
+        "sam_memory_search",
+        "sam_thread_list",
+        "sam_thread_open"
+      ],
+      "toolExecutionAllow": [
+        "sam_conversation_read",
+        "sam_memory_map",
+        "sam_memory_read",
+        "sam_memory_search",
+        "sam_thread_list",
+        "sam_thread_open"
+      ],
+      "read_zones": [
+        "l2_staging",
+        "ov_resources",
+        "runtime_outbox"
+      ],
+      "write_zones": [
+        "facts_2b"
+      ],
+      "prohibited_roles": [
+        "business_analyst",
+        "file_processor",
+        "finance_analyst"
+      ],
+      "prohibited_write_zones": [
+        "ledger_r1"
+      ],
+      "skill_gap": [
+        "no accepted Phase 1 legal skill; tools-only pending review"
+      ]
+    }
+  },
+  "catalog": "harness-openclaw/tool-registry/manifest.json",
+  "skill_catalog": "harness-openclaw/skill-registry/catalog.json",
+  "tool_search": {
+    "enabled": true,
+    "mode": "tools",
+    "code_mode": false,
+    "availability": "finalizeAgentToolAvailability",
+    "execution_allow": "toolExecutionAllow"
+  },
+  "handoff": {
+    "contract_version": "phase3.v1",
+    "stages": {
+      "2a_mapping": {
+        "producer": "file_processor",
+        "path_prefix": "l2_staging/",
+        "status": "ready",
+        "fields": [
+          "artifact_id",
+          "source_file_hash",
+          "manifest_uri",
+          "blocks"
+        ]
+      },
+      "2b_facts": {
+        "producers": [
+          "finance_analyst",
+          "legal_analyst",
+          "business_analyst"
+        ],
+        "path_prefix": "facts_2b/<role>/",
+        "requires": "2a_mapping.status=ready",
+        "fields": [
+          "artifact_id",
+          "source_2a_id",
+          "role",
+          "facts"
+        ]
+      },
+      "leader_summary": {
+        "producer": "leader",
+        "path_prefix": "runtime_outbox/leader/",
+        "requires": "all three 2b_facts.status=ready",
+        "fields": [
+          "artifact_id",
+          "source_2b_ids",
+          "summary"
+        ]
+      }
+    },
+    "downstream_gate": "missing_or_not_ready_upstream_must_not_start"
+  },
+  "oral_claims": {
+    "source": "user",
+    "statuses": [
+      "claimed_by_user",
+      "unverified",
+      "verified"
+    ],
+    "initial_weight": "unverified_not_equal_to_material_fact",
+    "verification_requires": "non_empty_material_evidence_sources",
+    "verified_weight": "equal_after_material_verification",
+    "fields": [
+      "claim_id",
+      "entity",
+      "metric",
+      "value",
+      "unit",
+      "period",
+      "quote",
+      "source",
+      "status",
+      "weight",
+      "evidence_sources",
+      "created_at",
+      "updated_at"
+    ]
+  },
+  "stalled_policy": {
+    "default_seconds": 90,
+    "slow_tools": {
+      "sam_document_ingest": {
+        "threshold_seconds": 300,
+        "heartbeat_is_progress": true
+      }
+    },
+    "classification": {
+      "below_threshold": "not_stalled",
+      "heartbeat_after_threshold": "progressing_slow_tool",
+      "no_heartbeat_after_threshold": "stalled"
+    }
+  },
+  "tool_search_guidance": "harness-openclaw/config/phase3-tool-search-guidance.md"
+}
