@@ -31,7 +31,8 @@ def connect(db_path: Path | str | None = None) -> sqlite3.Connection:
     return conn
 
 
-def init_db(db_path: Path = DEFAULT_DB_PATH) -> None:
+def init_db(db_path: Path | str | None = None) -> None:
+    db_path = _configured_db_path() if db_path is None else Path(db_path)
     conn = connect(db_path)
     try:
         # Legacy M1 databases have a NOT NULL module column.  Upgrade before
@@ -280,4 +281,4 @@ def _migrate_entity_bridge(conn: sqlite3.Connection) -> None:
 
 if __name__ == "__main__":
     init_db()
-    print(f"initialized {DEFAULT_DB_PATH}")
+    print(f"initialized {_configured_db_path()}")

@@ -8,7 +8,7 @@ import pytest
 
 from app.ports import LocalMemoryProvider
 from app.runtime_config import RuntimeConfig
-from app.db.database import connect
+from app.db.database import connect, init_db
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,6 +20,17 @@ def test_default_connect_uses_sam_data_root(monkeypatch, tmp_path: Path) -> None
     with connect() as conn:
         conn.execute("CREATE TABLE path_probe (value TEXT)")
         conn.commit()
+    assert (data_root / "app.db").exists()
+
+
+def test_default_init_db_uses_sam_data_root(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "sam-data"
+    monkeypatch.setenv("SAM_DATA_ROOT", str(data_root))
+    init_db()
+    with connect() as conn:
+        assert conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='entity_roster'"
+        ).fetchone() is not None
     assert (data_root / "app.db").exists()
 
 
