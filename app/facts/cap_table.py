@@ -8,7 +8,6 @@ from typing import Any, Iterable
 import uuid
 
 from ..ports import MemoryProvider
-from ..memory_paths import MEMORY_ROOT
 
 
 EVENT_TYPES = {
@@ -16,7 +15,7 @@ EVENT_TYPES = {
     "cancellation", "new_round", "split", "buyback", "conversion", "correction",
 }
 BASIS = {"issued", "fully_diluted"}
-ROOT = f"{MEMORY_ROOT}/2b_facts"
+ROOT = "viking://user/default/memories/projects/10_startup_ai_manager/2b_facts"
 
 
 def _now() -> str:

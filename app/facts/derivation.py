@@ -4,12 +4,11 @@ from __future__ import annotations
 from typing import Any, Iterable
 
 from ..ports import MemoryProvider
-from ..memory_paths import MEMORY_ROOT
 from .schema import FactRecord
 
 
 class FactDerivation:
-    def __init__(self, memory: MemoryProvider, *, root: str = MEMORY_ROOT):
+    def __init__(self, memory: MemoryProvider, *, root: str = "viking://user/default/memories/projects/10_startup_ai_manager"):
         self.memory = memory
         self.root = root.rstrip("/")
 
