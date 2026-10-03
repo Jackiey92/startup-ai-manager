@@ -287,8 +287,8 @@ class OpenVikingMemoryProvider:
             self._run(args)
 
     def add_resource(self, path: str, *, parent: str, wait: bool = True) -> None:
-        """Use OV's ingestion boundary; SAM never classifies by suffix."""
-        args = ["add-resource", path, "--parent", parent]
+        """Ingest into a semantic folder, creating the folder when needed."""
+        args = ["add-resource", path, "--parent-auto-create", parent]
         if wait:
             args.append("--wait")
         self._run(args)
