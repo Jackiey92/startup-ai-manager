@@ -43,7 +43,8 @@ class FactExtractionService:
                  JOIN entity_bridge_runs r ON r.id=b.run_id
                  JOIN source_files f ON f.file_hash=b.file_hash
                  WHERE b.company_id=? AND b.file_hash=? AND r.status='completed'
-                   AND b.classification='self'"""
+                   AND (b.classification='self' OR
+                        (b.classification='related' AND b.relation IN ('并表子公司','控股子公司','全资子公司','子公司')))"""
         params = [company_id, file_hash]
         if bridge_run_id is not None:
             sql += " AND b.run_id=?"

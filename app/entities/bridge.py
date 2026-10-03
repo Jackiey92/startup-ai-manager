@@ -41,14 +41,40 @@ class BridgeBlock:
     subject: str | None = None
 
 
+_BULLET_PREFIX = re.compile(r"^\s*[•●▪◦‣⁃]\s*")
+
+
+def _bbox_x0(source_loc: Any) -> float | None:
+    bbox = source_loc.get("bbox") if isinstance(source_loc, dict) else None
+    value: Any = None
+    if isinstance(bbox, dict):
+        value = bbox.get("x0", bbox.get("left"))
+    elif isinstance(bbox, (list, tuple)) and bbox:
+        value = bbox[0]
+    try:
+        return float(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
 def _item_structure(item: dict[str, Any]) -> dict[str, Any]:
-    """Read parser-provided list/heading structure without text heuristics."""
+    """Identify list structure from real MinerU text/source fields.
+
+    Current MinerU payloads only promise ``text`` and ``source_loc``.  The
+    optional parser fields remain accepted for older fixtures, but production
+    detection is the visible bullet prefix or the normalized bbox indentation
+    (body/title x0 around .091, indented bullets around .126).
+    """
+    text = str(item.get("text") or "")
+    source_loc = item.get("source_loc")
+    x0 = _bbox_x0(source_loc)
+    visual_bullet = bool(_BULLET_PREFIX.match(text)) or (x0 is not None and x0 >= 0.115)
     kind = str(item.get("kind") or item.get("block_type") or item.get("type") or item.get("role") or "").casefold()
     list_kinds = {"bullet", "list_item", "list-item", "list item"}
     list_level = item.get("list_level")
     if list_level is None and kind in list_kinds:
         list_level = item.get("level")
-    is_bullet = bool(item.get("is_bullet") or item.get("bullet") or list_level is not None)
+    is_bullet = visual_bullet or bool(item.get("is_bullet") or item.get("bullet") or list_level is not None)
     is_bullet = is_bullet or kind in list_kinds
     is_heading = bool(item.get("is_heading")) or kind in {"heading", "title", "section", "header"}
     return {"is_bullet": is_bullet, "list_level": list_level, "is_heading": is_heading}
@@ -147,6 +173,8 @@ def _split_entity_sections(content: str, roster: list[dict[str, Any]]) -> list[s
     discarded or rewritten.
     """
     text = str(content or "")
+    if text.rstrip().endswith((":", "：")):
+        return [text]
     relation_positions = [text.find(term) for term in _SUBSIDIARY_RELATIONS if text.find(term) > 0]
     if not relation_positions:
         return [text]
@@ -154,7 +182,8 @@ def _split_entity_sections(content: str, roster: list[dict[str, Any]]) -> list[s
     before, after = text[:cut].strip(), text[cut:].strip()
     # Only split when the prefix already contains a numeric metric.  A plain
     # relationship statement should remain one reviewable bridge block.
-    if not before or not re.search(r"\d", before):
+    if (not before or not re.search(r"(?:营业收入|净利润|毛利率|总资产|货币资金|应收账款|经营现金流)\s*[-+]?\d", before)
+            or not re.search(r"(?:营业收入|净利润|毛利率|总资产|货币资金|应收账款|经营现金流)\s*[-+]?\d", after)):
         return [text]
     return [before, after]
 
@@ -236,7 +265,7 @@ class EntityBridgeService:
                     context = None
                 elif (classification == "ambiguous" and structure.get("is_bullet")
                       and context is not None):
-                    classification = "self"
+                    classification = context["classification"]
                     relation = context["relation"]
                     subject = context["subject"]
                 reason = None
@@ -264,7 +293,10 @@ class EntityBridgeService:
                      classification, relation, subject, reason, source, needs_review, created),
                 )
                 if classification == "self" and subject:
-                    context = {"relation": relation, "subject": subject}
+                    context = {
+                        "classification": "related" if relation in _SUBSIDIARY_RELATIONS else "self",
+                        "relation": relation, "subject": subject,
+                    }
                 elif not structure.get("is_bullet"):
                     context = None
             conn.execute(

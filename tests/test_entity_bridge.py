@@ -123,23 +123,21 @@ def test_bullet_subject_inheritance_preserves_parent_child_and_stops_at_heading(
     init_db(db)
     stored = SourceFileStore(tmp_path / "objects", db).put_bytes(b"narrative", original_name="财务.pdf")
     items = [
-        {"text": "主公司有限公司2024年合并口径：", "kind": "heading", "is_heading": True},
-        {"text": "2024年营业收入3.26亿元", "is_bullet": True, "list_level": 0},
-        {"text": "2024年净利润0.58亿元", "is_bullet": True, "list_level": 0},
-        {"text": "毛利率31.50%", "is_bullet": True, "list_level": 0},
-        {"text": "货币资金0.84亿元", "is_bullet": True, "list_level": 0},
-        {"text": "应收账款1.12亿元", "is_bullet": True, "list_level": 0},
-        {"text": "经营现金流0.36亿元", "is_bullet": True, "list_level": 0},
-        {"text": "全资子公司常州未蓝新能源有限公司2024年单独口径：", "kind": "heading", "is_heading": True},
-        {"text": "营业收入0.92亿元", "is_bullet": True, "list_level": 0},
-        {"text": "净利润0.07亿元", "is_bullet": True, "list_level": 0},
-        {"text": "总资产1.35亿元", "is_bullet": True, "list_level": 0},
-        {"text": "技术与产品", "kind": "heading", "is_heading": True},
+        {"text": "主公司有限公司2024年合并口径：", "source_loc": {"file_hash": stored.file_hash, "page_no": 1, "bbox": [0.091, 0.1, 0.8, 0.12], "locator": "mineru:page/1/block/0"}},
+        {"text": "• 2024年营业收入3.26亿元", "source_loc": {"file_hash": stored.file_hash, "page_no": 1, "bbox": [0.126, 0.13, 0.8, 0.15], "locator": "mineru:page/1/block/1"}},
+        {"text": "• 2024年净利润0.58亿元", "source_loc": {"file_hash": stored.file_hash, "page_no": 1, "bbox": [0.126, 0.16, 0.8, 0.18], "locator": "mineru:page/1/block/2"}},
+        {"text": "• 毛利率31.50%", "source_loc": {"file_hash": stored.file_hash, "page_no": 1, "bbox": [0.126, 0.19, 0.8, 0.21], "locator": "mineru:page/1/block/3"}},
+        {"text": "• 货币资金0.84亿元", "source_loc": {"file_hash": stored.file_hash, "page_no": 1, "bbox": [0.126, 0.22, 0.8, 0.24], "locator": "mineru:page/1/block/4"}},
+        {"text": "• 应收账款1.12亿元", "source_loc": {"file_hash": stored.file_hash, "page_no": 1, "bbox": [0.126, 0.25, 0.8, 0.27], "locator": "mineru:page/1/block/5"}},
+        {"text": "• 经营现金流0.36亿元", "source_loc": {"file_hash": stored.file_hash, "page_no": 1, "bbox": [0.126, 0.28, 0.8, 0.30], "locator": "mineru:page/1/block/6"}},
+        {"text": "全资子公司常州未蓝新能源有限公司（主营电池管理系统及电池材料）2024年单独口径:", "source_loc": {"file_hash": stored.file_hash, "page_no": 1, "bbox": [0.091, 0.31, 0.8, 0.33], "locator": "mineru:page/1/block/7"}},
+        {"text": "• 营业收入0.92亿元", "source_loc": {"file_hash": stored.file_hash, "page_no": 1, "bbox": [0.126, 0.34, 0.8, 0.36], "locator": "mineru:page/1/block/8"}},
+        {"text": "• 净利润0.07亿元", "source_loc": {"file_hash": stored.file_hash, "page_no": 1, "bbox": [0.126, 0.37, 0.8, 0.39], "locator": "mineru:page/1/block/9"}},
+        {"text": "• 总资产1.35亿元", "source_loc": {"file_hash": stored.file_hash, "page_no": 1, "bbox": [0.126, 0.40, 0.8, 0.42], "locator": "mineru:page/1/block/10"}},
+        {"text": "技术与产品", "source_loc": {"file_hash": stored.file_hash, "page_no": 1, "bbox": [0.091, 0.43, 0.8, 0.45], "locator": "mineru:page/1/block/11"}},
         # This must not inherit the subsidiary context after the new section.
-        {"text": "营业收入99亿元", "is_bullet": True, "list_level": 0},
+        {"text": "• 营业收入99亿元", "source_loc": {"file_hash": stored.file_hash, "page_no": 1, "bbox": [0.126, 0.46, 0.8, 0.48], "locator": "mineru:page/1/block/12"}},
     ]
-    for index, item in enumerate(items):
-        item["source_loc"] = {"locator": f"text/{index}"}
     manifest = {
         "file_hash": stored.file_hash, "filename": stored.original_name,
         "format": "pdf", "parse_summary": {"status": "parsed"},
@@ -150,14 +148,14 @@ def test_bullet_subject_inheritance_preserves_parent_child_and_stops_at_heading(
     EntityRosterService(db).declare(company_id="acme", entity_name="主公司有限公司", aliases=("主企",))
     bridge = EntityBridgeService(db).run(company_id="acme", file_hash=stored.file_hash)
     rows = EntityBridgeService(db).list(company_id="acme", run_id=bridge["id"])
-    parent = [row for row in rows if row["content"].startswith("2024年营业收入")][0]
-    child = [row for row in rows if row["content"].startswith("营业收入0.92")][0]
-    stopped = [row for row in rows if row["content"].startswith("营业收入99")][0]
+    parent = [row for row in rows if row["content"].startswith("• 2024年营业收入")][0]
+    child = [row for row in rows if row["content"].startswith("• 营业收入0.92")][0]
+    stopped = [row for row in rows if row["content"].startswith("• 营业收入99")][0]
     assert (parent["classification"], parent["subject"], parent["relation"]) == (
         "self", "主公司有限公司", None
     )
     assert (child["classification"], child["subject"], child["relation"]) == (
-        "self", "常州未蓝新能源有限公司", "全资子公司"
+        "related", "常州未蓝新能源有限公司", "全资子公司"
     )
     assert stopped["classification"] == "ambiguous"
 
