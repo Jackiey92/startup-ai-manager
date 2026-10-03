@@ -16,6 +16,17 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def normalize_finance_text(text: str) -> str:
+    """Collapse MinerU character-spacing without changing source coordinates."""
+    value = str(text or "")
+    value = re.sub(r"(?<=\d)\s*\.\s*(?=\d)", ".", value)
+    value = re.sub(r"(?<=\d)\s+(?=[\d.])", "", value)
+    value = re.sub(r"(?<=\.)\s+(?=\d)", "", value)
+    value = re.sub(r"(?<=[\u4e00-\u9fff])\s+(?=\d)", "", value)
+    value = re.sub(r"(?<=\d)\s+(?=[\u4e00-\u9fff%])", "", value)
+    return value
+
+
 @dataclass(frozen=True)
 class PreparedFactExtraction:
     run_id: int
@@ -61,25 +72,27 @@ class FactExtractionService:
         employee = worker or (EmployeeRunner() if use_worker else None)
         for block in blocks:
             block_period = period_from_text(block.get("content", ""), period)
+            normalized_block = dict(block)
+            normalized_block["content"] = normalize_finance_text(block.get("content", ""))
             if use_worker:
                 try:
-                    proposed = employee.run(skill="finance-fact-extraction", text=block.get("content", ""),
+                    proposed = employee.run(skill="finance-fact-extraction", text=normalized_block["content"],
                                             company_id=company_id, thread_id=thread_id)
-                    verified = verify_candidates(proposed, [block], company_id=company_id)
+                    verified = verify_candidates(proposed, [normalized_block], company_id=company_id)
                     # A healthy employee may return an empty/partial payload
                     # (for example after a model timeout). Never let that
                     # suppress the deterministic finance extractor.
                     candidates.extend(verified)
                     if not proposed:
                         candidates.extend(extract_block_facts(
-                            block, company_id=company_id, period=block_period,
+                            normalized_block, company_id=company_id, period=block_period,
                         ))
                     continue
                 except WorkerUnavailable:
                     pass
                 except Exception:
                     pass
-            candidates.extend(extract_block_facts(block, company_id=company_id, period=block_period))
+            candidates.extend(extract_block_facts(normalized_block, company_id=company_id, period=block_period))
         return PreparedFactExtraction(run_id=run_id, candidates=tuple(candidates))
 
     def commit(self, prepared: PreparedFactExtraction) -> dict:

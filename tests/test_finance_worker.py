@@ -10,6 +10,7 @@ from app.db import connect, init_db
 from app.entities import EntityBridgeService, EntityRosterService
 from app.employees import EmployeeRunner, WorkerUnavailable
 from app.facts import FactExtractionService
+from app.facts.l1 import normalize_finance_text
 from app.harness.staging import StagingStore
 from app.storage import SourceFileStore
 
@@ -61,6 +62,26 @@ def test_worker_candidate_passes_only_after_exact_provenance_verification(tmp_pa
     }
     assert all(fact["entity"] == "主公司有限公司" for fact in facts)
     assert fake.calls[0]["company_id"] == "acme"
+
+
+def test_spaced_mineru_digits_are_normalized_before_worker_verification(tmp_path: Path):
+    db, stored, bridge = _setup(tmp_path)
+    spaced = "主公司有限公司 2 0 2 4 年度 营业收入 3 . 2 6 亿元，净利润 0 . 5 8 亿元，毛利率 3 1 . 5 0 %"
+    with connect(db) as conn:
+        conn.execute("UPDATE entity_bridge_blocks SET content=? WHERE run_id=?", (spaced, bridge["id"]))
+        conn.commit()
+    normalized = normalize_finance_text(spaced)
+    assert "营业收入3.26亿元" in normalized and "毛利率31.50%" in normalized
+    candidates = [
+        _candidate(metric="营业收入", value="3.26", unit="亿元", quote="主公司有限公司2024年度营业收入3.26亿元，净利润0.58亿元，毛利率31.50%"),
+        _candidate(metric="净利润", value="0.58", unit="亿元", quote="主公司有限公司2024年度营业收入3.26亿元，净利润0.58亿元，毛利率31.50%"),
+        _candidate(metric="毛利率", value="31.50", unit="%", quote="主公司有限公司2024年度营业收入3.26亿元，净利润0.58亿元，毛利率31.50%"),
+    ]
+    run = FactExtractionService(db).extract(
+        company_id="acme", file_hash=stored.file_hash, bridge_run_id=bridge["id"],
+        use_worker=True, worker=_FakeEmployee(candidates),
+    )
+    assert run["fact_count"] == 3
 
 
 def test_worker_human_quote_without_machine_coordinates_is_backfilled(tmp_path: Path):

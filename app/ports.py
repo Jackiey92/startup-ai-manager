@@ -43,6 +43,9 @@ class MemoryProvider(Protocol):
     def add_resource(self, path: str, *, parent: str, wait: bool = True) -> None:
         """Import a source file into the configured OV semantic folder."""
 
+    def wait_for_resource(self, uri: str, *, timeout: int = 600, interval: float = 2.0) -> None:
+        """Poll asynchronous OV processing until semantic navigation is ready."""
+
     def put(self, uri: str, content: str, *, metadata: dict[str, Any] | None = None) -> None:
         """Persist a memory document at a provider-specific URI."""
 
@@ -96,6 +99,9 @@ class LocalMemoryProvider:
         target = self._path(parent.rstrip("/") + "/" + source.name)
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, target)
+
+    def wait_for_resource(self, uri: str, *, timeout: int = 600, interval: float = 2.0) -> None:
+        return None
 
     def put(self, uri: str, content: str, *, metadata: dict[str, Any] | None = None) -> None:
         path = self._path(uri)
@@ -286,12 +292,37 @@ class OpenVikingMemoryProvider:
                 args.extend(["--tags", tags])
             self._run(args)
 
-    def add_resource(self, path: str, *, parent: str, wait: bool = True) -> None:
+    def add_resource(self, path: str, *, parent: str, wait: bool = True) -> Any:
         """Ingest into a semantic folder, creating the folder when needed."""
         args = ["add-resource", path, "--parent-auto-create", parent]
         if wait:
             args.append("--wait")
-        self._run(args)
+        return self._run(args)
+
+    @staticmethod
+    def _semantic_ready(payload: Any) -> bool:
+        if isinstance(payload, dict):
+            status = str(payload.get("status") or payload.get("state") or "").lower()
+            if status in {"ready", "completed", "complete", "success", "succeeded"}:
+                return True
+            if payload.get("overview_ready") is True or payload.get("abstract_ready") is True:
+                return True
+            return any(OpenVikingMemoryProvider._semantic_ready(value) for value in payload.values())
+        if isinstance(payload, list):
+            return any(OpenVikingMemoryProvider._semantic_ready(value) for value in payload)
+        return False
+
+    def wait_for_resource(self, uri: str, *, timeout: int = 600, interval: float = 2.0) -> None:
+        """Poll stat; submission is deliberately never retried."""
+        import time
+        deadline = time.monotonic() + max(1, int(timeout))
+        while True:
+            payload = self._run(["stat", uri])
+            if self._semantic_ready(payload):
+                return
+            if time.monotonic() >= deadline:
+                raise MemoryUnavailable(f"OpenViking semantic processing timed out for {uri}")
+            time.sleep(max(0.0, interval))
 
     def read(self, uri: str) -> str:
         payload = self._run(["read", uri])

@@ -20,12 +20,12 @@ from ..memory_paths import MEMORY_ROOT
 from ..classifier.semantic_folders import classify as classify_folder
 
 
-def add_parsed_resource(memory: MemoryProvider, manifest: dict[str, Any], *, parent: str) -> None:
+def add_parsed_resource(memory: MemoryProvider, manifest: dict[str, Any], *, parent: str) -> Any:
     """Ingest parser markdown, never the immutable source bytes, into OV."""
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".md") as handle:
         handle.write(render_mapping(manifest))
         handle.flush()
-        memory.add_resource(handle.name, parent=parent, wait=True)
+        return memory.add_resource(handle.name, parent=parent, wait=False)
 
 
 

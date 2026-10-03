@@ -237,10 +237,17 @@ def _parse_job_worker(job: dict, progress, cancel_event) -> None:
             # OV's local runtime does not parse PDF bytes.  Preserve the
             # immutable PDF in SAM's object store, but ingest MinerU's parsed
             # page markdown so OV can build L2/L1/L0 navigation.
-            add_parsed_resource(
+            resource_result = add_parsed_resource(
                 extraction.memory, payload,
                 parent=f"viking://resources/{extraction.classify_folder(payload, skills_root=RUNTIME_CONFIG.skill_root)}",
             )
+            wait_for_resource = getattr(extraction.memory, "wait_for_resource", None)
+            if wait_for_resource is not None:
+                wait_for_resource(
+                    str(resource_result.get("uri") if isinstance(resource_result, dict) else "viking://resources"),
+                    timeout=600,
+                    interval=2.0,
+                )
         except Exception:
             app.logger.exception("OV resource import deferred after extraction")
         check_cancel()

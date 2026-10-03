@@ -75,6 +75,28 @@ def test_add_resource_handles_missing_parent_without_plain_parent_fallback(tmp_p
     assert "--parent" not in [item for item in calls[0] if item != "--parent-auto-create"]
 
 
+def test_async_resource_processing_polls_until_ready_without_resubmitting(tmp_path):
+    source = tmp_path / "annual.md"
+    source.write_text("财务收入 3.26亿元", encoding="utf-8")
+    calls = []
+    responses = [
+        (0, json.dumps({"uri": "viking://resources/财务/annual.md", "status": "processing"}), ""),
+        (0, json.dumps({"status": "processing", "overview_ready": False}), ""),
+        (0, json.dumps({"status": "ready", "overview_ready": True, "abstract_ready": True}), ""),
+    ]
+
+    def runner(command, **kwargs):
+        calls.append(command)
+        response = responses.pop(0)
+        return subprocess.CompletedProcess(command, response[0], response[1], response[2])
+
+    provider = OpenVikingMemoryProvider(runner=runner)
+    result = provider.add_resource(str(source), parent="viking://resources/财务", wait=False)
+    provider.wait_for_resource(result["uri"], timeout=2, interval=0)
+    assert sum(command[1] == "add-resource" for command in calls) == 1
+    assert [command[1] for command in calls] == ["add-resource", "stat", "stat"]
+
+
 def test_openviking_provider_rejects_failed_transport():
     runner = fake_runner_factory([(1, "", "connection refused")])
     provider = OpenVikingMemoryProvider(runner=runner)
