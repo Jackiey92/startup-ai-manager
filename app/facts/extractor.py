@@ -24,7 +24,15 @@ METRICS: tuple[MetricSpec, ...] = (
     MetricSpec("净资产", ("所有者权益合计", "股东权益合计", "净资产")),
     MetricSpec("货币资金", ("货币资金",)),
     MetricSpec("应收账款", ("应收账款", "应收款项")),
-    MetricSpec("经营现金流", ("经营现金流", "经营活动现金流")),
+    MetricSpec(
+        "经营现金流",
+        (
+            "经营现金流",
+            "经营活动现金流",
+            "经营活动产生的现金流量净额",
+            "经营活动现金流量净额",
+        ),
+    ),
     MetricSpec("毛利率", ("毛利率", "销售毛利率", "综合毛利率")),
     MetricSpec("净利率", ("净利率", "销售净利率", "净利润率")),
     MetricSpec("客户", ("前五大客户", "主要客户", "客户数量", "客户数", "客户")),
@@ -109,8 +117,16 @@ def _value(value: Any) -> tuple[str, str, str | None] | None:
     literal = str(value).strip()
     if not literal:
         return None
-    unit = "%" if literal.endswith("%") else None
-    candidate = literal[:-1].strip() if unit else literal.replace(",", "")
+    match = re.fullmatch(
+        r"(?P<number>-?[0-9][0-9,]*(?:\.[0-9]+)?)\s*"
+        r"(?P<unit>亿元|万元|元|%)?",
+        literal,
+    )
+    if match is None:
+        return literal, "string", None
+    number = match.group("number")
+    unit = match.group("unit")
+    candidate = number.replace(",", "")
     try:
         Decimal(candidate)
     except InvalidOperation:
@@ -123,7 +139,11 @@ def _block_value(value: Any) -> tuple[str, str, str | None] | None:
     if value is None:
         return None
     literal = str(value).strip()
-    match = re.fullmatch(r"(?P<number>-?[0-9][0-9,]*(?:\.[0-9]+)?)(?P<unit>亿元|万元|元|%)?", literal)
+    match = re.fullmatch(
+        r"(?P<number>-?[0-9][0-9,]*(?:\.[0-9]+)?)\s*"
+        r"(?P<unit>亿元|万元|元|%)?",
+        literal,
+    )
     if match is None:
         return literal, "string", None
     number = match.group("number")
@@ -208,7 +228,7 @@ _TEXT_LABELS = tuple(dict.fromkeys(
 ))
 _TEXT_VALUE = re.compile(
     rf"(?P<label>{'|'.join(map(re.escape, sorted(_TEXT_LABELS, key=len, reverse=True)))})"
-    r"\s*(?:为|：|:)?\s*(?P<value>-?[0-9][0-9,]*(?:\.[0-9]+)?(?:亿元|万元|元|%)?)"
+    r"\s*(?:为|：|:)?\s*(?P<value>-?[0-9][0-9,]*(?:\.[0-9]+)?(?:\s*(?:亿元|万元|元|%))?)"
 )
 
 
@@ -228,7 +248,7 @@ def extract_block_facts(block: dict[str, Any], *, company_id: str, period: str =
     pattern = re.compile(
         rf"(?P<label>{'|'.join(map(re.escape, aliases))})"
         r"\s*(?:为|是|：|:|=|/|=>)?\s*"
-        r"(?P<value>-?[0-9][0-9,]*(?:\.[0-9]+)?(?:亿元|万元|元|%)?)"
+        r"(?P<value>-?[0-9][0-9,]*(?:\.[0-9]+)?(?:\s*(?:亿元|万元|元|%))?)"
     )
     file_hash = str(block.get("file_hash") or "")
     results: list[ExtractedFact] = []

@@ -97,6 +97,20 @@ def test_income_alias_and_chinese_currency_units_are_literal_and_numeric():
     assert one("收入51000.00万元") == ("营业收入", "51000.00", "万元", "number")
 
 
+def test_operating_cashflow_long_alias_preserves_value_unit_entity_and_period():
+    fact = extract_block_facts({
+        "file_hash": "a" * 64,
+        "content": "2024 年经营活动产生的现金流量净额为 0.36 亿元",
+        "source_page": 1,
+        "source_span": "page=1; locator=text/0",
+        "subject": "本公司",
+    }, company_id="acme", period="2024")[0]
+
+    assert (fact.metric, fact.value, fact.unit, fact.entity, fact.period) == (
+        "经营现金流", "0.36", "亿元", "本公司", "2024",
+    )
+
+
 def test_subsidiary_self_blocks_use_subject_dimension_without_false_conflict(tmp_path: Path):
     db, parent_file, parent_bridge = _pipeline(tmp_path, ["主公司有限公司营业收入3.26亿元"])
     store = SourceFileStore(tmp_path / "objects", db)
