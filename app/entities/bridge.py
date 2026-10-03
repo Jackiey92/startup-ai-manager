@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
 import re
+import time
 from typing import Any
 
 from ..db.database import connect
@@ -147,6 +148,25 @@ class EntityBridgeService:
             result.append(item)
         return result
 
+    def _wait_for_source_file(self, file_hash: str) -> None:
+        """Require the immutable source parent before creating attribution rows.
+
+        Upload commits ``source_files`` before a parse job is queued, but a
+        worker can race a just-committed upload when several jobs start at
+        once.  Waiting here keeps that transient ordering issue out of the FK
+        write and still fails clearly when the source really is absent.
+        """
+        delays = (0.0, 0.05, 0.1, 0.2, 0.4, 0.8)
+        for delay in delays:
+            if delay:
+                time.sleep(delay)
+            with connect(self.db_path) as conn:
+                if conn.execute(
+                    "SELECT 1 FROM source_files WHERE file_hash=?", (file_hash,)
+                ).fetchone() is not None:
+                    return
+        raise KeyError(f"source file not committed: {file_hash}")
+
     @staticmethod
     def _model_scope(roster: list[dict[str, Any]]) -> tuple[str | None, list[str]]:
         """Expose only the host name/aliases, never the complete roster."""
@@ -163,6 +183,7 @@ class EntityBridgeService:
         if self.employee is None and not use_model:
             raise ValueError("entity employee is required")
         manifest = self._manifest(file_hash)
+        self._wait_for_source_file(file_hash)
         roster = self._roster(company_id)
         model = self.model_client
         if use_model and model is None:
@@ -170,50 +191,75 @@ class EntityBridgeService:
         company_name, aliases = self._model_scope(roster)
         raw_blocks = _text_blocks(manifest)
         created = _now()
+
+        # Semantic work must not hold a database write transaction open.  A
+        # slow employee session used to leave the parent run uncommitted while
+        # other parse workers attempted their own attribution writes.  Build
+        # the immutable child payloads first, then persist parent and children
+        # in one short, explicit transaction below.
+        expanded_blocks = []
+        for block_type, content, page, span, structure in raw_blocks:
+            expanded_blocks.append((block_type, content, page, span, structure))
+        classified_blocks = []
+        for index, (block_type, content, page, span, structure) in enumerate(expanded_blocks):
+            reason = None
+            relation = None
+            source = "employee" if self.employee is not None else "deterministic"
+            if self.employee is not None:
+                try:
+                    result = self.employee.attribute_block(
+                        text=content, company_name=company_name, aliases=aliases,
+                        company_id=company_id, thread_id=thread_id,
+                    )
+                    classification = result["label"]
+                    relation = result.get("relation")
+                    subject = result.get("subject")
+                    reason = result.get("reason")
+                except (SemanticDecisionUnavailable, OSError, TypeError, ValueError):
+                    classification, relation, subject = "ambiguous", None, None
+                    reason = "employee semantic attribution unavailable"
+            else:
+                source = "model"
+                try:
+                    result = _validate_model_result(model.classify(
+                        text=content, company_name=company_name, aliases=aliases
+                    ))
+                    classification = result["label"]
+                    relation = None
+                    subject = result["subject"]
+                    reason = result["reason"]
+                except Exception:
+                    # Do not expose provider errors or allow a malformed
+                    # answer to weaken review safety.
+                    classification, relation, subject = "ambiguous", None, None
+                    reason = "model classification unavailable or invalid"
+            needs_review = 1 if classification == "ambiguous" else 0
+            classified_blocks.append(
+                (index, block_type, content, page, span, classification,
+                 relation, subject, reason, source, needs_review)
+            )
+
         with connect(self.db_path) as conn:
+            # Serialize the parent/child write section.  The parent is
+            # inserted and read back before any child insert, while the whole
+            # batch remains atomic.
+            conn.execute("BEGIN IMMEDIATE")
+            if conn.execute(
+                "SELECT 1 FROM source_files WHERE file_hash=?", (file_hash,)
+            ).fetchone() is None:
+                raise KeyError(f"source file not committed: {file_hash}")
             cur = conn.execute(
                 "INSERT INTO entity_bridge_runs(company_id,file_hash,status,block_count,created_at) VALUES (?,?,?,0,?)",
                 (company_id, file_hash, "running", created),
             )
             run_id = int(cur.lastrowid)
-            expanded_blocks = []
-            for block_type, content, page, span, structure in raw_blocks:
-                # The employee receives the original block. The bridge never
-                # rewrites prose or splits it using an application rule.
-                sections = [content]
-                expanded_blocks.extend((block_type, section, page, span, structure) for section in sections)
-            for index, (block_type, content, page, span, structure) in enumerate(expanded_blocks):
-                reason = None
-                relation = None
-                source = "employee" if self.employee is not None else "deterministic"
-                if self.employee is not None:
-                    try:
-                        result = self.employee.attribute_block(
-                            text=content, company_name=company_name, aliases=aliases,
-                            company_id=company_id, thread_id=thread_id,
-                        )
-                        classification = result["label"]
-                        relation = result.get("relation")
-                        subject = result.get("subject")
-                        reason = result.get("reason")
-                    except (SemanticDecisionUnavailable, OSError, TypeError, ValueError):
-                        classification, relation, subject = "ambiguous", None, None
-                        reason = "employee semantic attribution unavailable"
-                else:
-                    source = "model"
-                    try:
-                        result = _validate_model_result(model.classify(
-                            text=content, company_name=company_name, aliases=aliases
-                        ))
-                        classification = result["label"]
-                        relation = None
-                        subject = result["subject"]
-                        reason = result["reason"]
-                    except Exception:
-                        # Do not expose provider errors or allow a malformed
-                        # answer to weaken review safety.
-                        classification, subject, reason = "ambiguous", None, "model classification unavailable or invalid"
-                needs_review = 1 if classification == "ambiguous" else 0
+            parent = conn.execute(
+                "SELECT id FROM entity_bridge_runs WHERE id=?", (run_id,)
+            ).fetchone()
+            if parent is None:
+                raise RuntimeError("entity bridge parent run was not persisted")
+            for (index, block_type, content, page, span, classification,
+                 relation, subject, reason, source, needs_review) in classified_blocks:
                 conn.execute(
                     """INSERT INTO entity_bridge_blocks
                        (run_id,company_id,file_hash,block_index,block_type,content,source_page,source_span,
@@ -224,7 +270,7 @@ class EntityBridgeService:
                 )
             conn.execute(
                 "UPDATE entity_bridge_runs SET status='completed',block_count=?,completed_at=? WHERE id=?",
-                (len(expanded_blocks), _now(), run_id),
+                (len(classified_blocks), _now(), run_id),
             )
             conn.commit()
             row = conn.execute("SELECT * FROM entity_bridge_runs WHERE id=?", (run_id,)).fetchone()

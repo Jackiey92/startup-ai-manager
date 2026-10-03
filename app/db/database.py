@@ -15,6 +15,10 @@ def connect(db_path: Path = DEFAULT_DB_PATH) -> sqlite3.Connection:
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON")
+    # Multiple parse workers deliberately share the same SQLite ledger.  Wait
+    # for the current writer instead of letting a short lock race surface as a
+    # misleading downstream integrity failure.
+    conn.execute("PRAGMA busy_timeout=30000")
     return conn
 
 

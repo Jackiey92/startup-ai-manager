@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
@@ -101,6 +102,60 @@ def test_bridge_requires_employee_or_explicit_compatibility_model(tmp_path: Path
     db, stored, _ = _setup(tmp_path)
     with pytest.raises(ValueError, match="employee is required"):
         EntityBridgeService(db).run(company_id="host", file_hash=stored.file_hash)
+
+
+def test_concurrent_attribution_and_fact_writes_commit_parent_before_children(tmp_path: Path):
+    """Exercise the same four-worker SQLite path as the parse queue.
+
+    The attribution run and its immutable blocks must never be split across
+    connections: every child must see its committed run and source parent.
+    The subsequent fact run has the same dependency on the bridge parent.
+    """
+    db = tmp_path / "concurrent.db"
+    init_db(db)
+    EntityRosterService(db).declare(company_id="host", entity_name="主公司有限公司")
+
+    class Employee:
+        def attribute_block(self, **_payload):
+            return {
+                "label": "self", "subject": "主公司有限公司",
+                "relation": None, "reason": "fixture employee",
+            }
+
+    def process(index: int):
+        stored = SourceFileStore(tmp_path / "objects", db).put_bytes(
+            f"concurrent-{index}".encode(), original_name=f"{index}.pdf"
+        )
+        StagingStore(db).save_manifest({
+            "file_hash": stored.file_hash, "filename": stored.original_name,
+            "format": "pdf", "parse_summary": {"status": "parsed"},
+            "pages": [{"page_no": 1, "text_items": [{
+                "text": f"主公司有限公司营业收入 {100 + index}", "source_loc": {},
+            }], "tables": []}],
+        })
+        bridge = EntityBridgeService(db, employee=Employee()).run(
+            company_id="host", file_hash=stored.file_hash,
+        )
+        result = FactExtractionService(db).extract(
+            company_id="host", file_hash=stored.file_hash,
+            bridge_run_id=int(bridge["id"]),
+        )
+        return stored.file_hash, int(bridge["id"]), int(result["id"])
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        results = list(executor.map(process, range(4)))
+
+    with connect(db) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM entity_bridge_runs").fetchone()[0] == 4
+        assert conn.execute("SELECT COUNT(*) FROM entity_bridge_blocks").fetchone()[0] == 4
+        assert conn.execute("SELECT COUNT(*) FROM fact_runs").fetchone()[0] == 4
+        assert conn.execute(
+            """SELECT COUNT(*) FROM entity_bridge_blocks b
+               JOIN entity_bridge_runs r ON r.id=b.run_id
+               JOIN source_files s ON s.file_hash=b.file_hash"""
+        ).fetchone()[0] == 4
+        assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+    assert len({item[0] for item in results}) == 4
 
 
 def test_bullet_subject_inheritance_preserves_parent_child_and_stops_at_heading(tmp_path: Path):

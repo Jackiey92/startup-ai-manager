@@ -111,12 +111,22 @@ class FactExtractionService:
         blocks = self._blocks(company_id, file_hash, bridge_run_id)
         selected_run = bridge_run_id or (blocks[0]["run_id"] if blocks else None)
         with connect(self.db_path) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            if selected_run is not None:
+                parent = conn.execute(
+                    """SELECT 1 FROM entity_bridge_runs
+                       WHERE id=? AND company_id=? AND file_hash=? AND status='completed'""",
+                    (selected_run, company_id, file_hash),
+                ).fetchone()
+                if parent is None:
+                    raise KeyError(f"completed entity bridge run not committed: {selected_run}")
             cur = conn.execute(
                 "INSERT INTO fact_runs(company_id,file_hash,bridge_run_id,status,created_at) VALUES (?,?,?,?,?)",
                 (company_id, file_hash, selected_run, "running", _now()),
             )
             run_id = int(cur.lastrowid)
             filename = blocks[0].get("original_name", "") if blocks else ""
+            conn.commit()
         period = _period({"filename": filename})
         candidates = []
         unresolved: list[dict] = []
