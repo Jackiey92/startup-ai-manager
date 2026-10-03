@@ -97,13 +97,30 @@ def test_business_overview_service_reads_only_parsed_staging(tmp_path: Path) -> 
 
 def test_business_overview_reads_folder_navigation_from_ov(tmp_path: Path) -> None:
     from app.ports import LocalMemoryProvider
-    from app.memory_paths import MEMORY_ROOT
     memory = LocalMemoryProvider(tmp_path / "memory")
-    uri = f"{MEMORY_ROOT}/narratives/acme/Acme/技术与产品/L1/overview.md"
-    memory.put(uri, "# L1 Overview\n\n[]\n\n- 技术证据", metadata={"layer": "L1"})
-    result = BusinessOverviewService(tmp_path / "missing.db", memory).overview(company_id="acme")
-    assert result["narrative_documents"][0]["abstract_uri"].endswith("/L0/abstract.md")
-    assert "技术证据" in result["narrative_documents"][0]["overview"]
+    db_path = tmp_path / "app.db"
+    init_db(db_path)
+    store = SourceFileStore(tmp_path / "objects", db_path)
+    stored = store.put_bytes(b"source", original_name="技术资料.md")
+    manifest = _manifest(name="技术资料.md", text=["公司定位为工业材料供应商"])
+    manifest["file_hash"] = stored.file_hash
+    manifest["resource_folder"] = "技术与产品"
+    manifest["ov_resource_uri"] = (
+        f"viking://resources/技术与产品/{stored.file_hash}.md"
+    )
+    ClassificationService(db_path).classify_parsed(
+        file_hash=stored.file_hash, company_id="acme", manifest=manifest,
+    )
+    StagingStore(db_path).save_manifest(manifest)
+    resource = manifest["ov_resource_uri"]
+    memory.put(resource + "/.abstract.md", "盖戳：OV 摘要", metadata={"generated_by": "SemanticProcessor"})
+    memory.put(resource + "/.overview.md", "# 技术资料\n\n技术证据", metadata={"generated_by": "SemanticProcessor"})
+
+    result = BusinessOverviewService(db_path, memory).overview(company_id="acme")
+    assert result["navigation_documents"][0]["abstract_uri"].endswith("/.abstract.md")
+    assert "技术证据" in result["navigation_documents"][0]["overview"]
+    assert result["narrative_documents"] == result["navigation_documents"]
+    assert result["positioning"]["value"] == "工业材料供应商"
 
 
 def test_business_overview_page_is_empty_before_first_parse(tmp_path: Path, monkeypatch) -> None:

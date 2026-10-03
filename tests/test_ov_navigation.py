@@ -1,71 +1,53 @@
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from threading import Lock
-import time
-from app.db import init_db
-from app.entities import EntityBridgeService, EntityRosterService
-from app.harness.staging import StagingStore
-from app.ov_navigation import OVNavigationService, verify_narrative_item
+
+import pytest
+
+from app.ov_navigation import OVNavigationService
 from app.ports import LocalMemoryProvider
-from app.storage import SourceFileStore
-
-class FakeWorker:
-    def __init__(self, items): self.items=items
-    def run(self, **_): return self.items
-
-def setup(tmp_path: Path):
-    db=tmp_path/'app.db';init_db(db); stored=SourceFileStore(tmp_path/'objects',db).put_bytes(b'x',original_name='bp.pdf')
-    a='未蓝科技有限公司采用低温烧结技术，产品用于新能源汽车电池。公司计划2025年营收做到1000万元。公司自称技术行业领先。'
-    b='未蓝科技有限公司全资子公司常州未蓝新能源有限公司负责电池材料供应。'
-    StagingStore(db).save_manifest({'file_hash':stored.file_hash,'filename':'bp.pdf','format':'pdf','parse_summary':{'status':'parsed'},'pages':[{'page_no':1,'text_items':[{'text':a,'source_loc':{'locator':'text/0'}},{'text':b,'source_loc':{'locator':'text/1'}}],'tables':[]}]})
-    EntityRosterService(db).declare(company_id='acme',entity_name='未蓝科技有限公司')
-    return db,stored,EntityBridgeService(db).run(company_id='acme',file_hash=stored.file_hash)
-
-def items(): return [
- {'entity':'未蓝科技有限公司','category':'技术原理','kind':'fact','content':'公司采用低温烧结技术。','quote':'采用低温烧结技术'},
- {'entity':'未蓝科技有限公司','category':'产品与用途','kind':'fact','content':'产品用于新能源汽车电池。','quote':'产品用于新能源汽车电池'},
- {'entity':'未蓝科技有限公司','category':'客户与市场','kind':'plan','source_speaker':'公司','content':'公司计划2025年营收做到1000万元。','quote':'公司计划2025年营收做到1000万元'},
- {'entity':'未蓝科技有限公司','category':'其他','kind':'opinion','source_speaker':'公司自称','content':'公司自称技术行业领先。','quote':'公司自称技术行业领先'},
- {'entity':'常州未蓝新能源有限公司','category':'供应链与运营','kind':'fact','content':'子公司负责电池材料供应。','quote':'常州未蓝新能源有限公司负责电池材料供应'}]
-
-def test_folder_documents_are_entity_scoped_idempotent(tmp_path):
- db,stored,run=setup(tmp_path); svc=OVNavigationService(db); worker=FakeWorker(items())
- first=svc.rebuild(company_id='acme',file_hash=stored.file_hash,bridge_run_id=run['id'],worker=worker); svc.rebuild(company_id='acme',file_hash=stored.file_hash,bridge_run_id=run['id'],worker=worker)
- rows=svc.list(company_id='acme'); assert len(rows)==4 and first['item_count']==5
- tech=[r for r in rows if r['folder']=='技术与产品'][0]; assert '低温烧结' in tech['l1_overview'] and tech['citations'][0]['quote']
- assert svc.list(company_id='acme',entity='常州未蓝新能源有限公司')[0]['entity']=='常州未蓝新能源有限公司'
- assert '（计划）' in svc.list(company_id='acme',folder='客户与市场')[0]['l1_overview']
- assert '（观点·公司自称）' in svc.list(company_id='acme',folder='其他')[0]['l1_overview']
-
-def test_bad_quote_entity_or_unmarked_plan_is_rejected(tmp_path):
- db,stored,run=setup(tmp_path); blocks=OVNavigationService(db)._blocks('acme',stored.file_hash,run['id'])
- bad=[{'entity':'未蓝科技有限公司','category':'技术原理','kind':'fact','content':'x','quote':'不存在'}, {'entity':'其他','category':'技术原理','kind':'fact','content':'x','quote':'采用低温烧结技术'}, {'entity':'未蓝科技有限公司','category':'其他','kind':'fact','content':'计划2025年营收','quote':'公司计划2025年营收做到1000万元'}]
- assert [verify_narrative_item(x,blocks) for x in bad]==[None,None,None]
 
 
-def test_parallel_l1_rebuilds_serialize_same_uri_and_keep_both_documents(tmp_path):
- class ConflictOnConcurrentL1(LocalMemoryProvider):
-  def __init__(self, root):
-   super().__init__(root); self._active=set(); self._guard=Lock()
-  def put(self, uri, content, *, metadata=None):
-   if uri.endswith('/L1/overview.md'):
-    with self._guard:
-     if uri in self._active: raise RuntimeError('ALREADY_EXISTS: concurrent L1 create')
-     self._active.add(uri)
-    try:
-     time.sleep(0.01)
-     return super().put(uri, content, metadata=metadata)
-    finally:
-     with self._guard: self._active.remove(uri)
-   return super().put(uri, content, metadata=metadata)
+class NoNarrativeWrites(LocalMemoryProvider):
+    def __init__(self, root: Path):
+        super().__init__(root)
+        self.put_calls = []
 
- db,stored,run=setup(tmp_path); memory=ConflictOnConcurrentL1(tmp_path/'ov')
- service=OVNavigationService(db,memory)
- def rebuild():
-  return service.rebuild(company_id='acme',file_hash=stored.file_hash,bridge_run_id=run['id'],worker=FakeWorker(items()))
- with ThreadPoolExecutor(max_workers=2) as pool:
-  results=list(pool.map(lambda _item: rebuild(), range(2)))
- assert all(result['item_count']==5 for result in results)
- rows=service.list(company_id='acme')
- assert len(rows)==4
- assert '低温烧结' in next(row for row in rows if row['folder']=='技术与产品')['l1_overview']
+    def put(self, uri, content, *, metadata=None):
+        self.put_calls.append((uri, content, metadata))
+        if "/narratives/" in uri:
+            raise AssertionError("SAM must not write the legacy narratives namespace")
+        return super().put(uri, content, metadata=metadata)
+
+
+def test_sidecar_routes_match_measured_openviking_shape(tmp_path):
+    service = OVNavigationService(resources_root="viking://resources")
+    resource = service.resource_uri("技术与产品", "a" * 64)
+    assert resource == "viking://resources/技术与产品/" + "a" * 64 + ".md"
+    assert service.sidecar_uris(resource) == {
+        "abstract_uri": resource + "/.abstract.md",
+        "overview_uri": resource + "/.overview.md",
+    }
+
+
+def test_reads_ov_generated_sidecars_without_writing_narratives(tmp_path):
+    memory = NoNarrativeWrites(tmp_path / "ov")
+    service = OVNavigationService(memory=memory)
+    resource = service.resource_uri("财务", "b" * 64)
+    memory.put(resource + "/.abstract.md", "盖戳：OV 自动摘要", metadata={"generated_by": "SemanticProcessor"})
+    memory.put(resource + "/.overview.md", "# 财务\n\nOV 目录概览", metadata={"generated_by": "SemanticProcessor"})
+
+    result = service.read_sidecars(resource)
+    assert result is not None
+    assert result["abstract"] == "盖戳：OV 自动摘要"
+    assert "OV 目录概览" in result["overview"]
+    assert result["provenance"] == "openviking.semantic_processor"
+    assert not [call for call in memory.put_calls if "/narratives/" in call[0]]
+
+
+def test_sidecars_are_not_ready_until_both_files_exist(tmp_path):
+    memory = LocalMemoryProvider(tmp_path / "ov")
+    service = OVNavigationService(memory=memory)
+    resource = service.resource_uri("法务", "c" * 64)
+    memory.put(resource + "/.abstract.md", "摘要")
+    assert service.read_sidecars(resource) is None
+    with pytest.raises(ValueError):
+        service.sidecar_uris("file:///not-viking")

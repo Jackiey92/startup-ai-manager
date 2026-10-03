@@ -16,17 +16,16 @@ class TextOnlyOV(LocalMemoryProvider):
         source = Path(path)
         super().add_resource(path, parent=parent, wait=wait)
         if source.suffix == ".md":
-            self.put(parent.rstrip("/") + "/overview.md", "概览已就绪：" + source.read_text(encoding="utf-8")[:80])
-            self.put(parent.rstrip("/") + "/abstract.md", "盖戳：OV_READY")
+            self.put(parent.rstrip("/") + "/.overview.md", "概览已就绪：" + source.read_text(encoding="utf-8")[:80])
+            self.put(parent.rstrip("/") + "/.abstract.md", "盖戳：OV_READY")
 
     def add_resource_to(self, path: str, target_uri: str, *, wait: bool = True,
                         timeout: int = 600) -> None:
         source = Path(path)
         super().add_resource_to(path, target_uri, wait=wait, timeout=timeout)
         if source.suffix == ".md":
-            parent = target_uri.rsplit("/", 1)[0]
-            self.put(parent + "/overview.md", "概览已就绪：" + source.read_text(encoding="utf-8")[:80])
-            self.put(parent + "/abstract.md", "盖戳：OV_READY")
+            self.put(target_uri + "/.overview.md", "概览已就绪：" + source.read_text(encoding="utf-8")[:80])
+            self.put(target_uri + "/.abstract.md", "盖戳：OV_READY")
 
 
 def test_add_parsed_resource_sends_markdown_not_pdf_bytes():
@@ -82,7 +81,7 @@ def test_r2_pipeline_imports_resource_and_verifies_finance_facts(tmp_path: Path)
     raw.write_bytes(source_path.read_bytes())
     raw_ov = TextOnlyOV(tmp_path / "raw-ov")
     raw_ov.add_resource(str(raw), parent=f"viking://resources/{folder}", wait=True)
-    assert raw_ov.query(prefix=f"viking://resources/{folder}/overview.md") == []
+    assert raw_ov.query(prefix=f"viking://resources/{folder}/.overview.md") == []
     parsed = tmp_path / "parsed.md"
     parsed.write_text("第1页\n\n" + text, encoding="utf-8")
     memory.add_resource(str(parsed), parent=f"viking://resources/{folder}", wait=True)
@@ -91,8 +90,8 @@ def test_r2_pipeline_imports_resource_and_verifies_finance_facts(tmp_path: Path)
         critical = conn.execute("SELECT id FROM todos WHERE reason='critical_review' AND status='open'").fetchall()
     assert memory.query(prefix=f"viking://resources/{folder}")
     assert memory.read(f"viking://resources/{folder}/parsed.md").startswith("第1页")
-    assert "概览已就绪" in memory.read(f"viking://resources/{folder}/overview.md")
-    assert "OV_READY" in memory.read(f"viking://resources/{folder}/abstract.md")
+    assert "概览已就绪" in memory.read(f"viking://resources/{folder}/.overview.md")
+    assert "OV_READY" in memory.read(f"viking://resources/{folder}/.abstract.md")
     assert run["fact_count"] == 0
     assert run["unresolved"]
     assert facts == []

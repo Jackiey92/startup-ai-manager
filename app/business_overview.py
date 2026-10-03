@@ -13,8 +13,10 @@ import sqlite3
 from typing import Any, Iterable
 
 from .db.database import connect
-from .ports import MemoryProvider, LocalMemoryProvider, MemoryUnavailable
-from .memory_paths import MEMORY_ROOT
+from .ports import MemoryProvider
+from .ov_navigation import OVNavigationService
+from .source_map import render_mapping
+from .classifier.semantic_folders import classify as classify_folder
 
 
 # The UI consumes this mapping; keeping it here prevents stage wording from
@@ -424,26 +426,51 @@ class BusinessOverviewService:
         self.db_path = db_path
         self.memory = memory
 
-    def narrative_documents(self, *, company_id: str) -> list[dict[str, Any]]:
-        """Read current L1/L0 navigation from OV; no local prose cache."""
+    def _resource_uri(self, manifest: dict[str, Any]) -> str | None:
+        explicit = manifest.get("ov_resource_uri") or manifest.get("resource_uri")
+        if explicit:
+            return str(explicit)
+        file_hash = str(manifest.get("file_hash") or "").strip()
+        if not file_hash:
+            return None
+        folder = str(manifest.get("resource_folder") or "").strip()
+        if not folder:
+            try:
+                folder = classify_folder(text=render_mapping(manifest), skills_root="skills")
+            except (OSError, TypeError, ValueError):
+                return None
+        try:
+            return OVNavigationService(resources_root="viking://resources").resource_uri(folder, file_hash)
+        except ValueError:
+            return None
+
+    def navigation_documents(self, *, company_id: str) -> list[dict[str, Any]]:
+        """Read OV's generated sidecars; never generate or cache prose."""
         if self.memory is None:
             return []
-        prefix = f"{MEMORY_ROOT}/narratives/{company_id}"
         result = []
-        query_prefix = "viking://" if isinstance(self.memory, LocalMemoryProvider) else prefix
-        try:
-            items = self.memory.query(prefix=query_prefix)
-        except (FileNotFoundError, MemoryUnavailable, OSError):
-            return []
-        for item in items:
-            uri = str(item.get("uri", ""))
-            if not uri.endswith("/L1/overview.md"):
+        service = OVNavigationService(self.db_path, self.memory)
+        for manifest in self.manifests(company_id=company_id):
+            resource_uri = self._resource_uri(manifest)
+            if not resource_uri:
                 continue
-            content = str(item.get("content", ""))
-            parts = content.split("\n\n", 2)
-            result.append({"uri": uri, "abstract_uri": uri.replace("/L1/overview.md", "/L0/abstract.md"),
-                           "overview": parts[-1] if parts else "", "content": content})
+            sidecars = service.read_sidecars(resource_uri)
+            if sidecars is None:
+                continue
+            result.append({
+                **sidecars,
+                "file_hash": manifest.get("file_hash"),
+                "source_file": manifest.get("original_name") or manifest.get("filename"),
+                # Keep the response key during the migration window; its
+                # value is OV-owned navigation, not SAM-written narratives.
+                "uri": sidecars["overview_uri"],
+                "content": sidecars["overview"],
+            })
         return result
+
+    def narrative_documents(self, *, company_id: str) -> list[dict[str, Any]]:
+        """Deprecated response-shape alias for OV navigation sidecars."""
+        return self.navigation_documents(company_id=company_id)
 
     def manifests(self, *, company_id: str) -> list[dict[str, Any]]:
         try:
@@ -481,14 +508,7 @@ class BusinessOverviewService:
         return manifests
 
     def overview(self, *, company_id: str) -> dict[str, Any]:
-        narratives = self.narrative_documents(company_id=company_id)
-        if narratives:
-            return {
-                "products": [], "product_line_count": None, "max_trl": None,
-                "invention_patent_count": None, "software_copyright_count": None,
-                "business_model": None, "positioning": None, "summary": None,
-                "insight": None, "source_files": [], "narrative_documents": narratives,
-            }
+        navigation = self.navigation_documents(company_id=company_id)
         manifests = self.manifests(company_id=company_id)
         extracted = [extract_business_overview(manifest) for manifest in manifests]
         products: list[dict[str, Any]] = []
@@ -509,7 +529,7 @@ class BusinessOverviewService:
             model = model or item["business_model"]
             positioning = positioning or item["positioning"]
         trl_candidates.sort(key=lambda value: int(value["value"]), reverse=True)
-        return {
+        result = {
             "products": products,
             "product_line_count": len(products) if products else None,
             "max_trl": trl_candidates[0] if trl_candidates else None,
@@ -521,3 +541,7 @@ class BusinessOverviewService:
             "insight": None,
             "source_files": [str(manifest.get("original_name") or manifest.get("file_hash")) for manifest in manifests],
         }
+        if navigation:
+            result["navigation_documents"] = navigation
+            result["narrative_documents"] = navigation
+        return result

@@ -67,6 +67,26 @@ class StagingStore:
         data["payload"] = json.loads(data["payload"])
         return data
 
+    def update_payload(self, staging_id: int, updates: dict) -> None:
+        """Merge post-parse routing metadata without interpreting facts."""
+        if not isinstance(updates, dict):
+            raise TypeError("staging updates must be a mapping")
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT payload FROM parse_staging WHERE id=?", (staging_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError(staging_id)
+            payload = json.loads(row["payload"])
+            if not isinstance(payload, dict):
+                raise ValueError("staging payload must be an object")
+            payload.update(updates)
+            conn.execute(
+                "UPDATE parse_staging SET payload=? WHERE id=?",
+                (json.dumps(payload, ensure_ascii=False), staging_id),
+            )
+            conn.commit()
+
     def list_pending(self) -> list[dict]:
         with self._conn() as conn:
             conn.execute(

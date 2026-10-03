@@ -22,8 +22,8 @@ _sys.path.insert(0, str(_PROJECT_ROOT))
 from app.storage import SourceFileStore
 from app.db.database import init_db as init_core_db
 from app.classifier import ClassificationService
+from app.classifier.semantic_folders import classify as classify_resource_folder
 from app.facts import ConsolidationService, FactExtractionService
-from app.ov_navigation import OVNavigationService
 from app.entities import EntityBridgeService, EntityRosterService
 from app.guidance import GuideJobCoordinator, ImportGuideService, ModelUnavailable
 from app.harness.staging import StagingStore
@@ -255,32 +255,67 @@ def _parse_job_worker(job: dict, progress, cancel_event) -> None:
         if classification.get("_created_for_parse"):
             classification_id = int(classification["id"])
         extraction = ExtractionMemoryService(app.extensions["sam_memory_provider"])
-        extraction.ingest(job["company_id"], payload)
+        classify_folder = getattr(extraction, "classify_folder", None)
+        resource_folder = (
+            classify_folder(payload, skills_root=RUNTIME_CONFIG.skill_root)
+            if callable(classify_folder)
+            else classify_resource_folder(
+                text=json.dumps(payload, ensure_ascii=False),
+                skills_root=RUNTIME_CONFIG.skill_root,
+            )
+        )
+        extraction.ingest(job["company_id"], payload, resource_folder=resource_folder)
+        resource_uri = f"viking://resources/{resource_folder}/{job['file_hash']}.md"
+        staging.update_payload(staging_id, {
+            "resource_folder": resource_folder,
+            "ov_resource_uri": resource_uri,
+            "ov_sidecar_uris": {
+                "abstract_uri": f"{resource_uri}/.abstract.md",
+                "overview_uri": f"{resource_uri}/.overview.md",
+            },
+            "ov_import_status": "pending",
+        })
         # Source bytes are imported into OV's semantic namespace exactly once;
         # the employee/skill chooses the folder from parsed content.
-        try:
-            # OV's local runtime does not parse PDF bytes.  Preserve the
-            # immutable PDF in SAM's object store, but ingest MinerU's parsed
-            # page markdown so OV can build L2/L1/L0 navigation.
-            resource_result, resource_uri = add_parsed_resource(
-                extraction.memory, payload,
-                parent=f"viking://resources/{extraction.classify_folder(payload, skills_root=RUNTIME_CONFIG.skill_root)}",
-                resource_name=f"{job['file_hash']}.md",
-                timeout=budget(600),
-            )
-            wait_for_resource = getattr(extraction.memory, "wait_for_resource", None)
-            if wait_for_resource is not None:
-                # --to --wait is the primary completion point.  Keep only a
-                # short exact-URI confirmation fallback; never poll a folder
-                # or wait another 600 seconds for a URI OV did not choose.
-                wait_for_resource(
-                    resource_uri,
-                    timeout=min(15, budget(15)),
-                    interval=1.0,
+        if not hasattr(extraction, "memory"):
+            # Test doubles and compatibility adapters may only implement the
+            # 2A ingest method; they do not own an OV transport.
+            resource_folder = str(resource_folder)
+        else:
+            try:
+                # OV's local runtime does not parse PDF bytes.  Preserve the
+                # immutable PDF in SAM's object store, but ingest MinerU's
+                # parsed page markdown so OV can build its navigation.
+                _resource_result, imported_uri = add_parsed_resource(
+                    extraction.memory, payload,
+                    parent=f"viking://resources/{resource_folder}",
+                    resource_name=f"{job['file_hash']}.md",
+                    timeout=budget(600),
                 )
-        except Exception as exc:
-            app.logger.exception("OV resource import deferred after extraction")
-            progress(stage="parsing", message=f"OV 语义导入延迟：{exc}")
+                if imported_uri != resource_uri:
+                    raise RuntimeError(
+                        f"OV resource target mismatch: expected {resource_uri}, got {imported_uri}"
+                    )
+                # Persist only the exact OV route; sidecar bodies remain owned
+                # by OV and are read after SemanticProcessor materializes them.
+                staging.update_payload(staging_id, {
+                    "ov_resource_uri": resource_uri,
+                    "ov_import_status": "submitted",
+                })
+                wait_for_resource = getattr(extraction.memory, "wait_for_resource", None)
+                if wait_for_resource is not None:
+                    # --to --wait is the primary completion point.  Keep only
+                    # a short exact-URI confirmation fallback; never poll a
+                    # folder or wait another 600 seconds for a URI OV did not choose.
+                    wait_for_resource(
+                        resource_uri,
+                        timeout=min(15, budget(15)),
+                        interval=1.0,
+                    )
+            except Exception as exc:
+                app.logger.exception("OV resource import deferred after extraction")
+                staging.update_payload(staging_id, {"ov_import_status": "deferred"})
+                progress(stage="parsing", message=f"OV 语义导入延迟：{exc}")
         check_cancel()
         budget(600)
 
@@ -289,12 +324,6 @@ def _parse_job_worker(job: dict, progress, cancel_event) -> None:
         # critical section; only verified candidates are retained in memory.
         bridge_run = EntityBridgeService(MAIN_DB).run(
             company_id=job["company_id"], file_hash=job["file_hash"],
-        )
-        # Prose has its own source verifier and is intentionally independent
-        # from finance consolidation: a bad prose candidate never blocks facts.
-        OVNavigationService(MAIN_DB, app.extensions["sam_memory_provider"]).rebuild(
-            company_id=job["company_id"], file_hash=job["file_hash"],
-            bridge_run_id=int(bridge_run["id"]), thread_id=f"parse-job:{job['job_id']}",
         )
         fact_service = FactExtractionService(MAIN_DB)
         budget(600)
