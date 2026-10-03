@@ -228,20 +228,6 @@ CREATE TABLE IF NOT EXISTS fact_runs (
 CREATE INDEX IF NOT EXISTS idx_fact_runs_company
     ON fact_runs(company_id, created_at DESC, id DESC);
 
--- R2: L1/L0 are folder-level navigation documents, never atomic prose facts.
-CREATE TABLE IF NOT EXISTS narrative_folders (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    company_id TEXT NOT NULL,
-    entity TEXT NOT NULL,
-    folder TEXT NOT NULL,
-    l1_overview TEXT NOT NULL,
-    l0_abstract TEXT NOT NULL,
-    citations TEXT NOT NULL DEFAULT '[]',
-    source_fingerprint TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    UNIQUE(company_id, entity, folder)
-);
-
 -- Company-scoped dashboard visibility only; this never deletes source data.
 CREATE TABLE IF NOT EXISTS dashboard_preferences (
     company_id   TEXT NOT NULL,

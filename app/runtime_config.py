@@ -159,8 +159,10 @@ class RuntimeConfig:
     model_api_key_env: str
     model_default: str
     memory_provider: str
+    memory_base_url: str
     memory_base_url_env: str
     memory_api_key_env: str
+    memory_templates_dir: str
     tool_plugin_dir: Path
     tool_bridge_python: Path
     agent_id: str
@@ -242,8 +244,10 @@ class RuntimeConfig:
             str(env.get(base_url_env, model.get("base_url", ""))), base_url_env, name_env, key_env,
             str(env.get(name_env, model.get("default_model", "auto"))),
             str(memory.get("provider", "local")),
+            str(env.get("SAM_OV_BASE_URL", memory.get("base_url", "http://127.0.0.1:1933"))),
             str(memory.get("base_url_env", "SAM_OV_BASE_URL")),
             str(memory.get("api_key_env", "SAM_OV_API_KEY")),
+            str(env.get("SAM_OV_TEMPLATES_DIR", memory.get("templates_dir", "custom-prompts"))),
             plugin_dir, bridge_python,
             agent_id,
             gateway_mode,

@@ -8,9 +8,10 @@ from typing import Any, Callable, Iterable
 import uuid
 
 from .ports import MemoryProvider
+from .memory_paths import MEMORY_ROOT
 
 
-RUNTIME_ROOT = "viking://user/default/memories/projects/10_startup_ai_manager/2c_runtime"
+RUNTIME_ROOT = f"{MEMORY_ROOT}/2c_runtime"
 STATES = {"created", "running", "waiting", "blocked", "done", "cancelled", "expired"}
 TERMINAL = {"done", "cancelled", "expired"}
 TRANSITIONS = {

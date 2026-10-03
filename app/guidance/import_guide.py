@@ -17,6 +17,7 @@ from typing import Any
 
 from app.ports import ModelUnavailable, RuntimeProvider
 from app.storage import SourceFileStore
+from app.memory_paths import MEMORY_ROOT
 
 
 SYSTEM_PROMPT = """你是 Startup AI Manager 的企业资料导入引导助手。
@@ -125,7 +126,7 @@ class ImportGuideService:
                 "filename": payload.get("filename") or payload.get("original_name"),
                 "format": payload.get("format"),
                 "evidence_uri": (
-                    "viking://user/default/memories/projects/10_startup_ai_manager/"
+                    f"{MEMORY_ROOT}/"
                     f"2a_extraction/{self.company_id}/{source_id}/L2/manifest.json"
                 ),
                 "parse_summary": payload.get("parse_summary", {}),

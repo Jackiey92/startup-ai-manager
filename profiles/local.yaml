@@ -1,6 +1,8 @@
 profile: local
 memory:
-  provider: local
+  provider: openviking
+  base_url: http://127.0.0.1:1933
+  templates_dir: custom-prompts
 model:
   default_model: qwen3.8-max
 paths:

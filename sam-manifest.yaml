@@ -29,8 +29,10 @@ paths:
   tool_bridge_python: .venv/bin/python
 memory:
   provider: openviking
+  base_url: http://127.0.0.1:1933
   base_url_env: SAM_OV_BASE_URL
   api_key_env: SAM_OV_API_KEY
+  templates_dir: custom-prompts
 model:
   api: openai-completions
   base_url: https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1

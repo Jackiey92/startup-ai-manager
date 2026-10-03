@@ -229,7 +229,19 @@ def _parse_job_worker(job: dict, progress, cancel_event) -> None:
         )
         if classification.get("_created_for_parse"):
             classification_id = int(classification["id"])
-        ExtractionMemoryService(app.extensions["sam_memory_provider"]).ingest(job["company_id"], payload)
+        extraction = ExtractionMemoryService(app.extensions["sam_memory_provider"])
+        extraction.ingest(job["company_id"], payload)
+        # Source bytes are imported into OV's semantic namespace exactly once;
+        # the employee/skill chooses the folder from parsed content.
+        try:
+            stored = SourceFileStore(RUNTIME_CONFIG.objects_dir, MAIN_DB).get(job["file_hash"])
+            extraction.memory.add_resource(
+                str(RUNTIME_CONFIG.objects_dir / stored.storage_path),
+                parent=f"resources/{extraction.classify_folder(payload, skills_root=RUNTIME_CONFIG.skill_root)}",
+                wait=True,
+            )
+        except Exception:
+            app.logger.exception("OV resource import deferred after extraction")
         check_cancel()
 
         # Normal uploads automatically traverse the entity bridge and the
@@ -240,7 +252,7 @@ def _parse_job_worker(job: dict, progress, cancel_event) -> None:
         )
         # Prose has its own source verifier and is intentionally independent
         # from finance consolidation: a bad prose candidate never blocks facts.
-        NarrativeFolderService(MAIN_DB).rebuild(
+        NarrativeFolderService(MAIN_DB, app.extensions["sam_memory_provider"]).rebuild(
             company_id=job["company_id"], file_hash=job["file_hash"],
             bridge_run_id=int(bridge_run["id"]), thread_id=f"parse-job:{job['job_id']}",
         )
@@ -706,7 +718,7 @@ def api_facts():
 @app.route("/api/narratives", methods=["GET"])
 def api_narratives():
     company_id = str(request.args.get("company_id") or os.environ.get("SAM_COMPANY_ID", "default"))
-    return {"folders": NarrativeFolderService(MAIN_DB).list(
+    return {"folders": NarrativeFolderService(MAIN_DB, app.extensions["sam_memory_provider"]).list(
         company_id=company_id, entity=request.args.get("entity"),
         category=request.args.get("category"), file_hash=request.args.get("file_hash"),
     )}

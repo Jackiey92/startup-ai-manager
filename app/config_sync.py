@@ -6,8 +6,9 @@ from pathlib import Path
 from typing import Any
 
 from .ports import MemoryProvider
+from .memory_paths import MEMORY_ROOT
 
-CONFIG_ROOT = "viking://user/default/memories/projects/10_startup_ai_manager/agent_config"
+CONFIG_ROOT = f"{MEMORY_ROOT}/agent_config"
 CONFIG_FILES = ("SOUL.md", "IDENTITY.md", "AGENTS.md", "USER.md")
 
 

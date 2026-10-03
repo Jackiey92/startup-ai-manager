@@ -15,9 +15,10 @@ from typing import Any, Iterable
 
 from ..ports import MemoryProvider
 from ..source_map import render_mapping
+from ..memory_paths import MEMORY_ROOT
+from ..classifier.semantic_folders import classify as classify_folder
 
 
-MEMORY_ROOT = "viking://user/default/memories/projects/10_startup_ai_manager"
 
 
 def _now() -> str:
@@ -74,6 +75,10 @@ class ExtractionMemoryService:
         self.memory.put(l1_uri, l1, metadata={"layer": "2a", "level": "L1", "source_id": source_id})
         self.memory.put(l0_uri, l0, metadata={"layer": "2a", "level": "L0", "source_id": source_id})
         return ExtractionRecord(source_id, l2_manifest_uri, l2_document_uri, l1_uri, l0_uri)
+
+    def classify_folder(self, manifest: dict[str, Any], *, skills_root: str = "skills") -> str:
+        text = self._markdown(manifest)
+        return classify_folder(text=text, skills_root=skills_root)
 
 
 class ConflictScanner:

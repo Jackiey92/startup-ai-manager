@@ -14,6 +14,7 @@ import tempfile
 import shutil
 from collections.abc import Callable, Sequence
 from typing import Any, Protocol
+from .memory_paths import MEMORY_ROOT
 
 
 class RuntimeProvider(Protocol):
@@ -39,6 +40,9 @@ class ModelUnavailable(RuntimeError):
 
 
 class MemoryProvider(Protocol):
+    def add_resource(self, path: str, *, parent: str, wait: bool = True) -> None:
+        """Import a source file into the configured OV semantic folder."""
+
     def put(self, uri: str, content: str, *, metadata: dict[str, Any] | None = None) -> None:
         """Persist a memory document at a provider-specific URI."""
 
@@ -74,8 +78,9 @@ class LocalMemoryProvider:
     adapter can implement the same protocol and be selected by configuration.
     """
 
-    def __init__(self, root: str | Path):
+    def __init__(self, root: str | Path, *, memory_root: str = MEMORY_ROOT):
         self.root = Path(root)
+        self.memory_root = memory_root.rstrip("/")
 
     def _path(self, uri: str) -> Path:
         relative = uri.removeprefix("viking://").lstrip("/")
@@ -83,6 +88,14 @@ class LocalMemoryProvider:
         if self.root.resolve() not in path.parents and path != self.root.resolve():
             raise ValueError("memory URI escapes local memory root")
         return path
+
+    def add_resource(self, path: str, *, parent: str, wait: bool = True) -> None:
+        source = Path(path)
+        if not source.is_file():
+            raise FileNotFoundError(path)
+        target = self._path(parent.rstrip("/") + "/" + source.name)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, target)
 
     def put(self, uri: str, content: str, *, metadata: dict[str, Any] | None = None) -> None:
         path = self._path(uri)
@@ -108,13 +121,13 @@ class LocalMemoryProvider:
         if fact.get("status") != "verified":
             raise ValueError("only verified facts may enter the 2b memory provider")
         self.put(
-            f"viking://user/default/memories/projects/10_startup_ai_manager/2b_facts/{company_id}/{fact_key}.json",
+            f"{self.memory_root}/2b_facts/{company_id}/{fact_key}.json",
             json.dumps(fact, ensure_ascii=False, sort_keys=True),
             metadata={"layer": "2b", "company_id": company_id, "fact_key": fact_key},
         )
 
     def get_fact(self, company_id: str, fact_key: str) -> dict[str, Any] | None:
-        uri = f"viking://user/default/memories/projects/10_startup_ai_manager/2b_facts/{company_id}/{fact_key}.json"
+        uri = f"{self.memory_root}/2b_facts/{company_id}/{fact_key}.json"
         try:
             return json.loads(self.read(uri))
         except FileNotFoundError:
@@ -136,7 +149,7 @@ class LocalMemoryProvider:
             path.unlink()
 
     def list_facts(self, company_id: str, *, fact_keys: Sequence[str] = ()) -> list[dict[str, Any]]:
-        prefix = f"viking://user/default/memories/projects/10_startup_ai_manager/2b_facts/{company_id}"
+        prefix = f"{self.memory_root}/2b_facts/{company_id}"
         facts = []
         seen: set[str] = set()
         for key in fact_keys:
@@ -185,13 +198,17 @@ class OpenVikingMemoryProvider:
         *,
         base_url: str | None = None,
         api_key: str | None = None,
+        templates_dir: str = "custom-prompts",
         ov_bin: str = "ov",
         runner: Callable[..., subprocess.CompletedProcess[str]] | None = None,
+        memory_root: str = MEMORY_ROOT,
     ):
         self.base_url = base_url
         self.api_key = api_key
+        self.templates_dir = templates_dir
         self.ov_bin = ov_bin
         self._runner = runner or subprocess.run
+        self.memory_root = memory_root.rstrip("/")
         self._known_fact_keys: dict[str, set[str]] = {}
 
     def _env(self) -> dict[str, str]:
@@ -204,6 +221,8 @@ class OpenVikingMemoryProvider:
         if self.api_key:
             env["OPENVIKING_API_KEY"] = self.api_key
             env["VIKINGBOT_API_KEY"] = self.api_key
+        if self.templates_dir:
+            env["SAM_OV_TEMPLATES_DIR"] = self.templates_dir
         return env
 
     @staticmethod
@@ -267,6 +286,13 @@ class OpenVikingMemoryProvider:
                 args.extend(["--tags", tags])
             self._run(args)
 
+    def add_resource(self, path: str, *, parent: str, wait: bool = True) -> None:
+        """Use OV's ingestion boundary; SAM never classifies by suffix."""
+        args = ["add-resource", path, "--parent", parent]
+        if wait:
+            args.append("--wait")
+        self._run(args)
+
     def read(self, uri: str) -> str:
         payload = self._run(["read", uri])
         if isinstance(payload, str):
@@ -291,14 +317,14 @@ class OpenVikingMemoryProvider:
         if fact.get("status") != "verified":
             raise ValueError("only verified facts may enter the 2b memory provider")
         self.put(
-            f"viking://user/default/memories/projects/10_startup_ai_manager/2b_facts/{company_id}/{fact_key}.json",
+            f"{self.memory_root}/2b_facts/{company_id}/{fact_key}.json",
             json.dumps(fact, ensure_ascii=False, sort_keys=True),
             metadata={"layer": "2b", "company_id": company_id, "fact_key": fact_key},
         )
         self._known_fact_keys.setdefault(company_id, set()).add(fact_key)
 
     def get_fact(self, company_id: str, fact_key: str) -> dict[str, Any] | None:
-        uri = f"viking://user/default/memories/projects/10_startup_ai_manager/2b_facts/{company_id}/{fact_key}.json"
+        uri = f"{self.memory_root}/2b_facts/{company_id}/{fact_key}.json"
         try:
             return json.loads(self.read(uri))
         except (FileNotFoundError, MemoryUnavailable) as exc:
@@ -319,7 +345,7 @@ class OpenVikingMemoryProvider:
         self._run(["reindex", uri, "--mode", "semantic_and_vectors", "--wait", "true", "--recursive", str(recursive).lower()])
 
     def list_facts(self, company_id: str, *, fact_keys: Sequence[str] = ()) -> list[dict[str, Any]]:
-        prefix = f"viking://user/default/memories/projects/10_startup_ai_manager/2b_facts/{company_id}"
+        prefix = f"{self.memory_root}/2b_facts/{company_id}"
         facts: list[dict[str, Any]] = []
         keys = list(dict.fromkeys([*self._known_fact_keys.get(company_id, set()), *map(str, fact_keys)]))
         seen: set[str] = set()

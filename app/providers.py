@@ -24,8 +24,9 @@ def memory_provider(config: RuntimeConfig, *, env: dict[str, str] | None = None)
     if config.memory_provider == "local":
         return LocalMemoryProvider(config.memory_root)
     return OpenVikingMemoryProvider(
-        base_url=values.get(config.memory_base_url_env),
+        base_url=values.get(config.memory_base_url_env) or config.memory_base_url,
         api_key=values.get(config.memory_api_key_env),
+        templates_dir=config.memory_templates_dir,
     )
 
 

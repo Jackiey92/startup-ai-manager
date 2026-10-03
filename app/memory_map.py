@@ -14,9 +14,10 @@ import re
 from typing import Any, Callable
 
 from .ports import MemoryProvider, MemoryUnavailable
+from .memory_paths import MEMORY_ROOT
 from .storage.source_store import SourceFileStore
 
-ROOT = "viking://user/default/memories/projects/10_startup_ai_manager"
+ROOT = MEMORY_ROOT
 MAP_ROOT = ROOT + "/memory_maps"
 MAP_LIMIT = 12_000
 
