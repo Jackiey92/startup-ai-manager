@@ -260,23 +260,57 @@ CREATE TABLE IF NOT EXISTS dashboard_preferences (
 """
 
 MODULES = [
-    ("sales", "销售", 1),
-    ("marketing", "市场", 2),
-    ("hr", "人员", 3),
-    ("finance", "财务", 4),
-    ("module_5", "待定义5", 5),
-    ("module_6", "待定义6", 6),
-    ("module_7", "待定义7", 7),
-    ("module_8", "待定义8", 8),
+    ("finance", "财务", 1),
+    ("legal", "法务", 2),
+    ("technology_product", "技术与产品", 3),
+    ("customer_market", "客户与市场", 4),
+    ("team_equity", "团队股权", 5),
 ]
 
 DOC_TYPES = [
-    ("customer", "客户资料", "sales", 1),
-    ("sales_order", "订单合同", "sales", 2),
-    ("delivery", "发货验收", "sales", 3),
-    ("payment", "回款凭证", "sales", 4),
-    ("lead", "线索清单", "marketing", 1),
-    ("channel", "渠道资料", "marketing", 2),
-    ("campaign", "活动方案", "marketing", 3),
-    ("ad_spend", "投放数据", "marketing", 4),
+    ("financial_statement", "财务报表", "finance", 1),
+    ("audit_report", "审计报告", "finance", 2),
+    ("tax_document", "税务资料", "finance", 3),
+    ("budget_forecast", "预算与预测", "finance", 4),
+    ("contract", "合同与协议", "legal", 1),
+    ("litigation", "争议与诉讼", "legal", 2),
+    ("compliance", "合规与监管", "legal", 3),
+    ("intellectual_property", "知识产权", "legal", 4),
+    ("product_spec", "产品与规格", "technology_product", 1),
+    ("research_development", "研发项目", "technology_product", 2),
+    ("patent", "专利", "technology_product", 3),
+    ("quality_certification", "质量认证", "technology_product", 4),
+    ("customer_profile", "客户资料", "customer_market", 1),
+    ("sales_order", "销售订单", "customer_market", 2),
+    ("market_research", "市场研究", "customer_market", 3),
+    ("channel_campaign", "渠道与活动", "customer_market", 4),
+    ("personnel", "人员与组织", "team_equity", 1),
+    ("compensation", "薪酬", "team_equity", 2),
+    ("equity", "股权", "team_equity", 3),
+    ("governance", "治理与股东", "team_equity", 4),
 ]
+
+# Historical dictionary values from the prototype. Known values are mapped
+# to their new functional owner; placeholder modules are intentionally
+# unclassified rather than guessed into a new business function.
+LEGACY_MODULE_MAP = {
+    "sales": "customer_market",
+    "marketing": "customer_market",
+    "hr": "team_equity",
+    "finance": "finance",
+    "module_5": None,
+    "module_6": None,
+    "module_7": None,
+    "module_8": None,
+}
+
+LEGACY_DOC_TYPE_MAP = {
+    "customer": "customer_profile",
+    "sales_order": "sales_order",
+    "delivery": "channel_campaign",
+    "payment": "financial_statement",
+    "lead": "market_research",
+    "channel": "channel_campaign",
+    "campaign": "channel_campaign",
+    "ad_spend": "market_research",
+}

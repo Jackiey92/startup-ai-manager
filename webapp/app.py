@@ -402,7 +402,13 @@ _PARSE_MANAGER = ParseJobManager(
 )
 
 
-MODULE_LABELS = {"sales": "销售", "marketing": "市场", "hr": "人员", "finance": "财务"}
+MODULE_LABELS = {
+    "finance": "财务",
+    "legal": "法务",
+    "technology_product": "技术与产品",
+    "customer_market": "客户与市场",
+    "team_equity": "团队股权",
+}
 
 
 def _company_id() -> str:

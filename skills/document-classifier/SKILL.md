@@ -26,6 +26,19 @@ source locations, never from a filename keyword table. Return **bare JSON**:
 }
 ```
 
+`module` must be one of the functional dictionary codes below, and
+`doc_type` must belong to that module.  Use `null` when the source does not
+support a decision; do not emit prototype codes such as `sales`, `marketing`,
+`hr`, or `module_5`.
+
+| module | allowed doc_type values |
+|---|---|
+| `finance` | `financial_statement`, `audit_report`, `tax_document`, `budget_forecast` |
+| `legal` | `contract`, `litigation`, `compliance`, `intellectual_property` |
+| `technology_product` | `product_spec`, `research_development`, `patent`, `quality_certification` |
+| `customer_market` | `customer_profile`, `sales_order`, `market_research`, `channel_campaign` |
+| `team_equity` | `personnel`, `compensation`, `equity`, `governance` |
+
 Only fields relevant to the requested operation need to be present. Preserve
 the original text and coordinates. If the evidence is insufficient, return
 `unclassified`/`ambiguous` and explain the gap; do not guess.

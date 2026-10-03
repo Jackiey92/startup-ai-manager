@@ -5,7 +5,13 @@ import sqlite3
 import os
 from pathlib import Path
 
-from .schema import SCHEMA, MODULES, DOC_TYPES
+from .schema import (
+    DOC_TYPES,
+    LEGACY_DOC_TYPE_MAP,
+    LEGACY_MODULE_MAP,
+    MODULES,
+    SCHEMA,
+)
 
 DEFAULT_DB_PATH = Path("data/app.db")
 
@@ -50,10 +56,19 @@ def init_db(db_path: Path | str | None = None) -> None:
             MODULES,
         )
         conn.executemany(
+            "UPDATE modules SET name=?, sort_order=? WHERE code=?",
+            [(name, sort_order, code) for code, name, sort_order in MODULES],
+        )
+        conn.executemany(
             "INSERT OR IGNORE INTO doc_types(code,name,parent_module,sort_order)"
             " VALUES (?,?,?,?)",
             DOC_TYPES,
         )
+        conn.executemany(
+            "UPDATE doc_types SET name=?, parent_module=?, sort_order=? WHERE code=?",
+            [(name, parent, sort_order, code) for code, name, parent, sort_order in DOC_TYPES],
+        )
+        _migrate_module_dictionary(conn)
         conn.commit()
     finally:
         conn.close()
@@ -152,6 +167,113 @@ def _migrate_todos(conn: sqlite3.Connection) -> None:
     columns = {str(row["name"]) for row in conn.execute("PRAGMA table_info(todos)").fetchall()}
     if columns and "entity" not in columns:
         conn.execute("ALTER TABLE todos ADD COLUMN entity TEXT NOT NULL DEFAULT ''")
+
+
+def _migrate_module_dictionary(conn: sqlite3.Connection) -> None:
+    """Move prototype dictionary rows to the functional five-module model.
+
+    Existing classification rows are rewritten before obsolete dictionary
+    parents are removed.  Known prototype values retain their meaning;
+    placeholder modules become unclassified instead of being guessed into a
+    new function.  This ordering keeps both dictionary foreign keys valid
+    throughout the migration and makes a second init a no-op.
+    """
+    tables = {
+        str(row["name"])
+        for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()
+    }
+    if "modules" not in tables or "doc_types" not in tables:
+        return
+
+    module_codes = {code for code, _, _ in MODULES}
+    doc_type_codes = {code for code, _, _, _ in DOC_TYPES}
+    classification_exists = "file_classifications" in tables
+
+    old_modules = [
+        str(row["code"])
+        for row in conn.execute("SELECT code FROM modules").fetchall()
+        if str(row["code"]) not in module_codes
+    ]
+    if classification_exists:
+        for old_code in old_modules:
+            target = LEGACY_MODULE_MAP.get(old_code)
+            if target in module_codes:
+                conn.execute(
+                    "UPDATE file_classifications SET module=? WHERE module=?",
+                    (target, old_code),
+                )
+            else:
+                conn.execute(
+                    "UPDATE file_classifications SET module=NULL, doc_type=NULL WHERE module=?",
+                    (old_code,),
+                )
+
+    old_doc_types = [
+        str(row["code"])
+        for row in conn.execute("SELECT code FROM doc_types").fetchall()
+        if str(row["code"]) not in doc_type_codes
+    ]
+    if classification_exists:
+        for old_code in old_doc_types:
+            target = LEGACY_DOC_TYPE_MAP.get(old_code)
+            if target in doc_type_codes:
+                conn.execute(
+                    "UPDATE file_classifications SET doc_type=? WHERE doc_type=?",
+                    (target, old_code),
+                )
+            else:
+                conn.execute(
+                    "UPDATE file_classifications SET doc_type=NULL WHERE doc_type=?",
+                    (old_code,),
+                )
+
+    # Clear any legacy doc type whose module was a placeholder even if a
+    # future migration adds a row not covered by the explicit code map.
+    if classification_exists:
+        placeholders = tuple(code for code, target in LEGACY_MODULE_MAP.items() if target is None)
+        if placeholders:
+            marks = ",".join("?" for _ in placeholders)
+            conn.execute(
+                f"UPDATE file_classifications SET module=NULL, doc_type=NULL "
+                f"WHERE module IN ({marks})",
+                placeholders,
+            )
+
+    obsolete_doc_marks = ",".join("?" for _ in old_doc_types)
+    if old_doc_types:
+        conn.execute(f"DELETE FROM doc_types WHERE code IN ({obsolete_doc_marks})", old_doc_types)
+    obsolete_module_marks = ",".join("?" for _ in old_modules)
+    if old_modules:
+        conn.execute(f"DELETE FROM modules WHERE code IN ({obsolete_module_marks})", old_modules)
+
+    if classification_exists:
+        # Repair rows from pre-FK or hand-edited databases as well.  A
+        # dictionary migration must never leave a dangling reference or a
+        # doc_type whose parent differs from the row's module.
+        conn.execute(
+            """
+            UPDATE file_classifications
+               SET module=NULL, doc_type=NULL
+             WHERE module IS NOT NULL
+               AND NOT EXISTS (
+                   SELECT 1 FROM modules m WHERE m.code=file_classifications.module
+               )
+            """
+        )
+        conn.execute(
+            """
+            UPDATE file_classifications
+               SET doc_type=NULL
+             WHERE doc_type IS NOT NULL
+               AND NOT EXISTS (
+                   SELECT 1 FROM doc_types d
+                    WHERE d.code=file_classifications.doc_type
+                      AND d.parent_module=file_classifications.module
+               )
+            """
+        )
 
 
 def _migrate_entity_roster(conn: sqlite3.Connection) -> None:

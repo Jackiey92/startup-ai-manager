@@ -16,9 +16,9 @@ class _ClassificationEmployee:
     def classify_document(self, *, text: str, **_):
         rules = (
             ("finance", ("利润", "收入", "资产", "现金流")),
-            ("sales", ("客户", "订单", "发货")),
-            ("hr", ("员工", "岗位", "工资", "薪酬")),
-            ("marketing", ("渠道", "投放", "广告", "转化率")),
+            ("customer_market", ("客户", "订单", "发货")),
+            ("team_equity", ("员工", "岗位", "工资", "薪酬")),
+            ("customer_market", ("渠道", "投放", "广告", "转化率")),
         )
         module, terms = max(rules, key=lambda item: sum(token in text for token in item[1]))
         count = sum(token in text for token in terms)
@@ -28,6 +28,25 @@ class _ClassificationEmployee:
 def test_classification_paths_fail_closed_without_an_employee():
     assert classify_content(_manifest("营业收入 净利润" )).module is None
     assert classify_folder(text="营业收入 净利润") == "unclassified"
+
+
+def test_functional_dictionary_has_five_modules_and_parented_doc_types(tmp_path: Path) -> None:
+    db_path = tmp_path / "dictionary.db"
+    init_db(db_path)
+    conn = sqlite3.connect(db_path)
+    modules = dict(conn.execute("SELECT code, name FROM modules").fetchall())
+    doc_types = conn.execute("SELECT code, parent_module FROM doc_types").fetchall()
+    assert modules == {
+        "finance": "财务",
+        "legal": "法务",
+        "technology_product": "技术与产品",
+        "customer_market": "客户与市场",
+        "team_equity": "团队股权",
+    }
+    assert doc_types
+    assert {parent for _, parent in doc_types} == set(modules)
+    assert not {"sales", "marketing", "hr", "module_5"} & set(modules)
+    conn.close()
 
 
 def _manifest(*texts: str) -> dict:
@@ -67,9 +86,9 @@ def test_content_wins_when_filename_claims_sales(ledger) -> None:
     ("text", "module"),
     [
         ("营业收入 净利润 毛利率 现金流", "finance"),
-        ("客户名称 订单金额 发货状态 已发货", "sales"),
-        ("员工姓名 岗位 基本工资 薪酬", "hr"),
-        ("渠道 投放 广告 转化率", "marketing"),
+        ("客户名称 订单金额 发货状态 已发货", "customer_market"),
+        ("员工姓名 岗位 基本工资 薪酬", "team_equity"),
+        ("渠道 投放 广告 转化率", "customer_market"),
     ],
 )
 def test_content_modules_are_deterministic(text: str, module: str) -> None:
@@ -97,7 +116,7 @@ def test_module_filter_confirm_and_human_reclassification_keep_history(ledger) -
         file_hash=stored.file_hash, company_id="acme",
         manifest=_manifest("客户名称 订单金额 发货状态 已发货"),
     )
-    assert len(service.list_current(company_id="acme", module="sales")) == 1
+    assert len(service.list_current(company_id="acme", module="customer_market")) == 1
     assert service.confirm(file_hash=stored.file_hash, company_id="acme")["status"] == "confirmed"
     current = service.reclassify(
         file_hash=stored.file_hash, company_id="acme", module="finance", doc_type=None,
@@ -105,19 +124,19 @@ def test_module_filter_confirm_and_human_reclassification_keep_history(ledger) -
     assert current["classified_by"] == "human"
     rows = service.list_current(company_id="acme", include_history=True)
     assert rows[0]["module"] == "finance"
-    assert any(row["module"] == "sales" and row["status"] == "superseded" for row in rows[0]["history"])
-    assert service.list_current(company_id="acme", module="sales") == []
+    assert any(row["module"] == "customer_market" and row["status"] == "superseded" for row in rows[0]["history"])
+    assert service.list_current(company_id="acme", module="customer_market") == []
 
 
 def test_human_classification_is_not_overwritten_by_later_parser_retry(ledger) -> None:
     store, service = ledger
     stored = store.put_bytes(b"document", original_name="任意.xlsx")
-    service.reclassify(file_hash=stored.file_hash, company_id="acme", module="hr", doc_type=None)
+    service.reclassify(file_hash=stored.file_hash, company_id="acme", module="team_equity", doc_type=None)
     after = service.classify_parsed(
         file_hash=stored.file_hash, company_id="acme",
         manifest=_manifest("营业收入 净利润 毛利率 现金流"),
     )
-    assert after["module"] == "hr"
+    assert after["module"] == "team_equity"
     assert after["classified_by"] == "human"
 
 
@@ -160,7 +179,7 @@ def test_http_list_filter_confirm_and_human_contract(monkeypatch, ledger) -> Non
 
     monkeypatch.setattr(webapp, "MAIN_DB", store._db_path)
     client = webapp.app.test_client()
-    listed = client.get("/api/files/classifications?company_id=acme&module=sales")
+    listed = client.get("/api/files/classifications?company_id=acme&module=customer_market")
     assert listed.status_code == 200
     assert listed.get_json()["files"][0]["basis"] == "content"
     confirmed = client.post("/api/files/classifications/confirm", json={"file_hash": stored.file_hash, "company_id": "acme"})
@@ -194,9 +213,10 @@ def test_legacy_non_nullable_module_ledger_is_migrated_without_losing_rows(tmp_p
             created_at TEXT NOT NULL
         );
         INSERT INTO modules VALUES ('sales','销售',1);
+        INSERT INTO doc_types VALUES ('customer','客户资料','sales',1);
         INSERT INTO source_files VALUES ('h','old.xlsx',NULL,1,'h','internal','active',NULL,'now');
-        INSERT INTO file_classifications(file_hash,module,confidence,status,classified_by,created_at)
-            VALUES ('h','sales',0.6,'pending','auto','now');
+        INSERT INTO file_classifications(file_hash,module,doc_type,confidence,status,classified_by,created_at)
+            VALUES ('h','sales','customer',0.6,'pending','auto','now');
         """
     )
     conn.commit()
@@ -208,6 +228,8 @@ def test_legacy_non_nullable_module_ledger_is_migrated_without_losing_rows(tmp_p
     row = conn.execute("SELECT * FROM file_classifications WHERE file_hash='h'").fetchone()
     assert columns["module"]["notnull"] == 0
     assert row["company_id"] == "default"
+    assert row["module"] == "customer_market"
+    assert row["doc_type"] == "customer_profile"
     assert row["basis"] == "name"
     assert row["status"] == "auto"
     conn.close()
