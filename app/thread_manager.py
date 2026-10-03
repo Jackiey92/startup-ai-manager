@@ -18,8 +18,9 @@ def _safe(value: str) -> str:
 
 
 class ThreadManager:
-    def __init__(self, memory: MemoryProvider, *, root: str = CONVERSATION_ROOT):
-        self.memory, self.root = memory, root.rstrip("/")
+    def __init__(self, memory: MemoryProvider, *, root: str | None = None):
+        configured = root or getattr(memory, "memory_root", CONVERSATION_ROOT.removesuffix("/conversations"))
+        self.memory, self.root = memory, configured.rstrip("/") + "/conversations"
 
     def index_uri(self) -> str:
         return self.root + "/thread_index.json"

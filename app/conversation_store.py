@@ -88,8 +88,9 @@ def deterministic_summary(turns: list[dict[str, Any]], limit: int = 800) -> str:
 
 
 class ConversationStore:
-    def __init__(self, memory: MemoryProvider, *, root: str = CONVERSATION_ROOT):
-        self.memory, self.root = memory, root.rstrip("/")
+    def __init__(self, memory: MemoryProvider, *, root: str | None = None):
+        configured = root or getattr(memory, "memory_root", MEMORY_ROOT)
+        self.memory, self.root = memory, (configured.rstrip("/") + "/conversations")
 
     def base(self, company_id: str, thread_id: str) -> str:
         return f"{self.root}/{_scope(company_id)}/{_scope(thread_id)}"

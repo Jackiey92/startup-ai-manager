@@ -22,11 +22,12 @@ def runtime_provider(config: RuntimeConfig, staging: StagingStore) -> RuntimePro
 def memory_provider(config: RuntimeConfig, *, env: dict[str, str] | None = None) -> MemoryProvider:
     values = env if env is not None else os.environ
     if config.memory_provider == "local":
-        return LocalMemoryProvider(config.memory_root)
+        return LocalMemoryProvider(config.memory_root, memory_root=config.memory_root_uri)
     return OpenVikingMemoryProvider(
         base_url=values.get(config.memory_base_url_env) or config.memory_base_url,
         api_key=values.get(config.memory_api_key_env),
         templates_dir=config.memory_templates_dir,
+        memory_root=config.memory_root_uri,
     )
 
 
