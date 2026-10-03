@@ -224,6 +224,24 @@ def test_employee_runner_unwraps_openclaw_payload_envelope():
 
 
 @pytest.mark.parametrize("raw", [
+    lambda candidate: "```json\n" + json.dumps({"candidates": [candidate]}, ensure_ascii=False) + "\n```",
+    lambda candidate: json.dumps({"candidates": [candidate]}, ensure_ascii=False),
+])
+def test_employee_runner_accepts_bare_json_and_one_outer_json_fence(raw):
+    candidate = _candidate()
+    runner = EmployeeRunner(runner=lambda **_: raw(candidate))
+    assert runner.run(
+        skill="finance-fact-extraction", text="block", company_id="acme",
+    ) == [candidate]
+
+
+def test_employee_runner_rejects_invalid_json_after_fence_unwrap():
+    runner = EmployeeRunner(runner=lambda **_: "```json\nnot-json\n```")
+    with pytest.raises(WorkerUnavailable, match="invalid JSON"):
+        runner.run(skill="finance-fact-extraction", text="block", company_id="acme")
+
+
+@pytest.mark.parametrize("raw", [
     {"status": "ok", "result": {"payloads": []}},
     {"status": "ok", "result": {"payloads": [{"text": "not-json"}]}},
     {"status": "ok", "result": {"payloads": [{"missing": "text"}]}},

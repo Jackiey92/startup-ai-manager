@@ -11,6 +11,7 @@ description: Extract finance fact candidates without changing digits or units.
 后端待办策略处理。返回严格 JSON：`{"candidates": [...]}`，每项包含
 `metric/value/unit/entity/period/quote`。`quote` 使用人话原文片段；不要猜测
 或构造机器页码、定位符、文件哈希，后端会从匹配的 self 块补齐坐标。
+必须返回裸 JSON 对象或数组，禁止使用 Markdown 代码围栏（例如 ```json ... ```）。
 
 如果原文不足以形成可逐字核验的候选，必须返回空 `candidates`，并附
 `unresolved` 说明卡点；不要用常识补数字、实体、期间或单位。示例：

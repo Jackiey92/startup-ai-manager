@@ -29,10 +29,21 @@ class EmployeeRunner:
             raise WorkerUnavailable("employee skill unavailable") from exc
 
     @staticmethod
+    def _strip_json_fence(raw: str) -> str:
+        """Remove one outer Markdown JSON fence without changing payload data."""
+        lines = raw.strip().splitlines()
+        if len(lines) < 3:
+            return raw.strip()
+        opening = lines[0].strip().lower()
+        if opening not in {"```", "```json"} or lines[-1].strip() != "```":
+            return raw.strip()
+        return "\n".join(lines[1:-1]).strip()
+
+    @staticmethod
     def _payload(raw: Any) -> list[dict[str, Any]]:
         try:
             if isinstance(raw, str):
-                raw = json.loads(raw)
+                raw = json.loads(EmployeeRunner._strip_json_fence(raw))
         except (TypeError, json.JSONDecodeError) as exc:
             raise WorkerUnavailable("employee returned invalid JSON") from exc
         if isinstance(raw, dict) and ("candidates" in raw or "items" in raw):
