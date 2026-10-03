@@ -4,7 +4,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
+import logging
 import os
+import sqlite3
 import re
 import tempfile
 from pathlib import Path
@@ -14,6 +16,9 @@ from .consolidation import ConsolidationResult, ConsolidationService
 from .extractor import ExtractedFact, extract_block_facts, _period, period_from_text
 from .verifier import verify_candidates
 from ..employees import EmployeeRunner, WorkerUnavailable
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 def _now() -> str:
@@ -136,12 +141,19 @@ class FactExtractionService:
                     legacy_parent_id = int(parent["id"])
                 elif artifact is None and not blocks:
                     raise KeyError(f"bridge artifact not committed: {selected_run}")
-            cur = conn.execute(
-                """INSERT INTO fact_runs
-                   (company_id,file_hash,bridge_run_id,bridge_artifact_id,status,created_at)
-                   VALUES (?,?,?,?,?,?)""",
-                (company_id, file_hash, legacy_parent_id, artifact_id, "running", _now()),
-            )
+            try:
+                cur = conn.execute(
+                    """INSERT INTO fact_runs
+                       (company_id,file_hash,bridge_run_id,bridge_artifact_id,status,created_at)
+                       VALUES (?,?,?,?,?,?)""",
+                    (company_id, file_hash, legacy_parent_id, artifact_id, "running", _now()),
+                )
+            except sqlite3.IntegrityError:
+                LOGGER.exception(
+                    "fact_runs INSERT failed company_id=%s file_hash=%s bridge_run_id=%s artifact_id=%s",
+                    company_id, file_hash, legacy_parent_id, artifact_id,
+                )
+                raise
             run_id = int(cur.lastrowid)
             filename = blocks[0].get("original_name", "") if blocks else ""
             conn.commit()

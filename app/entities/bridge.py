@@ -9,8 +9,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
+import logging
 import re
 import secrets
+import sqlite3
 import time
 from typing import Any
 from uuid import uuid4
@@ -19,6 +21,9 @@ from ..db.database import connect
 from ..source_map import _coord
 from ..employees import SemanticDecisionUnavailable, SemanticEmployee
 from .model_client import EntityAttributionModelClient
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 def _now() -> str:
@@ -252,22 +257,36 @@ class EntityBridgeService:
                 "SELECT 1 FROM source_files WHERE file_hash=?", (file_hash,)
             ).fetchone() is None:
                 raise KeyError(f"source file not committed: {file_hash}")
-            conn.execute(
-                """INSERT INTO entity_bridge_artifacts
-                   (artifact_id,run_id,company_id,file_hash,status,block_count,created_at)
-                   VALUES (?,?,?,?,?,?,?)""",
-                (artifact_id, run_id, company_id, file_hash, "running", 0, created),
-            )
+            try:
+                conn.execute(
+                    """INSERT INTO entity_bridge_artifacts
+                       (artifact_id,run_id,company_id,file_hash,status,block_count,created_at)
+                       VALUES (?,?,?,?,?,?,?)""",
+                    (artifact_id, run_id, company_id, file_hash, "running", 0, created),
+                )
+            except sqlite3.IntegrityError:
+                LOGGER.exception(
+                    "entity_bridge_artifacts INSERT failed company_id=%s file_hash=%s artifact_id=%s",
+                    company_id, file_hash, artifact_id,
+                )
+                raise
             for (index, block_type, content, page, span, classification,
                  relation, subject, reason, source, needs_review) in classified_blocks:
-                conn.execute(
-                    """INSERT INTO entity_bridge_blocks
-                       (run_id,artifact_id,company_id,file_hash,block_index,block_type,content,source_page,source_span,
-                       classification,relation,subject,reason,source,needs_review,status,created_at)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'pending',?)""",
-                    (run_id, artifact_id, company_id, file_hash, index, block_type, content, page, span,
-                     classification, relation, subject, reason, source, needs_review, created),
-                )
+                try:
+                    conn.execute(
+                        """INSERT INTO entity_bridge_blocks
+                           (run_id,artifact_id,company_id,file_hash,block_index,block_type,content,source_page,source_span,
+                           classification,relation,subject,reason,source,needs_review,status,created_at)
+                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'pending',?)""",
+                        (run_id, artifact_id, company_id, file_hash, index, block_type, content, page, span,
+                         classification, relation, subject, reason, source, needs_review, created),
+                    )
+                except sqlite3.IntegrityError:
+                    LOGGER.exception(
+                        "entity_bridge_blocks INSERT failed company_id=%s file_hash=%s artifact_id=%s block_index=%s",
+                        company_id, file_hash, artifact_id, index,
+                    )
+                    raise
             conn.execute(
                 """UPDATE entity_bridge_artifacts
                    SET status='completed', block_count=?, completed_at=?

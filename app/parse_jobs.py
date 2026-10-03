@@ -174,6 +174,7 @@ class ParseJobManager:
                              progress_current=current.get("progress_total") or current.get("progress_current") or 0,
                              message="解析完成", finished_at=_now())
         except RetryableRuntimeError as exc:
+            LOGGER.exception("parse job runtime failure job_id=%s", job_id)
             if event.is_set():
                 self._update(job_id, status="canceled", stage="canceled", message="已按用户要求停止", error_kind="canceled", finished_at=_now())
             else:
@@ -194,6 +195,9 @@ class ParseJobManager:
                         self._retry_timers[job_id] = timer
                     timer.start()
         except Exception as exc:
+            LOGGER.exception(
+                "parse job failed job_id=%s file_hash=%s", job_id, job.get("file_hash")
+            )
             if event.is_set():
                 self._update(job_id, status="canceled", stage="canceled", message="已按用户要求停止", error_kind="canceled", finished_at=_now())
             else:

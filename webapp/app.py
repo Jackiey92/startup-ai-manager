@@ -370,6 +370,9 @@ def _parse_job_worker(job: dict, progress, cancel_event) -> None:
             # turn a successfully parsed and consolidated upload into failed.
             app.logger.exception("import guide queue failed after parse job completion")
     except Exception as exc:
+        app.logger.exception(
+            "parse job worker failed job_id=%s file_hash=%s", job["job_id"], job["file_hash"]
+        )
         if fact_service is not None and prepared_facts is not None:
             try:
                 fact_service.abort(

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sqlite3
+import os
 from pathlib import Path
 
 from .schema import SCHEMA, MODULES, DOC_TYPES
@@ -9,8 +10,16 @@ from .schema import SCHEMA, MODULES, DOC_TYPES
 DEFAULT_DB_PATH = Path("data/app.db")
 
 
-def connect(db_path: Path = DEFAULT_DB_PATH) -> sqlite3.Connection:
-    db_path = Path(db_path)
+def _configured_db_path() -> Path:
+    """Resolve the default ledger under the deployment's SAM data root."""
+    data_root = os.environ.get("SAM_DATA_ROOT")
+    return Path(data_root) / "app.db" if data_root else DEFAULT_DB_PATH
+
+
+def connect(db_path: Path | str | None = None) -> sqlite3.Connection:
+    # An explicit path is authoritative for tests and scoped stores.  Only
+    # the no-argument path follows the deployment data-root contract.
+    db_path = _configured_db_path() if db_path is None else Path(db_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row

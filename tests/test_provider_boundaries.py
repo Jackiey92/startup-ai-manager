@@ -8,9 +8,29 @@ import pytest
 
 from app.ports import LocalMemoryProvider
 from app.runtime_config import RuntimeConfig
+from app.db.database import connect
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_default_connect_uses_sam_data_root(monkeypatch, tmp_path: Path) -> None:
+    data_root = tmp_path / "sam-data"
+    monkeypatch.setenv("SAM_DATA_ROOT", str(data_root))
+    with connect() as conn:
+        conn.execute("CREATE TABLE path_probe (value TEXT)")
+        conn.commit()
+    assert (data_root / "app.db").exists()
+
+
+def test_explicit_connect_path_overrides_sam_data_root(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("SAM_DATA_ROOT", str(tmp_path / "default"))
+    explicit = tmp_path / "explicit" / "app.db"
+    with connect(explicit) as conn:
+        conn.execute("CREATE TABLE path_probe (value TEXT)")
+        conn.commit()
+    assert explicit.exists()
+    assert not (tmp_path / "default" / "app.db").exists()
 
 
 def test_local_profile_injects_paths_skills_and_local_sam_ov() -> None:
