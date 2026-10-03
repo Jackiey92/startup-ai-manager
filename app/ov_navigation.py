@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import hashlib, json, re
 from pathlib import Path
+from threading import RLock
 from typing import Any
 from .db.database import connect
 from .employees import EmployeeRunner, WorkerUnavailable
@@ -13,6 +14,19 @@ FOLDERS = {"技术原理": "技术与产品", "产品与用途": "技术与产�
            "供应链与运营": "供应链与运营", "团队": "团队", "其他": "其他"}
 PLAN = re.compile(r"计划|目标|预计|拟|将|希望")
 OPINION = re.compile(r"自称|领先|先进|认为|判断|评价|称")
+
+# A parse pool may rebuild the same entity/folder from several documents at
+# once.  Keep the read/merge/write sequence atomic per provider+URI; the lock
+# is deliberately only around the tiny OV navigation write, not extraction or
+# model work, so document parsing remains parallel.
+_WRITE_LOCKS: dict[tuple[int, str], RLock] = {}
+_WRITE_LOCKS_GUARD = RLock()
+
+
+def _write_lock(memory: MemoryProvider, uri: str) -> RLock:
+    key = (id(memory), uri)
+    with _WRITE_LOCKS_GUARD:
+        return _WRITE_LOCKS.setdefault(key, RLock())
 
 def _now(): return datetime.now(timezone.utc).isoformat()
 def _compact(value: Any): return re.sub(r"\s+", "", str(value or "").strip())
@@ -61,17 +75,18 @@ class OVNavigationService:
         for (entity,folder), items in grouped.items():
             additions = [{**i["citation"], "line": i["line"]} for i in items]
             uri = self._uri(company_id, entity, folder, "L1/overview.md")
-            old: list[dict[str, Any]] = []
-            try:
-                old = json.loads(self.memory.read(uri).split("\n\n", 1)[-1])
-            except (FileNotFoundError, ValueError, json.JSONDecodeError):
-                pass
-            citations = list({json.dumps(x, ensure_ascii=False, sort_keys=True): x for x in old + additions}.values())
-            lines = list(dict.fromkeys(str(x.get("line") or x.get("quote") or "") for x in citations))
-            overview = "\n".join(f"- {line}" for line in lines)
-            body = f"# L1 Overview\n\n{json.dumps(citations, ensure_ascii=False)}\n\n{overview}\n"
-            self.memory.put(uri, body, metadata={"layer": "L1", "company_id": company_id, "folder": folder})
-            self.memory.put(self._uri(company_id, entity, folder, "L0/abstract.md"), lines[0][:240] if lines else "", metadata={"layer": "L0"})
+            with _write_lock(self.memory, uri):
+                old: list[dict[str, Any]] = []
+                try:
+                    old = json.loads(self.memory.read(uri).split("\n\n", 1)[-1])
+                except (FileNotFoundError, ValueError, json.JSONDecodeError):
+                    pass
+                citations = list({json.dumps(x, ensure_ascii=False, sort_keys=True): x for x in old + additions}.values())
+                lines = list(dict.fromkeys(str(x.get("line") or x.get("quote") or "") for x in citations))
+                overview = "\n".join(f"- {line}" for line in lines)
+                body = f"# L1 Overview\n\n{json.dumps(citations, ensure_ascii=False)}\n\n{overview}\n"
+                self.memory.put(uri, body, metadata={"layer": "L1", "company_id": company_id, "folder": folder})
+                self.memory.put(self._uri(company_id, entity, folder, "L0/abstract.md"), lines[0][:240] if lines else "", metadata={"layer": "L0"})
             changed.append({"entity":entity,"folder":folder})
         return {"folders": changed, "item_count": sum(map(len,grouped.values()))}
     def list(self, *, company_id, entity=None, folder=None):

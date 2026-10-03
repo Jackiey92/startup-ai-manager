@@ -39,6 +39,7 @@ def test_openviking_provider_uses_cli_and_injected_transport(tmp_path):
     command, kwargs = runner.calls[0]
     assert command[0] == "ov"
     assert "write" in command
+    assert command[command.index("--mode") + 1] == "replace"
     assert kwargs["env"]["OPENVIKING_URL"] == "https://ov.example.test"
     assert kwargs["env"]["VIKINGBOT_ENDPOINT"] == "https://ov.example.test"
     assert kwargs["env"]["VIKINGBOT_API_KEY"] == "secret-for-test"

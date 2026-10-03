@@ -103,21 +103,51 @@ def test_worker_human_quote_without_machine_coordinates_is_backfilled(tmp_path: 
     )
 
 
-def test_worker_tampering_wrong_unit_entity_or_year_is_rejected(tmp_path: Path):
-    for candidate in (
+def test_worker_tampering_is_rejected_but_deterministic_facts_survive(tmp_path: Path):
+    for index, candidate in enumerate((
         _candidate(unit="万元"),
         _candidate(unit=None),
         _candidate(entity="其他公司有限公司"),
         _candidate(period="2023"),
         _candidate(value="9.99"),
         _candidate(quote="完全不在原文中的片段"),
-    ):
-        db, stored, bridge = _setup(tmp_path)
+    )):
+        db, stored, bridge = _setup(tmp_path / str(index))
         fake = _FakeEmployee([candidate])
         run = FactExtractionService(db).extract(company_id="acme", file_hash=stored.file_hash,
                                                 bridge_run_id=bridge["id"], use_worker=True, worker=fake)
-        assert run["fact_count"] == 0
-        assert FactExtractionService(db).list_facts(company_id="acme") == []
+        facts = FactExtractionService(db).list_facts(company_id="acme")
+        assert run["fact_count"] == 2
+        assert {(fact["attribute"], fact["value"]) for fact in facts} == {
+            ("营业收入", "3.26"), ("净利润", "0.58"),
+        }
+
+
+def test_docx_falls_back_when_employee_candidates_fail_verification(tmp_path: Path):
+    db = tmp_path / "app.db"
+    init_db(db)
+    store = SourceFileStore(tmp_path / "objects", db)
+    stored = store.put_bytes(b"docx-worker", original_name="年报.docx")
+    text = "主公司有限公司2024年度营业收入3.26亿元"
+    StagingStore(db).save_manifest({
+        "file_hash": stored.file_hash, "filename": stored.original_name, "format": "docx",
+        "parse_summary": {"status": "parsed"},
+        "pages": [{"page_no": 1, "text_items": [{
+            "text": text, "source_loc": {"locator": "text/0"},
+        }], "tables": []}],
+    })
+    EntityRosterService(db).declare(company_id="acme", entity_name="主公司有限公司")
+    bridge = EntityBridgeService(db).run(company_id="acme", file_hash=stored.file_hash)
+    invalid = _candidate(quote="模型臆造的引用")
+    run = FactExtractionService(db).extract(
+        company_id="acme", file_hash=stored.file_hash, bridge_run_id=bridge["id"],
+        use_worker=True, worker=_FakeEmployee([invalid]),
+    )
+    facts = FactExtractionService(db).list_facts(company_id="acme")
+    assert run["fact_count"] == 1
+    assert {(fact["attribute"], fact["value"], fact["period"]) for fact in facts} == {
+        ("营业收入", "3.26", "2024"),
+    }
 
 
 def test_worker_keeps_parent_and_subsidiary_entities_separate(tmp_path: Path):

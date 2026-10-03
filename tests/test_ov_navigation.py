@@ -1,8 +1,12 @@
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Lock
+import time
 from app.db import init_db
 from app.entities import EntityBridgeService, EntityRosterService
 from app.harness.staging import StagingStore
 from app.ov_navigation import OVNavigationService, verify_narrative_item
+from app.ports import LocalMemoryProvider
 from app.storage import SourceFileStore
 
 class FakeWorker:
@@ -37,3 +41,31 @@ def test_bad_quote_entity_or_unmarked_plan_is_rejected(tmp_path):
  db,stored,run=setup(tmp_path); blocks=OVNavigationService(db)._blocks('acme',stored.file_hash,run['id'])
  bad=[{'entity':'未蓝科技有限公司','category':'技术原理','kind':'fact','content':'x','quote':'不存在'}, {'entity':'其他','category':'技术原理','kind':'fact','content':'x','quote':'采用低温烧结技术'}, {'entity':'未蓝科技有限公司','category':'其他','kind':'fact','content':'计划2025年营收','quote':'公司计划2025年营收做到1000万元'}]
  assert [verify_narrative_item(x,blocks) for x in bad]==[None,None,None]
+
+
+def test_parallel_l1_rebuilds_serialize_same_uri_and_keep_both_documents(tmp_path):
+ class ConflictOnConcurrentL1(LocalMemoryProvider):
+  def __init__(self, root):
+   super().__init__(root); self._active=set(); self._guard=Lock()
+  def put(self, uri, content, *, metadata=None):
+   if uri.endswith('/L1/overview.md'):
+    with self._guard:
+     if uri in self._active: raise RuntimeError('ALREADY_EXISTS: concurrent L1 create')
+     self._active.add(uri)
+    try:
+     time.sleep(0.01)
+     return super().put(uri, content, metadata=metadata)
+    finally:
+     with self._guard: self._active.remove(uri)
+   return super().put(uri, content, metadata=metadata)
+
+ db,stored,run=setup(tmp_path); memory=ConflictOnConcurrentL1(tmp_path/'ov')
+ service=OVNavigationService(db,memory)
+ def rebuild():
+  return service.rebuild(company_id='acme',file_hash=stored.file_hash,bridge_run_id=run['id'],worker=FakeWorker(items()))
+ with ThreadPoolExecutor(max_workers=2) as pool:
+  results=list(pool.map(lambda _item: rebuild(), range(2)))
+ assert all(result['item_count']==5 for result in results)
+ rows=service.list(company_id='acme')
+ assert len(rows)==4
+ assert '低温烧结' in next(row for row in rows if row['folder']=='技术与产品')['l1_overview']

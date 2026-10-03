@@ -316,7 +316,11 @@ class OpenVikingMemoryProvider:
         with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".md") as handle:
             handle.write(content)
             handle.flush()
-            args = ["write", uri, "--from-file", handle.name, "--wait", "--processing-mode", "semantic_and_vectors"]
+            # L1/L0 navigation is rebuilt idempotently by concurrent parse
+            # workers.  Make the intended upsert explicit: relying on the
+            # CLI default can turn a racing second write into ALREADY_EXISTS.
+            args = ["write", uri, "--from-file", handle.name, "--mode", "replace",
+                    "--wait", "--processing-mode", "semantic_and_vectors"]
             if tags:
                 args.extend(["--tags", tags])
             self._run(args)

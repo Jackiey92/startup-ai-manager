@@ -84,7 +84,12 @@ class FactExtractionService:
                     # (for example after a model timeout). Never let that
                     # suppress the deterministic finance extractor.
                     candidates.extend(verified)
-                    if not proposed:
+                    # An employee can return candidates that are all rejected
+                    # by the provenance verifier (bad quote, unit, entity,
+                    # or period).  That is equivalent to an empty verified
+                    # result for the deterministic fallback; do not lose a
+                    # docx/text fact merely because the model answered.
+                    if not verified:
                         candidates.extend(extract_block_facts(
                             normalized_block, company_id=company_id, period=block_period,
                         ))
