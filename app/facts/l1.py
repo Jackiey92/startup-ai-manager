@@ -65,7 +65,15 @@ class FactExtractionService:
                 try:
                     proposed = employee.run(skill="finance-fact-extraction", text=block.get("content", ""),
                                             company_id=company_id, thread_id=thread_id)
-                    candidates.extend(verify_candidates(proposed, [block], company_id=company_id))
+                    verified = verify_candidates(proposed, [block], company_id=company_id)
+                    # A healthy employee may return an empty/partial payload
+                    # (for example after a model timeout). Never let that
+                    # suppress the deterministic finance extractor.
+                    candidates.extend(verified)
+                    if not proposed:
+                        candidates.extend(extract_block_facts(
+                            block, company_id=company_id, period=block_period,
+                        ))
                     continue
                 except WorkerUnavailable:
                     pass

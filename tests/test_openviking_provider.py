@@ -45,6 +45,18 @@ def test_openviking_provider_uses_cli_and_injected_transport(tmp_path):
     assert "secret-for-test" not in " ".join(command)
 
 
+def test_add_resource_passes_full_ov_parent_uri(tmp_path):
+    source = tmp_path / "annual.pdf"
+    source.write_bytes(b"pdf")
+    runner = fake_runner_factory([(0, json.dumps({"ok": True}), "")])
+    provider = OpenVikingMemoryProvider(base_url="http://127.0.0.1:1933", runner=runner)
+    provider.add_resource(str(source), parent="viking://resources/财务", wait=True)
+    command, _ = runner.calls[0]
+    assert command[:4] == ["ov", "add-resource", str(source), "--parent"]
+    assert command[4] == "viking://resources/财务"
+    assert "--wait" in command
+
+
 def test_openviking_provider_rejects_failed_transport():
     runner = fake_runner_factory([(1, "", "connection refused")])
     provider = OpenVikingMemoryProvider(runner=runner)

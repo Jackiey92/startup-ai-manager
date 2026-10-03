@@ -237,7 +237,7 @@ def _parse_job_worker(job: dict, progress, cancel_event) -> None:
             stored = SourceFileStore(RUNTIME_CONFIG.objects_dir, MAIN_DB).get(job["file_hash"])
             extraction.memory.add_resource(
                 str(RUNTIME_CONFIG.objects_dir / stored.storage_path),
-                parent=f"resources/{extraction.classify_folder(payload, skills_root=RUNTIME_CONFIG.skill_root)}",
+                parent=f"viking://resources/{extraction.classify_folder(payload, skills_root=RUNTIME_CONFIG.skill_root)}",
                 wait=True,
             )
         except Exception:
