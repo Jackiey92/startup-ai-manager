@@ -46,6 +46,18 @@ the bridge must not pretend that this path succeeded.
 
 ## Safety and memory boundary
 
+## Employee workflow and quality gate
+
+The employee, not the host application, runs `scripts/bridge` in the skill
+sandbox. After each bridge result, run `scripts/quality.py` and inspect its
+JSON. If issues are reported (unbalanced parentheses, an incomplete company
+suffix, a missing guide colon, or a mid-word break), retry the same source
+with the alternate selected engine (`mineru` ↔ `docling`) when available.
+Compare the second result with the quality gate and source coordinates. If it
+still fails, write the manifest with `parse_summary.status=parse_failed`, add
+the quality issue to `parse_summary.warnings`, and make the review state
+explicit; never silently accept damaged主体 text.
+
 This skill writes L2 extraction only. It must never write verified 2b facts,
 resolve conflicts, or update OV directly. The caller/runtime owns the L2
 destination and may pass a RuntimeProvider-managed path. Raw source bytes and

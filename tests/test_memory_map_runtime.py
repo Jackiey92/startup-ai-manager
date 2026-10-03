@@ -85,9 +85,7 @@ def test_runtime_injects_token_plan_provider_into_existing_config(tmp_path: Path
     assert env["SAM_LEADER_MODEL"] == "qwen3.8-max"
 
 
-def test_document_ingest_child_gets_local_proxy_bypass(tmp_path: Path, monkeypatch):
-    import app.harness.runtime.openclaw_adapter as adapter_module
-
+def test_document_ingest_agent_keeps_model_proxy_boundary(tmp_path: Path, monkeypatch):
     calls = []
 
     def runner(command, **kwargs):
@@ -106,11 +104,9 @@ def test_document_ingest_child_gets_local_proxy_bypass(tmp_path: Path, monkeypat
     config = RuntimeConfig.from_env(project_root=Path(__file__).parents[1], env={"SAM_PROFILE": "local"})
     config = replace(config, state_dir=tmp_path / "state", config_path=tmp_path / "state" / "openclaw.json")
     adapter = OpenClawAdapter(StagingStore(db_path=tmp_path / "db.sqlite"), config=config, runner=runner)
-    # The task writer needs a real source record; use the lower-level helper's
-    # runner contract in a direct env assertion instead of touching a database.
-    env = adapter_module._local_parser_env()
-    assert "HTTP_PROXY" not in env and "HTTPS_PROXY" not in env and "ALL_PROXY" not in env
-    assert all(host in env["NO_PROXY"] for host in ("localhost", "127.0.0.1", "::1"))
+    adapter.run_agent_message("document-ingest skill task")
+    env = calls[-1]["env"]
+    assert env["HTTP_PROXY"] == "http://127.0.0.1:10808"
 
 
 def test_gateway_mode_starts_one_daemon_and_reuses_it(tmp_path: Path, monkeypatch):
@@ -213,18 +209,14 @@ def test_gateway_fingerprint_binds_state_port_and_effective_model(tmp_path: Path
     assert first != second
 
 
-def test_document_ingest_runs_deterministic_bridge_without_agent(tmp_path: Path):
+def test_document_ingest_is_delegated_to_skill_agent(tmp_path: Path):
     db_path = tmp_path / "app.db"
     objects = tmp_path / "objects"
     init_db(db_path)
     stored = SourceFileStore(objects_path=objects, db_path=db_path).put_bytes(
         b"xlsx", original_name="report.xlsx"
     )
-    calls = []
-
-    def runner(command, **kwargs):
-        calls.append((command, kwargs))
-        payload = {
+    payload = {
             "source_id": stored.file_hash,
             "file_hash": stored.file_hash,
             "filename": "report.xlsx",
@@ -236,15 +228,20 @@ def test_document_ingest_runs_deterministic_bridge_without_agent(tmp_path: Path)
                 "full_text_external": False,
             },
         }
-        return subprocess.CompletedProcess(command, 0, json.dumps(payload), "")
-
     config = RuntimeConfig.from_env(project_root=Path(__file__).parents[1], env={"SAM_PROFILE": "local"})
     adapter = OpenClawAdapter(
         StagingStore(db_path=db_path), config=config, objects_dir=objects,
-        db_path=db_path, runner=runner,
+        db_path=db_path,
     )
+    messages = []
+    def invoke(message, *, timeout):
+        messages.append(message)
+        (adapter.root / "outbox").mkdir(parents=True, exist_ok=True)
+        (adapter.root / "outbox" / f"{stored.file_hash}.json").write_text(json.dumps(payload), encoding="utf-8")
+    adapter._invoke_agent = invoke
     staging_id = adapter.run_parse(stored.file_hash, "xlsx")
     staged = StagingStore(db_path=db_path).get(staging_id)
     assert staged["payload"]["parse_summary"]["status"] == "parsed"
-    assert "document-ingest/scripts/bridge" in calls[0][0][1]
-    assert "--message" not in calls[0][0]
+    assert messages and "document-ingest skill" in messages[0]
+    assert "document-ingest/scripts/bridge" not in messages[0]
+    assert "document-ingest/scripts/bridge" not in __import__("inspect").getsource(OpenClawAdapter)

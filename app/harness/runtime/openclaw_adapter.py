@@ -50,32 +50,6 @@ def _scope_session_id(company_id: str | None, thread_id: str | None, nonce: str)
     return f"sam-scope.{part(company_id)}.{part(thread_id)}.{nonce}"
 
 
-def _local_parser_env(base: dict[str, str] | None = None) -> dict[str, str]:
-    """Return a proxy-free environment for the deterministic parser child.
-
-    The parent Flask/OpenClaw process may require its proxy for model traffic.
-    This is intentionally applied only to the document-ingest bridge child;
-    it never mutates ``os.environ`` or the Agent/GPT process environment.
-    """
-    env = dict(base if base is not None else os.environ)
-    for name in tuple(env):
-        lowered = name.lower()
-        if lowered in {"http_proxy", "https_proxy", "all_proxy"} or (
-            lowered.endswith("_proxy") and lowered != "no_proxy"
-        ):
-            env.pop(name, None)
-    bypass = ["localhost", "127.0.0.1", "::1"]
-    existing = env.get("NO_PROXY") or env.get("no_proxy") or ""
-    for value in existing.split(","):
-        value = value.strip()
-        if value and value not in bypass:
-            bypass.append(value)
-    encoded = ",".join(bypass)
-    env["NO_PROXY"] = encoded
-    env["no_proxy"] = encoded
-    return env
-
-
 def _stop_gateways() -> None:
     with _GATEWAY_LOCK:
         processes = list(_GATEWAY_PROCESSES.values())
@@ -128,9 +102,6 @@ class OpenClawAdapter(RuntimeProvider):
         self.objects_dir = Path(objects_dir) if objects_dir else self.config.objects_dir
         self.db_path = Path(db_path) if db_path else self.config.main_db
         self._runner = runner or subprocess.run
-        self._parse_processes: dict[str, subprocess.Popen] = {}
-        self._parse_cancel_requested: set[str] = set()
-        self._parse_process_lock = Lock()
 
     def supports(self, format: str) -> bool:
         return format in self.config.skill_for_format
@@ -142,12 +113,14 @@ class OpenClawAdapter(RuntimeProvider):
         task_path = self._write_task(file_hash, format)
         skill_name = self.config.skill_for_format[format]
         try:
-            if skill_name == "document-ingest":
-                return self._run_document_ingest(task_path, timeout=timeout)
-            message = f'Use the {self.config.skill_for_format[format]} skill with task file "{task_path}".'
             out_path = self.root / "outbox" / f"{file_hash}.json"
             if out_path.exists():
                 out_path.unlink()
+            message = (
+                f'Use the {skill_name} skill with task file "{task_path}". '
+                f'Run the skill\'s bridge and quality checks in its sandbox, then write the complete '
+                f'L2 manifest JSON to "{out_path}". Do not write facts, OV, or other application state.'
+            )
 
             self._invoke_agent(message, timeout=timeout)
 
@@ -169,103 +142,12 @@ class OpenClawAdapter(RuntimeProvider):
             except FileNotFoundError:
                 pass
 
-    def _run_document_ingest(self, task_path: Path, *, timeout: int) -> int:
-        """Run the deterministic local parser; do not ask the Agent to execute it."""
-        bridge = self.config.skill_root / "document-ingest" / "scripts" / "bridge"
-        if not bridge.is_file():
-            raise RuntimeError(f"document-ingest bridge is missing: {bridge}")
-        # Only the local parsing child bypasses the user's model proxy.  The
-        # surrounding Flask/OpenClaw process keeps its original environment.
-        env = _local_parser_env()
-        env["SAM_PROJECT_ROOT"] = str(self.config.project_root)
-        env["SAM_L2_IMAGE_ROOT"] = str(self.config.data_root / "l2-images")
-        command = [str(self.config.tool_bridge_python), str(bridge), str(task_path)]
-        if self._runner is not subprocess.run:
-            # Injected runners keep the deterministic unit-test contract.
-            proc = self._runner(
-                command, cwd=self.config.project_root, env=env,
-                capture_output=True, text=True, encoding="utf-8",
-                errors="replace", timeout=timeout,
-            )
-        else:
-            # Production parsing uses a process group so cancellation can kill
-            # only this bridge and its descendants, never the shared MinerU
-            # daemon.  The bridge itself may talk to that daemon over localhost.
-            process = subprocess.Popen(
-                command, cwd=self.config.project_root, env=env,
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                text=True, encoding="utf-8", errors="replace",
-                start_new_session=True,
-            )
-            key = task_path.stem
-            with self._parse_process_lock:
-                self._parse_processes[key] = process
-                cancel_requested = key in self._parse_cancel_requested
-                self._parse_cancel_requested.discard(key)
-            if cancel_requested:
-                self._terminate_parse_process(key, process)
-                raise RuntimeError("document-ingest bridge canceled")
-            try:
-                stdout, stderr = process.communicate(timeout=timeout)
-                proc = subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
-            except subprocess.TimeoutExpired:
-                self._terminate_parse_process(key, process)
-                raise RuntimeError(f"document-ingest bridge timed out after {timeout}s")
-            finally:
-                with self._parse_process_lock:
-                    if self._parse_processes.get(key) is process:
-                        self._parse_processes.pop(key, None)
-        if proc.returncode != 0:
-            detail = (proc.stderr or proc.stdout or "").strip()[-1000:]
-            raise RuntimeError(f"document-ingest bridge failed ({proc.returncode}): {detail}")
-        try:
-            payload = json.loads(proc.stdout)
-        except json.JSONDecodeError as exc:
-            raise RuntimeError("document-ingest bridge returned invalid JSON") from exc
-        if not isinstance(payload, dict) or not isinstance(payload.get("parse_summary"), dict):
-            raise RuntimeError("document-ingest bridge returned an invalid manifest")
-        return self.staging.save_manifest(payload)
-
     def cancel_parse(self, file_hash: str) -> bool:
-        """Terminate one private bridge process group, if it is running."""
-        key = str(file_hash)
-        with self._parse_process_lock:
-            process = self._parse_processes.get(key)
-            if process is None:
-                # The worker can be between its last cancellation check and
-                # Popen/register.  Keep a one-shot intent so that registration
-                # immediately terminates that newly-created private group.
-                self._parse_cancel_requested.add(key)
-                return False
-        self._terminate_parse_process(key, process)
+        """Keep the RuntimeProvider cancellation seam without owning Agent work."""
         return True
 
     def clear_parse_cancel(self, file_hash: str) -> None:
-        """Clear a pre-spawn cancellation intent consumed by a worker check."""
-        with self._parse_process_lock:
-            self._parse_cancel_requested.discard(str(file_hash))
-
-    def _terminate_parse_process(self, key: str, process: subprocess.Popen) -> None:
-        try:
-            os.killpg(process.pid, signal.SIGTERM)
-        except (OSError, ProcessLookupError):
-            try:
-                process.terminate()
-            except OSError:
-                pass
-        try:
-            process.wait(timeout=3)
-        except (OSError, subprocess.TimeoutExpired):
-            try:
-                os.killpg(process.pid, signal.SIGKILL)
-            except (OSError, ProcessLookupError):
-                try:
-                    process.kill()
-                except OSError:
-                    pass
-        with self._parse_process_lock:
-            if self._parse_processes.get(key) is process:
-                self._parse_processes.pop(key, None)
+        return None
 
     def run_agent_message(self, message: str, *, context_text: str | None = None,
                           company_id: str | None = None, thread_id: str | None = None,
