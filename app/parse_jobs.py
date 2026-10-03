@@ -4,6 +4,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 import hashlib
+import logging
 import os
 from threading import Event, Lock, Timer
 import time
@@ -27,6 +28,7 @@ class ParseJobCanceled(RuntimeError):
 
 JobWorker = Callable[[dict[str, Any], Callable[..., None], Event], None]
 CancelParser = Callable[[str], bool]
+LOGGER = logging.getLogger(__name__)
 
 
 class ParseJobManager:
@@ -38,12 +40,12 @@ class ParseJobManager:
     """
 
     def __init__(self, db_path, worker: JobWorker, *, cancel_parser: CancelParser | None = None,
-                 workers: int | None = None) -> None:
+                 workers: int | None = None, logger: Any | None = None) -> None:
         self.db_path = db_path
         self.worker = worker
         self.cancel_parser = cancel_parser or (lambda _file_hash: False)
         requested = workers if workers is not None else int(
-            os.environ.get("SAM_PARSE_CONCURRENCY", os.environ.get("SAM_PARSE_WORKERS", "2"))
+            os.environ.get("SAM_PARSE_CONCURRENCY", os.environ.get("SAM_PARSE_WORKERS", "4"))
         )
         upper_bound = max(1, int(os.environ.get(
             "SAM_PARSE_CONCURRENCY_MAX", os.environ.get("SAM_PARSE_WORKERS_MAX", "4")
@@ -51,6 +53,9 @@ class ParseJobManager:
         count = min(requested, upper_bound)
         if count < 1:
             raise ValueError("SAM_PARSE_WORKERS must be positive")
+        self.worker_count = count
+        self.startup_log_line = f"parse workers={count} (requested={requested}, max={upper_bound})"
+        (logger or LOGGER).warning(self.startup_log_line)
         self.executor = ThreadPoolExecutor(max_workers=count, thread_name_prefix="sam-parse")
         self._events: dict[str, Event] = {}
         self._critical: set[str] = set()

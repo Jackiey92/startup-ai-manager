@@ -351,6 +351,7 @@ _PARSE_MANAGER = ParseJobManager(
     MAIN_DB,
     _parse_job_worker,
     cancel_parser=_PARSE_ADAPTER.cancel_parse,
+    logger=app.logger,
 )
 
 

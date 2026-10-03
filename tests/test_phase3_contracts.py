@@ -143,3 +143,13 @@ def test_slow_tool_stall_policy_allows_mineru_but_detects_real_no_progress() -> 
     assert classify_stalled("sam_document_ingest", 150) == "not_stalled"
     assert classify_stalled("sam_document_ingest", 301, heartbeat=True) == "progressing_slow_tool"
     assert classify_stalled("sam_document_ingest", 301, heartbeat=False) == "stalled"
+
+
+def test_parse_pool_contract_defaults_to_four_and_isolates_sessions() -> None:
+    config = json.loads(CONFIG.read_text(encoding="utf-8"))
+    pool = config["parse_pool"]
+    assert pool["default_workers"] == 4
+    assert pool["max_workers"] == 4
+    assert pool["startup_log"] == "parse workers=N (requested=N, max=N)"
+    assert pool["session_policy"] == "independent_openclaw_session_per_document"
+    assert pool["failure_isolation"] == "one_job_failure_does_not_cancel_other_jobs"

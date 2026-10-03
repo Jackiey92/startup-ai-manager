@@ -71,6 +71,25 @@ def test_scoped_employee_calls_reuse_one_openclaw_session(tmp_path: Path):
     assert first == second
 
 
+def test_unscoped_parse_calls_use_independent_openclaw_sessions(tmp_path: Path):
+    calls = []
+
+    def runner(command, **kwargs):
+        calls.append(command)
+        return subprocess.CompletedProcess(command, 0, json.dumps({"meta": {"finalAssistantVisibleText": "ok"}}), "")
+
+    config = RuntimeConfig.from_env(project_root=Path(__file__).parents[1], env={"SAM_PROFILE": "local"})
+    config = replace(config, state_dir=tmp_path / "state", config_path=tmp_path / "state" / "openclaw.json")
+    adapter = OpenClawAdapter(StagingStore(db_path=tmp_path / "missing.db"), config=config, runner=runner)
+    # run_parse uses this same unscoped invocation path; two files must never
+    # inherit the leader's scoped conversation/session.
+    adapter.run_agent_message("parse file A")
+    adapter.run_agent_message("parse file B")
+    first = calls[0][calls[0].index("--session-id") + 1]
+    second = calls[1][calls[1].index("--session-id") + 1]
+    assert first != second
+
+
 def test_runtime_injects_token_plan_provider_into_existing_config(tmp_path: Path):
     calls = []
 

@@ -126,6 +126,10 @@ class OpenClawAdapter(RuntimeProvider):
                 f'Do not use filesystem paths, run shell commands, or write facts, OV, or other application state.'
             )
 
+            # Parsing jobs must not share the scoped leader conversation:
+            # each call deliberately uses the unscoped session path, whose
+            # nonce creates an independent OpenClaw session per document.
+            # This prevents one slow tool_call from serializing other files.
             self._invoke_agent(message, timeout=timeout)
 
             if not out_path.exists():

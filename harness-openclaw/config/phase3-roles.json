@@ -261,5 +261,12 @@
       "no_heartbeat_after_threshold": "stalled"
     }
   },
-  "tool_search_guidance": "harness-openclaw/config/phase3-tool-search-guidance.md"
+  "tool_search_guidance": "harness-openclaw/config/phase3-tool-search-guidance.md",
+  "parse_pool": {
+    "default_workers": 4,
+    "max_workers": 4,
+    "startup_log": "parse workers=N (requested=N, max=N)",
+    "session_policy": "independent_openclaw_session_per_document",
+    "failure_isolation": "one_job_failure_does_not_cancel_other_jobs"
+  }
 }

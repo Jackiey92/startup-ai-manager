@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from threading import Event
+from threading import Barrier, Event, Lock
 from pathlib import Path
 
 from app.db.database import connect, init_db
@@ -215,6 +215,50 @@ def test_parse_workers_are_capped_by_configured_upper_bound(tmp_path: Path, monk
     try:
         assert manager.executor._max_workers == 2
     finally:
+        manager.close()
+
+
+def test_default_parse_pool_starts_four_workers_and_emits_startup_count(tmp_path: Path, monkeypatch):
+    monkeypatch.delenv("SAM_PARSE_CONCURRENCY", raising=False)
+    monkeypatch.delenv("SAM_PARSE_WORKERS", raising=False)
+    monkeypatch.delenv("SAM_PARSE_CONCURRENCY_MAX", raising=False)
+    monkeypatch.delenv("SAM_PARSE_WORKERS_MAX", raising=False)
+    manager, _ = _manager(tmp_path, lambda *_args: None, workers=None)
+    try:
+        assert manager.worker_count == 4
+        assert manager.executor._max_workers == 4
+        assert manager.startup_log_line.startswith("parse workers=4")
+    finally:
+        manager.close()
+
+
+def test_four_jobs_enter_parsing_at_the_same_time(tmp_path: Path):
+    entered = Barrier(4)
+    entered_names = []
+    names_lock = Lock()
+    all_entered = Event()
+    release = Event()
+
+    def worker(job, progress, event):
+        progress(stage="parsing", current=0, total=1, message="started")
+        with names_lock:
+            entered_names.append(job["job_id"])
+            if len(entered_names) == 4:
+                all_entered.set()
+        entered.wait(timeout=2)
+        release.wait(timeout=2)
+        progress(stage="parsing", current=1, total=1, message="done")
+
+    manager, digest = _manager(tmp_path, worker, workers=4)
+    try:
+        jobs = [_create(manager, digest, f"parallel-{index}.pdf") for index in range(4)]
+        assert all_entered.wait(timeout=2)
+        assert len(set(entered_names)) == 4
+        assert all(manager.get(job["job_id"])["stage"] == "parsing" for job in jobs)
+        release.set()
+        assert all(_wait_for(manager, job["job_id"], lambda row: row["status"] == "done")["status"] == "done" for job in jobs)
+    finally:
+        release.set()
         manager.close()
 
 
