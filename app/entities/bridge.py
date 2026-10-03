@@ -41,8 +41,21 @@ class BridgeBlock:
     subject: str | None = None
 
 
-def _text_blocks(manifest: dict[str, Any]) -> list[tuple[str, str, Any, str | None]]:
-    blocks: list[tuple[str, str, Any, str | None]] = []
+def _item_structure(item: dict[str, Any]) -> dict[str, Any]:
+    """Read parser-provided list/heading structure without text heuristics."""
+    kind = str(item.get("kind") or item.get("block_type") or item.get("type") or item.get("role") or "").casefold()
+    list_kinds = {"bullet", "list_item", "list-item", "list item"}
+    list_level = item.get("list_level")
+    if list_level is None and kind in list_kinds:
+        list_level = item.get("level")
+    is_bullet = bool(item.get("is_bullet") or item.get("bullet") or list_level is not None)
+    is_bullet = is_bullet or kind in list_kinds
+    is_heading = bool(item.get("is_heading")) or kind in {"heading", "title", "section", "header"}
+    return {"is_bullet": is_bullet, "list_level": list_level, "is_heading": is_heading}
+
+
+def _text_blocks(manifest: dict[str, Any]) -> list[tuple[str, str, Any, str | None, dict[str, Any]]]:
+    blocks: list[tuple[str, str, Any, str | None, dict[str, Any]]] = []
     for page in manifest.get("pages", []) if isinstance(manifest, dict) else []:
         if not isinstance(page, dict):
             continue
@@ -50,7 +63,9 @@ def _text_blocks(manifest: dict[str, Any]) -> list[tuple[str, str, Any, str | No
         for item in page.get("text_items", []) or []:
             if not isinstance(item, dict) or not isinstance(item.get("text"), str):
                 continue
-            blocks.append(("text", item["text"], page_no, _coord(item.get("source_loc"), fallback_page=page_no)))
+            blocks.append(("text", item["text"], page_no,
+                           _coord(item.get("source_loc"), fallback_page=page_no),
+                           _item_structure(item)))
         for table in page.get("tables", []) or []:
             if not isinstance(table, dict):
                 continue
@@ -68,7 +83,7 @@ def _text_blocks(manifest: dict[str, Any]) -> list[tuple[str, str, Any, str | No
                     content = " / ".join(str(value) for value in headers) + " => " + content
                 location = row.get("source_loc") if isinstance(row, dict) else table_loc
                 span = _coord(location, fallback_page=page_no)
-                blocks.append(("table_row", content, page_no, span))
+                blocks.append(("table_row", content, page_no, span, {"is_bullet": False, "is_heading": False}))
     return blocks
 
 
@@ -211,11 +226,19 @@ class EntityBridgeService:
             )
             run_id = int(cur.lastrowid)
             expanded_blocks = []
-            for block_type, content, page, span in raw_blocks:
+            for block_type, content, page, span, structure in raw_blocks:
                 sections = _split_entity_sections(content, roster) if block_type == "text" else [content]
-                expanded_blocks.extend((block_type, section, page, span) for section in sections)
-            for index, (block_type, content, page, span) in enumerate(expanded_blocks):
+                expanded_blocks.extend((block_type, section, page, span, structure) for section in sections)
+            context: dict[str, Any] | None = None
+            for index, (block_type, content, page, span, structure) in enumerate(expanded_blocks):
                 classification, relation, subject = classify_block(content, roster)
+                if structure.get("is_heading"):
+                    context = None
+                elif (classification == "ambiguous" and structure.get("is_bullet")
+                      and context is not None):
+                    classification = "self"
+                    relation = context["relation"]
+                    subject = context["subject"]
                 reason = None
                 source = "deterministic"
                 if use_model and classification == "ambiguous":
@@ -240,6 +263,10 @@ class EntityBridgeService:
                     (run_id, company_id, file_hash, index, block_type, content, page, span,
                      classification, relation, subject, reason, source, needs_review, created),
                 )
+                if classification == "self" and subject:
+                    context = {"relation": relation, "subject": subject}
+                elif not structure.get("is_bullet"):
+                    context = None
             conn.execute(
                 "UPDATE entity_bridge_runs SET status='completed',block_count=?,completed_at=? WHERE id=?",
                 (len(expanded_blocks), _now(), run_id),

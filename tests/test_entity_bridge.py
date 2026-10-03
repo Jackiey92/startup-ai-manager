@@ -9,6 +9,7 @@ from app.entities.bridge import EntityBridgeService, classify_block
 from app.entities.roster import EntityRosterService
 from app.harness.staging import StagingStore
 from app.storage import SourceFileStore
+from app.facts import FactExtractionService
 
 
 def _manifest(file_hash: str) -> dict:
@@ -115,6 +116,62 @@ def test_subsidiary_is_self_but_customer_is_related_and_subject_prefix_is_trimme
     assert classify_block(
         "本公司主要客户为苏州星河半导体有限公司", roster
     ) == ("related", "客户", "苏州星河半导体有限公司")
+
+
+def test_bullet_subject_inheritance_preserves_parent_child_and_stops_at_heading(tmp_path: Path):
+    db = tmp_path / "context.db"
+    init_db(db)
+    stored = SourceFileStore(tmp_path / "objects", db).put_bytes(b"narrative", original_name="财务.pdf")
+    items = [
+        {"text": "主公司有限公司2024年合并口径：", "kind": "heading", "is_heading": True},
+        {"text": "2024年营业收入3.26亿元", "is_bullet": True, "list_level": 0},
+        {"text": "2024年净利润0.58亿元", "is_bullet": True, "list_level": 0},
+        {"text": "毛利率31.50%", "is_bullet": True, "list_level": 0},
+        {"text": "货币资金0.84亿元", "is_bullet": True, "list_level": 0},
+        {"text": "应收账款1.12亿元", "is_bullet": True, "list_level": 0},
+        {"text": "经营现金流0.36亿元", "is_bullet": True, "list_level": 0},
+        {"text": "全资子公司常州未蓝新能源有限公司2024年单独口径：", "kind": "heading", "is_heading": True},
+        {"text": "营业收入0.92亿元", "is_bullet": True, "list_level": 0},
+        {"text": "净利润0.07亿元", "is_bullet": True, "list_level": 0},
+        {"text": "总资产1.35亿元", "is_bullet": True, "list_level": 0},
+        {"text": "技术与产品", "kind": "heading", "is_heading": True},
+        # This must not inherit the subsidiary context after the new section.
+        {"text": "营业收入99亿元", "is_bullet": True, "list_level": 0},
+    ]
+    for index, item in enumerate(items):
+        item["source_loc"] = {"locator": f"text/{index}"}
+    manifest = {
+        "file_hash": stored.file_hash, "filename": stored.original_name,
+        "format": "pdf", "parse_summary": {"status": "parsed"},
+        "pages": [{"page_no": 1, "text_items": items, "tables": []}],
+    }
+    StagingStore(db).save_manifest(manifest)
+    # Deliberately realistic registration: no generic "公司"/"本公司" alias.
+    EntityRosterService(db).declare(company_id="acme", entity_name="主公司有限公司", aliases=("主企",))
+    bridge = EntityBridgeService(db).run(company_id="acme", file_hash=stored.file_hash)
+    rows = EntityBridgeService(db).list(company_id="acme", run_id=bridge["id"])
+    parent = [row for row in rows if row["content"].startswith("2024年营业收入")][0]
+    child = [row for row in rows if row["content"].startswith("营业收入0.92")][0]
+    stopped = [row for row in rows if row["content"].startswith("营业收入99")][0]
+    assert (parent["classification"], parent["subject"], parent["relation"]) == (
+        "self", "主公司有限公司", None
+    )
+    assert (child["classification"], child["subject"], child["relation"]) == (
+        "self", "常州未蓝新能源有限公司", "全资子公司"
+    )
+    assert stopped["classification"] == "ambiguous"
+
+    result = FactExtractionService(db).extract(
+        company_id="acme", file_hash=stored.file_hash, bridge_run_id=bridge["id"],
+    )
+    facts = FactExtractionService(db).list_facts(company_id="acme")
+    values = {(row["entity"], row["attribute"]): row["value"] for row in facts}
+    assert result["fact_count"] == 9
+    assert values[("主公司有限公司", "营业收入")] == "3.26"
+    assert values[("主公司有限公司", "毛利率")] == "31.50"
+    assert values[("常州未蓝新能源有限公司", "营业收入")] == "0.92"
+    assert values[("常州未蓝新能源有限公司", "总资产")] == "1.35"
+    assert FactExtractionService(db).list_todos(company_id="acme") == []
 
 
 class _FakeModel:
