@@ -13,14 +13,18 @@ from app.runtime_config import RuntimeConfig
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_local_profile_injects_paths_and_skills() -> None:
+def test_local_profile_injects_paths_skills_and_local_sam_ov() -> None:
     config = RuntimeConfig.from_env(project_root=ROOT, env={"SAM_PROFILE": "local"})
     assert config.project_root == ROOT
     assert config.harness_root == ROOT / "harness-openclaw"
     assert config.objects_dir == ROOT / "data" / "objects"
     assert config.main_db == ROOT / "data" / "app.db"
     assert config.skill_for_format["pdf"] == "document-ingest"
-    assert config.memory_provider == "local"
+    # Local development now exercises the local SAM OpenViking endpoint; the
+    # filesystem provider remains an explicit test double, not the default.
+    assert config.memory_provider == "openviking"
+    assert config.memory_base_url == "http://127.0.0.1:1933"
+    assert config.memory_templates_dir == "custom-prompts"
     assert config.agent_id == "sam-leader"
     assert config.gateway_port == 18790
     assert config.gateway_port != 18789
