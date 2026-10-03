@@ -6,6 +6,7 @@ from pathlib import Path
 
 from app.db.database import connect, init_db
 from app.parse_jobs import ParseJobCanceled, ParseJobManager
+from app.ports import RetryableRuntimeError
 
 
 def _wait_for(manager: ParseJobManager, job_id: str, predicate, timeout: float = 2.0):
@@ -164,4 +165,54 @@ def test_canceled_queued_job_cleans_worker_event_and_can_retry(tmp_path: Path):
         assert _wait_for(manager, second["job_id"], lambda j: j["status"] == "done")["status"] == "done"
     finally:
         release.set()
+        manager.close()
+
+
+def test_parse_jobs_isolate_one_slow_instance_from_other_jobs(tmp_path: Path):
+    slow_started = Event()
+    release = Event()
+
+    def worker(job, progress, event):
+        if job["original_name"] == "slow.pdf":
+            slow_started.set()
+            release.wait(2)
+        progress(stage="parsing", current=1, total=1, message="done")
+
+    manager, digest = _manager(tmp_path, worker, workers=2)
+    try:
+        slow = _create(manager, digest, "slow.pdf")
+        assert slow_started.wait(1)
+        fast = _create(manager, digest, "fast.pdf")
+        assert _wait_for(manager, fast["job_id"], lambda j: j["status"] == "done")["status"] == "done"
+        assert manager.get(slow["job_id"])["status"] == "parsing"
+    finally:
+        release.set()
+        manager.close()
+
+
+def test_parse_workers_are_capped_by_configured_upper_bound(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("SAM_PARSE_WORKERS_MAX", "2")
+    manager, _ = _manager(tmp_path, lambda *_args: None, workers=99)
+    try:
+        assert manager.executor._max_workers == 2
+    finally:
+        manager.close()
+
+
+def test_retryable_runtime_error_is_requeued_instead_of_failed(tmp_path: Path, monkeypatch):
+    calls = []
+
+    def worker(job, progress, event):
+        calls.append(job["job_id"])
+        if len(calls) == 1:
+            raise RetryableRuntimeError("gateway not ready")
+
+    monkeypatch.setenv("SAM_RUNTIME_RETRIES", "2")
+    manager, digest = _manager(tmp_path, worker)
+    try:
+        job = _create(manager, digest)
+        done = _wait_for(manager, job["job_id"], lambda j: j["status"] == "done", timeout=3)
+        assert done["status"] == "done"
+        assert len(calls) == 2
+    finally:
         manager.close()

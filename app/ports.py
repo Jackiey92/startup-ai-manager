@@ -12,6 +12,7 @@ import os
 import subprocess
 import tempfile
 import shutil
+import time
 from collections.abc import Callable, Sequence
 from typing import Any, Protocol
 from .memory_paths import MEMORY_ROOT
@@ -37,6 +38,12 @@ class ModelProvider(Protocol):
 
 class ModelUnavailable(RuntimeError):
     """The configured model provider could not return a valid response."""
+
+
+class RetryableRuntimeError(RuntimeError):
+    """A runtime dependency is not ready yet and the job may be retried."""
+
+    error_kind = "runtime"
 
 
 class MemoryProvider(Protocol):
@@ -313,14 +320,29 @@ class OpenVikingMemoryProvider:
         return False
 
     def wait_for_resource(self, uri: str, *, timeout: int = 600, interval: float = 2.0) -> None:
-        """Poll stat; submission is deliberately never retried."""
-        import time
-        deadline = time.monotonic() + max(1, int(timeout))
+        """Poll stat until semantic processing is ready.
+
+        OpenViking creates the resource asynchronously.  A deterministic child
+        URI can therefore return NOT_FOUND for a short period after
+        ``add-resource`` has accepted the submission.  That response is a
+        pending state here, not a second submission and not an immediate
+        failure.  Only a timeout turns it into a durable, actionable error.
+        """
+        deadline = time.monotonic() + max(0.0, float(timeout))
+        not_found: FileNotFoundError | None = None
         while True:
-            payload = self._run(["stat", uri])
-            if self._semantic_ready(payload):
+            try:
+                payload = self._run(["stat", uri])
+            except FileNotFoundError as exc:
+                not_found = exc
+                payload = None
+            if payload is not None and self._semantic_ready(payload):
                 return
             if time.monotonic() >= deadline:
+                if not_found is not None:
+                    raise MemoryUnavailable(
+                        f"OpenViking resource did not appear before timeout: {uri}"
+                    ) from not_found
                 raise MemoryUnavailable(f"OpenViking semantic processing timed out for {uri}")
             time.sleep(max(0.0, interval))
 

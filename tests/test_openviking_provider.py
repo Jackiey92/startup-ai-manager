@@ -97,6 +97,40 @@ def test_async_resource_processing_polls_until_ready_without_resubmitting(tmp_pa
     assert [command[1] for command in calls] == ["add-resource", "stat", "stat"]
 
 
+def test_not_found_child_is_pending_until_stat_becomes_ready(tmp_path):
+    source = tmp_path / "annual.md"
+    source.write_text("财务收入 3.26亿元", encoding="utf-8")
+    calls = []
+    responses = [
+        (0, json.dumps({"ok": True}), ""),
+        (1, "", "NOT_FOUND: resource is still being created"),
+        (0, json.dumps({"status": "ready", "overview_ready": True, "abstract_ready": True}), ""),
+    ]
+
+    def runner(command, **kwargs):
+        calls.append(command)
+        response = responses.pop(0)
+        return subprocess.CompletedProcess(command, response[0], response[1], response[2])
+
+    provider = OpenVikingMemoryProvider(runner=runner)
+    provider.add_resource(str(source), parent="viking://resources/财务", wait=False)
+    provider.wait_for_resource("viking://resources/财务/annual.md", timeout=2, interval=0)
+    assert [command[1] for command in calls] == ["add-resource", "stat", "stat"]
+
+
+def test_not_found_becomes_actionable_timeout_not_immediate_failure(tmp_path):
+    calls = []
+
+    def runner(command, **kwargs):
+        calls.append(command)
+        return subprocess.CompletedProcess(command, 1, "", "NOT_FOUND: resource")
+
+    provider = OpenVikingMemoryProvider(runner=runner)
+    with pytest.raises(MemoryUnavailable, match="did not appear before timeout"):
+        provider.wait_for_resource("viking://resources/财务/missing.md", timeout=0, interval=0)
+    assert len(calls) == 1
+
+
 def test_add_resource_without_uri_polls_deterministic_child_not_parent(tmp_path):
     source = tmp_path / "report.md"
     source.write_text("中文正文", encoding="utf-8")

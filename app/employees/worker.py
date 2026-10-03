@@ -61,7 +61,9 @@ class EmployeeRunner:
             raw = self.runner(skill=skill, skill_text=skill_text, text=text, scope=scope,
                               timeout=self.timeout)
         else:
-            runtime = self.runtime or runtime_provider(self.config, StagingStore(self.config.main_db))
+            if self.runtime is None:
+                self.runtime = runtime_provider(self.config, StagingStore(self.config.main_db))
+            runtime = self.runtime
             prompt = "Load the supplied employee skill and return only its required JSON candidates/items payload."
             raw = runtime.run_agent_message(
                 prompt, context_text=skill_text + "\n\nBLOCK:\n" + text,

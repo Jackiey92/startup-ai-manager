@@ -5,11 +5,12 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 import hashlib
 import os
-from threading import Event, Lock
+from threading import Event, Lock, Timer
 import time
 from typing import Callable, Any
 
 from .db.database import connect
+from .ports import RetryableRuntimeError
 
 
 STATUSES = {"queued", "parsing", "done", "failed", "canceled"}
@@ -41,15 +42,24 @@ class ParseJobManager:
         self.db_path = db_path
         self.worker = worker
         self.cancel_parser = cancel_parser or (lambda _file_hash: False)
-        count = workers if workers is not None else int(os.environ.get("SAM_PARSE_WORKERS", "1"))
+        requested = workers if workers is not None else int(os.environ.get("SAM_PARSE_WORKERS", "2"))
+        upper_bound = max(1, int(os.environ.get("SAM_PARSE_WORKERS_MAX", "4")))
+        count = min(requested, upper_bound)
         if count < 1:
             raise ValueError("SAM_PARSE_WORKERS must be positive")
         self.executor = ThreadPoolExecutor(max_workers=count, thread_name_prefix="sam-parse")
         self._events: dict[str, Event] = {}
         self._critical: set[str] = set()
+        self._runtime_retries: dict[str, int] = {}
+        self._retry_timers: dict[str, Timer] = {}
         self._lock = Lock()
 
     def close(self) -> None:
+        with self._lock:
+            timers = list(self._retry_timers.values())
+            self._retry_timers.clear()
+        for timer in timers:
+            timer.cancel()
         self.executor.shutdown(wait=False, cancel_futures=True)
 
     def create(self, *, company_id: str, file_hash: str, original_name: str,
@@ -126,6 +136,7 @@ class ParseJobManager:
             if job_id in self._events:
                 raise RuntimeError("job cancellation is still finishing")
             self._events[job_id] = Event()
+            self._runtime_retries.pop(job_id, None)
         self._update(job_id, status="queued", stage="queued", message=None,
                      error_kind=None, progress_current=0, progress_total=None,
                      started_at=None, finished_at=None, updated_at=now)
@@ -134,6 +145,7 @@ class ParseJobManager:
 
     def _run(self, job_id: str) -> None:
         event = self._events.setdefault(job_id, Event())
+        rescheduled = False
         job = self.get(job_id)
         if job["status"] != "queued":
             with self._lock:
@@ -152,6 +164,26 @@ class ParseJobManager:
                 self._update(job_id, status="done", stage="done",
                              progress_current=current.get("progress_total") or current.get("progress_current") or 0,
                              message="解析完成", finished_at=_now())
+        except RetryableRuntimeError as exc:
+            if event.is_set():
+                self._update(job_id, status="canceled", stage="canceled", message="已按用户要求停止", error_kind="canceled", finished_at=_now())
+            else:
+                with self._lock:
+                    attempt = self._runtime_retries.get(job_id, 0) + 1
+                    self._runtime_retries[job_id] = attempt
+                max_attempts = max(1, int(os.environ.get("SAM_RUNTIME_RETRIES", "5")))
+                if attempt > max_attempts:
+                    self._update(job_id, status="failed", stage="failed", message=str(exc)[:500], error_kind="runtime", finished_at=_now())
+                else:
+                    delay = min(30.0, 0.5 * (2 ** (attempt - 1)))
+                    self._update(job_id, status="queued", stage="starting_engine",
+                                 message=f"运行时未就绪，将在 {delay:g}s 后重试：{exc}", error_kind="runtime")
+                    rescheduled = True
+                    timer = Timer(delay, self._submit_retry, args=(job_id, event))
+                    timer.daemon = True
+                    with self._lock:
+                        self._retry_timers[job_id] = timer
+                    timer.start()
         except Exception as exc:
             if event.is_set():
                 self._update(job_id, status="canceled", stage="canceled", message="已按用户要求停止", error_kind="canceled", finished_at=_now())
@@ -160,9 +192,20 @@ class ParseJobManager:
                 self._update(job_id, status="failed", stage="failed", message=str(exc)[:500] or "解析失败", error_kind=str(kind), finished_at=_now())
         finally:
             with self._lock:
+                if not rescheduled and self._events.get(job_id) is event:
+                    self._events.pop(job_id, None)
+                if not rescheduled:
+                    self._critical.discard(job_id)
+                    self._runtime_retries.pop(job_id, None)
+
+    def _submit_retry(self, job_id: str, event: Event) -> None:
+        with self._lock:
+            self._retry_timers.pop(job_id, None)
+            if self._events.get(job_id) is not event or event.is_set():
                 if self._events.get(job_id) is event:
                     self._events.pop(job_id, None)
-                self._critical.discard(job_id)
+                return
+        self.executor.submit(self._run, job_id)
 
     def _progress(self, job_id: str, *, stage: str | None = None, current: int | None = None,
                   total: int | None = None, message: str | None = None,

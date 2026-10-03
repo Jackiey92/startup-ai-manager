@@ -54,6 +54,23 @@ def test_agent_scope_is_injected_outside_prompt(tmp_path: Path):
     assert "acme" not in calls[-1][0][calls[-1][0].index("--message") + 1]
 
 
+def test_scoped_employee_calls_reuse_one_openclaw_session(tmp_path: Path):
+    calls = []
+
+    def runner(command, **kwargs):
+        calls.append(command)
+        return subprocess.CompletedProcess(command, 0, json.dumps({"meta": {"finalAssistantVisibleText": "ok"}}), "")
+
+    config = RuntimeConfig.from_env(project_root=Path(__file__).parents[1], env={"SAM_PROFILE": "local"})
+    config = replace(config, state_dir=tmp_path / "state", config_path=tmp_path / "state" / "openclaw.json")
+    adapter = OpenClawAdapter(StagingStore(db_path=tmp_path / "missing.db"), config=config, runner=runner)
+    adapter.run_agent_message("第一块", company_id="acme", thread_id="parse-job-1")
+    adapter.run_agent_message("第二块", company_id="acme", thread_id="parse-job-1")
+    first = calls[0][calls[0].index("--session-id") + 1]
+    second = calls[1][calls[1].index("--session-id") + 1]
+    assert first == second
+
+
 def test_runtime_injects_token_plan_provider_into_existing_config(tmp_path: Path):
     calls = []
 
@@ -173,6 +190,61 @@ def test_gateway_mode_starts_one_daemon_and_reuses_it(tmp_path: Path, monkeypatc
     assert gateway_envs[0]["SAM_SKILL_ROOT"] == str(config.skill_root)
     assert gateway_envs[0]["SAM_LEADER_MODEL_API_KEY"] == "test-secret"
     assert all("--local" not in command for command in agent_calls)
+    adapter_module._stop_gateways()
+
+
+def test_gateway_health_probe_retries_within_long_startup_budget(tmp_path: Path, monkeypatch):
+    import app.harness.runtime.openclaw_adapter as adapter_module
+
+    gateway_calls = []
+
+    class FakeProcess:
+        pid = 43211
+
+        def poll(self):
+            return None
+
+        def terminate(self):
+            return None
+
+        def wait(self, timeout=None):
+            return 0
+
+        def kill(self):
+            return None
+
+    def fake_run(command, **kwargs):
+        return subprocess.CompletedProcess(command, 0, "{}", "")
+
+    def fake_popen(command, **kwargs):
+        gateway_calls.append(command)
+        return FakeProcess()
+
+    class ReadySocket:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    attempts = {"count": 0}
+
+    def socket_connection(*args, **kwargs):
+        attempts["count"] += 1
+        if attempts["count"] <= 4:
+            raise OSError("gateway still booting")
+        return ReadySocket()
+
+    monkeypatch.setattr(adapter_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(adapter_module.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(adapter_module.socket, "create_connection", socket_connection)
+    monkeypatch.setenv("SAM_GATEWAY_STARTUP_TIMEOUT", "3")
+    config = RuntimeConfig.from_env(project_root=Path(__file__).parents[1], env={"SAM_PROFILE": "local"})
+    config = replace(config, state_dir=tmp_path / "state", config_path=tmp_path / "state" / "openclaw.json")
+    adapter = OpenClawAdapter(StagingStore(db_path=tmp_path / "missing.db"), config=config)
+    adapter.ensure_runtime_ready(timeout=3)
+    assert len(gateway_calls) == 1
+    assert attempts["count"] >= 4
     adapter_module._stop_gateways()
 
 

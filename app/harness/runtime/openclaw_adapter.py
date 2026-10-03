@@ -23,7 +23,7 @@ from collections.abc import Callable
 
 from ..contracts import ParseResult, TextSpan, TableRow, SourceLoc, ClassificationHint
 from ..staging import StagingStore
-from ...ports import RuntimeProvider
+from ...ports import RetryableRuntimeError, RuntimeProvider
 from ...runtime_config import RuntimeConfig
 
 
@@ -103,6 +103,8 @@ class OpenClawAdapter(RuntimeProvider):
         self.objects_dir = Path(objects_dir) if objects_dir else self.config.objects_dir
         self.db_path = Path(db_path) if db_path else self.config.main_db
         self._runner = runner or subprocess.run
+        self._session_ids: dict[tuple[str, str], str] = {}
+        self._session_lock = Lock()
 
     def supports(self, format: str) -> bool:
         return format in self.config.skill_for_format
@@ -160,6 +162,12 @@ class OpenClawAdapter(RuntimeProvider):
         return self._invoke_agent(prompt, timeout=timeout, company_id=company_id,
                                   thread_id=thread_id, allow_promote=allow_promote)
 
+    def ensure_runtime_ready(self, *, timeout: int = 90) -> None:
+        """Health-probe the owned Gateway before a parse worker starts work."""
+        if self.config.openclaw_mode != "gateway":
+            return
+        self._ensure_gateway(self._base_env(), timeout=timeout)
+
     def _write_task(self, file_hash: str, format: str) -> Path:
         inbox = self.root / "inbox"
         inbox.mkdir(parents=True, exist_ok=True)
@@ -184,35 +192,7 @@ class OpenClawAdapter(RuntimeProvider):
 
     def _invoke_agent(self, message: str, timeout: int, *, company_id: str | None = None,
                       thread_id: str | None = None, allow_promote: bool = False) -> str:
-        env = os.environ.copy()
-        env["PATH"] = f"{self.config.venv_bin}:{env.get('PATH', '')}"
-        state_dir = self.config.state_dir
-        state_dir.mkdir(parents=True, exist_ok=True)
-        env["OPENCLAW_STATE_DIR"] = str(state_dir)
-        env["OPENCLAW_CONFIG_PATH"] = str(self.config.config_path)
-        self._ensure_skill_mount()
-        env["SAM_PROJECT_ROOT"] = str(self.config.project_root)
-        env["SAM_HARNESS_ROOT"] = str(self.config.harness_root)
-        env["SAM_SKILL_ROOT"] = str(self.config.skill_root)
-        env["OPENCLAW_GATEWAY_PORT"] = str(self.config.gateway_port)
-        env["SAM_OPENCLAW_GATEWAY_PORT"] = str(self.config.gateway_port)
-        env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(self.config.project_root), env.get("PYTHONPATH", "")]))
-        env["SAM_TOOL_PLUGIN_DIR"] = str(self.config.tool_plugin_dir)
-        env["SAM_TOOL_BRIDGE_PYTHON"] = str(self.config.tool_bridge_python)
-        env["SAM_OBJECTS_DIR"] = str(self.objects_dir)
-        # Keep the provider/model contract captured by RuntimeConfig in the
-        # child environment. RuntimeConfig already resolves environment wins;
-        # assigning these non-secret values here prevents an unrelated parent
-        # process environment from silently overriding an explicitly injected
-        # config (notably during isolated acceptance runs). The API key is
-        # intentionally never assigned or logged here.
-        if self.config.model_base_url:
-            env[self.config.model_base_url_env] = self.config.model_base_url
-        env[self.config.model_name_env] = self.config.model_default
-        if self.config.model_api_key_env not in env and env.get("SAM_GUIDE_MODEL_API_KEY"):
-            # One-release compatibility for callers that still export the
-            # guide-prefixed secret; never log or synthesize the value.
-            env[self.config.model_api_key_env] = env["SAM_GUIDE_MODEL_API_KEY"]
+        env = self._base_env()
         if self.config.openclaw_mode == "gateway":
             # The Gateway ownership fingerprint includes the effective model
             # configuration, so prepare the child environment first.
@@ -225,8 +205,7 @@ class OpenClawAdapter(RuntimeProvider):
         cache_dir = self.root / "cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
         env["XDG_CACHE_HOME"] = str(cache_dir)
-        import uuid
-        session_id = _scope_session_id(company_id, thread_id, uuid.uuid4().hex)
+        session_id = self._session_id(company_id, thread_id)
         cmd = [self.config.node_bin, str(self.config.openclaw_entry), "agent",
                "--agent", self.config.agent_id, "--session-id", session_id, "--json",
                "--message", message, "--timeout", str(timeout)]
@@ -245,6 +224,46 @@ class OpenClawAdapter(RuntimeProvider):
                 f"openclaw agent failed ({proc.returncode}): {proc.stderr.strip() or proc.stdout.strip()}"
             )
         return proc.stdout
+
+    def _base_env(self) -> dict[str, str]:
+        """Build trusted runtime environment without request-specific scope."""
+        env = os.environ.copy()
+        env["PATH"] = f"{self.config.venv_bin}:{env.get('PATH', '')}"
+        state_dir = self.config.state_dir
+        state_dir.mkdir(parents=True, exist_ok=True)
+        env["OPENCLAW_STATE_DIR"] = str(state_dir)
+        env["OPENCLAW_CONFIG_PATH"] = str(self.config.config_path)
+        self._ensure_skill_mount()
+        env["SAM_PROJECT_ROOT"] = str(self.config.project_root)
+        env["SAM_HARNESS_ROOT"] = str(self.config.harness_root)
+        env["SAM_SKILL_ROOT"] = str(self.config.skill_root)
+        env["OPENCLAW_GATEWAY_PORT"] = str(self.config.gateway_port)
+        env["SAM_OPENCLAW_GATEWAY_PORT"] = str(self.config.gateway_port)
+        env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(self.config.project_root), env.get("PYTHONPATH", "")]))
+        env["SAM_TOOL_PLUGIN_DIR"] = str(self.config.tool_plugin_dir)
+        env["SAM_TOOL_BRIDGE_PYTHON"] = str(self.config.tool_bridge_python)
+        env["SAM_OBJECTS_DIR"] = str(self.objects_dir)
+        # RuntimeConfig already resolves environment wins.  The API key is
+        # intentionally never synthesized or logged here.
+        if self.config.model_base_url:
+            env[self.config.model_base_url_env] = self.config.model_base_url
+        env[self.config.model_name_env] = self.config.model_default
+        if self.config.model_api_key_env not in env and env.get("SAM_GUIDE_MODEL_API_KEY"):
+            env[self.config.model_api_key_env] = env["SAM_GUIDE_MODEL_API_KEY"]
+        return env
+
+    def _session_id(self, company_id: str | None, thread_id: str | None) -> str:
+        if company_id is None or thread_id is None:
+            import uuid
+            return _scope_session_id(company_id, thread_id, uuid.uuid4().hex)
+        key = (str(company_id), str(thread_id))
+        with self._session_lock:
+            session_id = self._session_ids.get(key)
+            if session_id is None:
+                import uuid
+                session_id = _scope_session_id(company_id, thread_id, uuid.uuid4().hex)
+                self._session_ids[key] = session_id
+            return session_id
 
     def _ensure_skill_mount(self) -> None:
         """Ensure the configured first-party skill root is visible to OpenClaw."""
@@ -353,19 +372,25 @@ class OpenClawAdapter(RuntimeProvider):
                     text=True,
                 )
                 _GATEWAY_PROCESSES[key] = (process, stream)
-        deadline = time.monotonic() + min(max(timeout, 1), 15)
+        try:
+            configured_limit = max(1.0, float(os.environ.get("SAM_GATEWAY_STARTUP_TIMEOUT", "90")))
+        except ValueError:
+            configured_limit = 90.0
+        deadline = time.monotonic() + min(max(float(timeout), 1.0), configured_limit)
+        delay = 0.1
         while time.monotonic() < deadline:
             if process.poll() is not None:
                 _discard_gateway(key, process)
-                raise RuntimeError("OpenClaw Gateway exited during startup")
+                raise RetryableRuntimeError("OpenClaw Gateway exited during startup; parse job will retry")
             try:
                 with socket.create_connection(("127.0.0.1", self.config.gateway_port), timeout=0.2):
                     self._write_gateway_owner(process, env)
                     return
             except OSError:
-                time.sleep(0.1)
+                time.sleep(min(delay, max(0.0, deadline - time.monotonic())))
+                delay = min(delay * 2.0, 1.5)
         _discard_gateway(key, process)
-        raise TimeoutError("OpenClaw Gateway startup timed out")
+        raise RetryableRuntimeError("OpenClaw Gateway startup timed out; parse job will retry")
 
     def reclaim_gateway_port(self) -> None:
         """Reclaim a previously owned Gateway before the web server starts.

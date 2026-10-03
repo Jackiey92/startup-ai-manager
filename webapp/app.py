@@ -5,6 +5,7 @@ import json
 import hmac
 import os
 import subprocess
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -186,6 +187,17 @@ def queue_import_guide(uploaded_file_hash: str, *, company_id: str | None = None
 def _parse_job_worker(job: dict, progress, cancel_event) -> None:
     """Run the existing deterministic upload pipeline off the request thread."""
     adapter = _PARSE_ADAPTER
+    try:
+        total_timeout = max(1.0, float(os.environ.get("SAM_PARSE_TOTAL_TIMEOUT", "900")))
+    except ValueError:
+        total_timeout = 900.0
+    deadline = time.monotonic() + total_timeout
+
+    def budget(maximum: int) -> int:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("parse job total timeout")
+        return max(1, min(maximum, int(remaining)))
 
     def check_cancel() -> None:
         if cancel_event.is_set():
@@ -208,11 +220,16 @@ def _parse_job_worker(job: dict, progress, cancel_event) -> None:
         if not _has_declared_self(job["company_id"]):
             raise ValueError("请先登记本公司名称")
         progress(stage="parsing", message="正在解析文档")
+        ensure_ready = getattr(adapter, "ensure_runtime_ready", None)
+        if ensure_ready is not None:
+            # This probe is deliberately before parser work. A cold Gateway
+            # remains a retryable runtime condition, not a document failure.
+            ensure_ready(timeout=budget(90))
         # Cancellation can arrive while the worker is transitioning from
         # engine setup to the private bridge.  Re-check immediately before
         # spawning so a stopped queued job never starts a parser.
         check_cancel()
-        staging_id = adapter.run_parse(job["file_hash"], job["harness_format"], timeout=600)
+        staging_id = adapter.run_parse(job["file_hash"], job["harness_format"], timeout=budget(600))
         check_cancel()
         staged = staging.get(staging_id)
         payload = staged.get("payload", {})
@@ -254,12 +271,14 @@ def _parse_job_worker(job: dict, progress, cancel_event) -> None:
             if wait_for_resource is not None:
                 wait_for_resource(
                     resource_uri,
-                    timeout=600,
+                    timeout=budget(600),
                     interval=2.0,
                 )
-        except Exception:
+        except Exception as exc:
             app.logger.exception("OV resource import deferred after extraction")
+            progress(stage="parsing", message=f"OV 语义导入延迟：{exc}")
         check_cancel()
+        budget(600)
 
         # Normal uploads automatically traverse the entity bridge and the
         # finance employee.  Model work happens before the short write-only
@@ -274,6 +293,7 @@ def _parse_job_worker(job: dict, progress, cancel_event) -> None:
             bridge_run_id=int(bridge_run["id"]), thread_id=f"parse-job:{job['job_id']}",
         )
         fact_service = FactExtractionService(MAIN_DB)
+        budget(600)
         prepared_facts = fact_service.prepare(
             company_id=job["company_id"], file_hash=job["file_hash"],
             bridge_run_id=int(bridge_run["id"]), use_worker=True,
