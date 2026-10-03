@@ -5,11 +5,14 @@
 // newer 2026.9 line changed the registration wrapper, while retaining the
 // same tool object contract.
 const { spawn } = require("node:child_process");
+const fs = require("node:fs");
+const path = require("node:path");
 
 const TOOL_NAMES = [
   "sam_memory_read", "sam_memory_search", "sam_file_get",
   "sam_memory_map", "sam_conversation_read", "sam_thread_list",
   "sam_thread_open", "sam_promote",
+  "sam_document_ingest",
 ];
 
 const schemas = {
@@ -21,6 +24,7 @@ const schemas = {
   sam_thread_list: { type: "object", additionalProperties: false, properties: {} },
   sam_thread_open: { type: "object", additionalProperties: false, properties: {} },
   sam_promote: { type: "object", additionalProperties: false, required: ["fact_key", "fact"], properties: { fact_key: { type: "string", minLength: 1 }, fact: { type: "object" } } },
+  sam_document_ingest: { type: "object", description: "Parse one injected inbox task with the mounted document-ingest skill. Only file_hash and format are accepted; paths and engines are controlled by SAM.", additionalProperties: false, required: ["file_hash", "format"], properties: { file_hash: { type: "string", pattern: "^[0-9a-f]{64}$" }, format: { type: "string", enum: ["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "image"] } } },
 };
 
 const TOOL_DESCRIPTIONS = {
@@ -32,6 +36,7 @@ const TOOL_DESCRIPTIONS = {
   sam_thread_list: "List visible threads. Call exactly sam_thread_list({}).",
   sam_thread_open: "Read current injected thread summary. Call exactly sam_thread_open({}).",
   sam_promote: "Optional verified-fact promotion. Input exactly {fact_key,fact}; evidence must already exist in the current thread.",
+  sam_document_ingest: "Run the mounted document-ingest skill for the injected task. The tool owns bridge, quality checks, alternate-engine retry, and the confined outbox; never provide a path.",
 };
 
 function redactedError(error) {
@@ -58,7 +63,70 @@ function validate(name, input) {
   if (name === "sam_memory_search" && (typeof input.query !== "string" || !input.query.trim())) throw new Error("bad request");
   if (name === "sam_file_get" && !/^[0-9a-f]{64}$/.test(input.file_hash || "")) throw new Error("bad request");
   if (name === "sam_promote" && (!process.env.SAM_ALLOW_PROMOTE || !/^(1|true|yes)$/i.test(process.env.SAM_ALLOW_PROMOTE))) throw new Error("promotion disabled");
+  if (name === "sam_document_ingest" && (!/^[0-9a-f]{64}$/.test(input.file_hash || "") || !schemas.sam_document_ingest.properties.format.enum.includes(input.format))) throw new Error("bad request");
   return input;
+}
+
+function runProcess(command, args, env, timeout) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { cwd: env.SAM_PROJECT_ROOT || process.cwd(), env, stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = ""; let stderr = "";
+    const timer = setTimeout(() => { child.kill(); reject(new Error("document ingest timeout")); }, timeout);
+    child.stdout.on("data", chunk => { stdout += chunk.toString(); });
+    child.stderr.on("data", chunk => { stderr += chunk.toString(); });
+    child.on("error", error => { clearTimeout(timer); reject(error); });
+    child.on("close", code => {
+      clearTimeout(timer);
+      if (code !== 0) return reject(new Error((stderr || stdout || "document ingest failed").slice(-500)));
+      resolve(stdout);
+    });
+  });
+}
+
+async function documentIngestCall(input) {
+  validate("sam_document_ingest", input);
+  const root = path.resolve(process.env.SAM_HARNESS_ROOT || process.cwd());
+  const taskPath = path.join(root, "inbox", `${input.file_hash}.json`);
+  const outbox = path.join(root, "outbox");
+  const task = JSON.parse(fs.readFileSync(taskPath, "utf8"));
+  if (task.file_hash !== input.file_hash || task.format !== input.format) throw new Error("injected task mismatch");
+  const objects = path.resolve(process.env.SAM_OBJECTS_DIR || path.join(process.env.SAM_PROJECT_ROOT || process.cwd(), "data", "objects"));
+  const source = path.resolve(String(task.source_path || ""));
+  if (!source.startsWith(`${objects}${path.sep}`) || !fs.statSync(source).isFile()) throw new Error("source is outside the object store");
+  const skillRoot = path.resolve(process.env.SAM_SKILL_ROOT || path.join(process.env.SAM_PROJECT_ROOT || process.cwd(), "skills"));
+  const bridge = path.join(skillRoot, "document-ingest", "scripts", "bridge");
+  const quality = path.join(skillRoot, "document-ingest", "scripts", "quality.py");
+  const python = process.env.SAM_TOOL_BRIDGE_PYTHON || process.env.SAM_VENV_PYTHON || "python3";
+  fs.mkdirSync(outbox, { recursive: true });
+  const temp = path.join(outbox, `.${input.file_hash}.json`);
+  const baseEnv = { ...process.env, SAM_INGEST_ENGINE: process.env.SAM_INGEST_ENGINE || "auto" };
+  const engines = baseEnv.SAM_INGEST_ENGINE === "auto" ? ["auto", "mineru", "docling"] : [baseEnv.SAM_INGEST_ENGINE];
+  let manifest = null; let issues = []; let attempted = [];
+  try {
+    for (const engine of engines) {
+      attempted.push(engine);
+      const env = { ...baseEnv, SAM_INGEST_ENGINE: engine };
+      await runProcess(python, [bridge, taskPath, "--output", temp], env, Number(process.env.SAM_DOCUMENT_INGEST_TIMEOUT_MS || 600000));
+      manifest = JSON.parse(fs.readFileSync(temp, "utf8"));
+      const qualityOutput = await runProcess(python, [quality, temp], env, 30000);
+      const report = JSON.parse(qualityOutput.trim().split("\n").filter(Boolean).pop() || "{}");
+      issues = Array.isArray(report.issues) ? report.issues : [];
+      if (manifest.parse_summary?.status !== "parsed") {
+        issues = [...issues, { code: "parse_failed", message: "解析引擎未产出可用正文" }];
+      }
+      if (!issues.length) break;
+    }
+    if (!manifest) throw new Error("document ingest produced no manifest");
+    if (issues.length) {
+      const summary = manifest.parse_summary || (manifest.parse_summary = {});
+      summary.status = "parse_failed";
+      summary.warnings = [...(Array.isArray(summary.warnings) ? summary.warnings : []), ...issues.map(item => `quality:${item.code}`), `engines:${attempted.join(",")}`];
+    }
+    const finalPath = path.join(outbox, `${input.file_hash}.json`);
+    fs.writeFileSync(`${finalPath}.tmp`, JSON.stringify(manifest, null, 2) + "\n");
+    fs.renameSync(`${finalPath}.tmp`, finalPath);
+    return toToolResult({ status: manifest.parse_summary?.status || "parsed", outbox_path: finalPath, quality_issues: issues });
+  } finally { try { fs.unlinkSync(temp); } catch (_) {} }
 }
 
 function decodeScopePart(value) {
@@ -86,7 +154,7 @@ const pendingScopes = new Map();
 function rememberExecutionScope(event, context) {
   const toolName = event?.toolName;
   const callId = context?.toolCallId || event?.toolCallId;
-  if (!TOOL_NAMES.includes(toolName) || typeof callId !== "string" || !callId) return;
+  if (!TOOL_NAMES.includes(toolName) || toolName === "sam_document_ingest" || typeof callId !== "string" || !callId) return;
   const scope = scopeFromSessionId(context?.sessionId || context?.sessionKey || event?.sessionId || event?.sessionKey);
   if (scope) pendingScopes.set(callId, scope);
 }
@@ -170,9 +238,11 @@ function register(api) {
       parameters: schemas[name],
       inputSchema: schemas[name],
       optional: name === "sam_promote",
-      execute: async (...handlerArgs) => bridgeCall(name, extractParams(handlerArgs), takeExecutionScope(handlerArgs[0])),
+      execute: async (...handlerArgs) => name === "sam_document_ingest"
+        ? documentIngestCall(extractParams(handlerArgs))
+        : bridgeCall(name, extractParams(handlerArgs), takeExecutionScope(handlerArgs[0])),
     });
   }
 }
 
-module.exports = { id: "sam-memory", name: "SAM memory tools", register, _private: { schemas, validate, bridgeCall, extractParams, toToolResult, rememberExecutionScope, takeExecutionScope, scopeFromSessionId, TOOL_NAMES } };
+module.exports = { id: "sam-memory", name: "SAM memory tools", register, _private: { schemas, validate, bridgeCall, documentIngestCall, extractParams, toToolResult, rememberExecutionScope, takeExecutionScope, scopeFromSessionId, TOOL_NAMES } };

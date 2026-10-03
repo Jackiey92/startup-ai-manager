@@ -20,7 +20,8 @@
             "sam_memory_map",
             "sam_conversation_read",
             "sam_thread_list",
-            "sam_thread_open"
+            "sam_thread_open",
+            "sam_document_ingest"
           ]
         }
       }
@@ -46,7 +47,8 @@
       "sam_memory_map",
       "sam_conversation_read",
       "sam_thread_list",
-      "sam_thread_open"
+      "sam_thread_open",
+      "sam_document_ingest"
     ]
   },
   "models": {

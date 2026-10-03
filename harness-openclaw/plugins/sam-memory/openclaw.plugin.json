@@ -12,7 +12,8 @@
       "sam_conversation_read",
       "sam_thread_list",
       "sam_thread_open",
-      "sam_promote"
+      "sam_promote",
+      "sam_document_ingest"
     ]
   },
   "configSchema": { "type": "object", "additionalProperties": false }

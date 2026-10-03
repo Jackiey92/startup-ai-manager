@@ -30,6 +30,7 @@ from ...runtime_config import RuntimeConfig
 _READONLY_TOOLS = [
     "sam_memory_read", "sam_memory_search", "sam_file_get", "sam_memory_map",
     "sam_conversation_read", "sam_thread_list", "sam_thread_open",
+    "sam_document_ingest",
 ]
 _GATEWAY_LOCK = Lock()
 _GATEWAY_PROCESSES: dict[str, tuple[subprocess.Popen, object]] = {}
@@ -117,9 +118,10 @@ class OpenClawAdapter(RuntimeProvider):
             if out_path.exists():
                 out_path.unlink()
             message = (
-                f'Use the {skill_name} skill with task file "{task_path}". '
-                f'Run the skill\'s bridge and quality checks in its sandbox, then write the complete '
-                f'L2 manifest JSON to "{out_path}". Do not write facts, OV, or other application state.'
+                f'Use the {skill_name} skill for file_hash={file_hash}, format={format}. '
+                f'Call the registered sam_document_ingest tool; it owns the confined bridge, quality '
+                f'checks, alternate-engine retry, and writes the complete L2 manifest to the outbox. '
+                f'Do not use filesystem paths, run shell commands, or write facts, OV, or other application state.'
             )
 
             self._invoke_agent(message, timeout=timeout)
@@ -197,6 +199,7 @@ class OpenClawAdapter(RuntimeProvider):
         env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(self.config.project_root), env.get("PYTHONPATH", "")]))
         env["SAM_TOOL_PLUGIN_DIR"] = str(self.config.tool_plugin_dir)
         env["SAM_TOOL_BRIDGE_PYTHON"] = str(self.config.tool_bridge_python)
+        env["SAM_OBJECTS_DIR"] = str(self.objects_dir)
         # Keep the provider/model contract captured by RuntimeConfig in the
         # child environment. RuntimeConfig already resolves environment wins;
         # assigning these non-secret values here prevents an unrelated parent

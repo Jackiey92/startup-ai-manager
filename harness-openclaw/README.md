@@ -8,12 +8,14 @@
 - `outbox/`：技能产出的 `ParseResult` JSON，仅为 staging 数据（运行时生成，不入库）。
 - `../skills/document-ingest/`：统一文档导入技能，负责 MinerU/Docling 解析与 L2 staging 输出。
 - `state/openclaw.example.json`：OpenClaw 配置模板；复制为 `state/openclaw.json`，路径和模型端点由 profile/环境变量注入。
-- `plugins/sam-memory/`：`registerTool` 薄壳；Python bridge 通过 `SAM_TOOL_BRIDGE_PYTHON`/`SAM_PROJECT_ROOT` 注入，作用域由 `SAM_COMPANY_ID`、`SAM_THREAD_ID` 注入。
+- `plugins/sam-memory/`：OpenClaw 原生 `registerTool` 插件；除记忆工具外注册受控 `sam_document_ingest`，bridge/quality 通过 `SAM_TOOL_BRIDGE_PYTHON`/`SAM_PROJECT_ROOT` 在插件执行边界运行，作用域由运行时注入。
 - `cache/`、`state/` 下的运行时数据不入库。
 
-解析边界：`OpenClawAdapter.run_parse` 对 `document-ingest` 直接调用
-`skills/document-ingest/scripts/bridge`，这是本地确定性步骤，不要求主 Agent
-拥有 exec 或路径读写权限；解析完成后才由 `sam-leader`（显示名 SAM Leader）基于 L2 证据生成指引。
+解析边界：`OpenClawAdapter.run_parse` 只创建受控 inbox 任务并请求员工调用
+`sam_document_ingest`。员工通过 `document-ingest` Skill 发现该工具；工具在
+OpenClaw 插件执行器内校验 hash、只读对象目录，运行 Skill 携带的 bridge/quality，
+按质量结果换引擎重试，并原子写入 outbox。应用层不再直接 subprocess 解析，解析
+完成后才由 `sam-leader`（显示名 SAM Leader）基于 L2 证据生成指引。
 每次启动 Agent 前，适配器会把 `SAM_SKILL_ROOT` 注入 OpenClaw 的
 `skills.load.extraDirs`，确保仓库自有 Skill 被发现。
 
@@ -32,7 +34,8 @@
 - `SAM_MEMORY_ROOT`：local MemoryProvider 的持久化根目录
 - `SAM_TOOL_PLUGIN_DIR`：OpenClaw 插件目录（指向 `harness-openclaw/plugins/sam-memory`）
 - `SAM_TOOL_BRIDGE_PYTHON`：bridge 使用的 Python 可执行文件；未设置时使用 `SAM_VENV_PYTHON` 或 `python3`
-- `SAM_TOOL_BRIDGE_TIMEOUT_MS`：单次工具 bridge 超时，默认 15000ms
+- `SAM_TOOL_BRIDGE_TIMEOUT_MS`：记忆工具 bridge 超时，默认 15000ms
+- `SAM_DOCUMENT_INGEST_TIMEOUT_MS`：受控文档技能单次引擎超时，默认 600000ms
 - `SAM_COMPANY_ID` / `SAM_THREAD_ID`：由服务端/会话注入的工具作用域，工具参数不得覆盖
 - `SAM_ALLOW_PROMOTE=1`：显式启用写入型 `sam_promote`；默认关闭
 
@@ -65,7 +68,7 @@ openclaw plugins install <build-output>
 `scripts/run.sh` and `tools/run-sam-isolated.sh` prepare a clean OpenClaw
 state before serving: the repository `sam-memory` plugin is mounted into
 `$OPENCLAW_STATE_DIR/extensions/sam-memory`, and the generated config enables
-the seven read-only `sam_*` tools. This removes the need for a manual symlink
+the scoped memory tools plus `sam_document_ingest`. This removes the need for a manual symlink
 in a fresh state. Gateway mode is the default; the Flask-owned adapter starts
 one loopback Gateway on the first Agent call and reuses it for later calls.
 Set `SAM_OPENCLAW_MODE=local` only for a one-shot diagnostic run.

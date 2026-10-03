@@ -76,17 +76,18 @@ def test_plugin_syntax_and_registration_shape():
     assert package["openclaw"]["extensions"] == ["./index.js"]
     assert set(manifest["contracts"]["tools"]) == {
         "sam_memory_read", "sam_memory_search", "sam_file_get", "sam_memory_map",
-        "sam_conversation_read", "sam_thread_list", "sam_thread_open", "sam_promote",
+        "sam_conversation_read", "sam_thread_list", "sam_thread_open", "sam_promote", "sam_document_ingest",
     }
     checked = subprocess.run(["node", "--check", str(plugin)], capture_output=True, text=True)
     assert checked.returncode == 0, checked.stderr
     script = """
 const p = require(process.argv[1]); const names=[]; const specs={};
 p.register({registerTool(spec) { names.push(spec.name); specs[spec.name]=spec; if (spec.optional !== (spec.name === 'sam_promote')) process.exit(2); }});
-if (names.length !== 8 || !names.includes('sam_memory_search') || !names.includes('sam_memory_map')) process.exit(3);
+if (names.length !== 9 || !names.includes('sam_memory_search') || !names.includes('sam_memory_map') || !names.includes('sam_document_ingest')) process.exit(3);
 if (!/exactly sam_memory_map\\(\\{\\}\\)/i.test(specs.sam_memory_map.description)) process.exit(7);
 if (!/never pass limit/i.test(specs.sam_memory_search.description)) process.exit(8);
 if (specs.sam_memory_map.parameters.additionalProperties !== false || specs.sam_memory_search.parameters.additionalProperties !== false) process.exit(9);
+if (specs.sam_document_ingest.parameters.properties.file_hash.pattern !== '^[0-9a-f]{64}$') process.exit(10);
 const got = p._private.extractParams(['call-id', {query:'q'}, {ctxOnly:true}, () => {}]);
 if (got.query !== 'q') process.exit(4);
 const fallback = p._private.extractParams(['call-id', {ctxOnly:true}, () => {}]);
