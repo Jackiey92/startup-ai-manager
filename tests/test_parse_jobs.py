@@ -190,9 +190,28 @@ def test_parse_jobs_isolate_one_slow_instance_from_other_jobs(tmp_path: Path):
         manager.close()
 
 
+def test_parse_job_failure_does_not_block_other_pool_instance(tmp_path: Path):
+    def worker(job, progress, event):
+        if job["original_name"] == "bad.pdf":
+            raise RuntimeError("only this document failed")
+        progress(stage="parsing", current=1, total=1, message="done")
+
+    manager, digest = _manager(tmp_path, worker, workers=2)
+    try:
+        bad = _create(manager, digest, "bad.pdf")
+        fast = _create(manager, digest, "fast.pdf")
+        bad_done = _wait_for(manager, bad["job_id"], lambda j: j["status"] == "failed")
+        fast_done = _wait_for(manager, fast["job_id"], lambda j: j["status"] == "done")
+        assert bad_done["error_kind"] == "engine"
+        assert fast_done["status"] == "done"
+    finally:
+        manager.close()
+
+
 def test_parse_workers_are_capped_by_configured_upper_bound(tmp_path: Path, monkeypatch):
-    monkeypatch.setenv("SAM_PARSE_WORKERS_MAX", "2")
-    manager, _ = _manager(tmp_path, lambda *_args: None, workers=99)
+    monkeypatch.setenv("SAM_PARSE_CONCURRENCY", "99")
+    monkeypatch.setenv("SAM_PARSE_CONCURRENCY_MAX", "2")
+    manager, _ = _manager(tmp_path, lambda *_args: None, workers=None)
     try:
         assert manager.executor._max_workers == 2
     finally:

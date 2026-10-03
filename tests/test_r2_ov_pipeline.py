@@ -19,21 +19,35 @@ class TextOnlyOV(LocalMemoryProvider):
             self.put(parent.rstrip("/") + "/overview.md", "概览已就绪：" + source.read_text(encoding="utf-8")[:80])
             self.put(parent.rstrip("/") + "/abstract.md", "盖戳：OV_READY")
 
+    def add_resource_to(self, path: str, target_uri: str, *, wait: bool = True,
+                        timeout: int = 600) -> None:
+        source = Path(path)
+        super().add_resource_to(path, target_uri, wait=wait, timeout=timeout)
+        if source.suffix == ".md":
+            parent = target_uri.rsplit("/", 1)[0]
+            self.put(parent + "/overview.md", "概览已就绪：" + source.read_text(encoding="utf-8")[:80])
+            self.put(parent + "/abstract.md", "盖戳：OV_READY")
+
 
 def test_add_parsed_resource_sends_markdown_not_pdf_bytes():
     calls = []
 
     class Capture:
-        def add_resource(self, path, *, parent, wait):
-            calls.append((Path(path).suffix, Path(path).read_text(encoding="utf-8"), parent, wait))
+        def ensure_directory(self, uri):
+            calls.append(("mkdir", uri))
+
+        def add_resource_to(self, path, target_uri, *, wait, timeout):
+            calls.append((Path(path).suffix, Path(path).read_text(encoding="utf-8"), target_uri, wait, timeout))
 
     _result, target = add_parsed_resource(Capture(), {
         "source_id": "report", "filename": "report.pdf", "format": "pdf",
         "file_hash": "a" * 64, "parse_summary": {"raw_bytes_external": False, "full_text_external": False},
         "pages": [{"page_no": 1, "text_items": [{"text": "财务收入 3.26亿元"}], "tables": []}],
     }, parent="viking://resources/财务")
-    assert calls and calls[0][0] == ".md" and not calls[0][1].startswith("%PDF")
-    assert "财务收入" in calls[0][1] and calls[0][2] == "viking://resources/财务"
+    assert calls[0] == ("mkdir", "viking://resources/财务")
+    assert calls[1][0] == ".md" and not calls[1][1].startswith("%PDF")
+    assert "财务收入" in calls[1][1] and calls[1][2] == "viking://resources/财务/report.md"
+    assert calls[1][3] is True
     assert target == "viking://resources/财务/report.md"
 
 

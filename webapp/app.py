@@ -265,14 +265,18 @@ def _parse_job_worker(job: dict, progress, cancel_event) -> None:
             resource_result, resource_uri = add_parsed_resource(
                 extraction.memory, payload,
                 parent=f"viking://resources/{extraction.classify_folder(payload, skills_root=RUNTIME_CONFIG.skill_root)}",
-                resource_name=f"{payload.get('source_id') or job['file_hash']}.md",
+                resource_name=f"{job['file_hash']}.md",
+                timeout=budget(600),
             )
             wait_for_resource = getattr(extraction.memory, "wait_for_resource", None)
             if wait_for_resource is not None:
+                # --to --wait is the primary completion point.  Keep only a
+                # short exact-URI confirmation fallback; never poll a folder
+                # or wait another 600 seconds for a URI OV did not choose.
                 wait_for_resource(
                     resource_uri,
-                    timeout=budget(600),
-                    interval=2.0,
+                    timeout=min(15, budget(15)),
+                    interval=1.0,
                 )
         except Exception as exc:
             app.logger.exception("OV resource import deferred after extraction")

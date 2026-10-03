@@ -22,12 +22,7 @@ from ..classifier.semantic_folders import classify as classify_folder
 
 
 def parsed_resource_uri(parent: str, resource_name: str) -> str:
-    """Return the child URI OV creates for an imported file.
-
-    ``ov add-resource`` does not reliably return its created URI.  The CLI
-    imports the basename below ``--parent-auto-create``, so the caller can
-    poll this deterministic child instead of accidentally polling the folder.
-    """
+    """Build the exact target URI owned by SAM for parsed markdown."""
     clean_parent = str(parent).rstrip("/")
     name = Path(str(resource_name)).name
     if not clean_parent.startswith("viking://"):
@@ -38,19 +33,21 @@ def parsed_resource_uri(parent: str, resource_name: str) -> str:
 
 
 def add_parsed_resource(memory: MemoryProvider, manifest: dict[str, Any], *, parent: str,
-                        resource_name: str | None = None) -> tuple[Any, str]:
+                        resource_name: str | None = None, timeout: int = 600) -> tuple[Any, str]:
     """Ingest parser markdown, never the immutable source bytes, into OV.
 
-    The returned URI is deterministic even when the real OV CLI response has
-    no ``uri`` field.  The temporary file is safe to remove after the CLI has
-    accepted the upload; the original PDF remains in SAM's object store.
+    The target is submitted through ``--to`` so OV cannot choose its short
+    fingerprint directory/name.  The temporary file is safe to remove after
+    the CLI has accepted the upload; the original PDF remains in SAM's object
+    store.
     """
     name = resource_name or f"{manifest.get('source_id') or manifest.get('file_hash')}.md"
     target_uri = parsed_resource_uri(parent, name)
     with tempfile.TemporaryDirectory() as directory:
         path = Path(directory) / Path(name).name
         path.write_text(render_mapping(manifest), encoding="utf-8")
-        result = memory.add_resource(str(path), parent=parent, wait=False)
+        memory.ensure_directory(parent)
+        result = memory.add_resource_to(str(path), target_uri, wait=True, timeout=timeout)
     return result, target_uri
 
 

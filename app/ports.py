@@ -50,6 +50,13 @@ class MemoryProvider(Protocol):
     def add_resource(self, path: str, *, parent: str, wait: bool = True) -> None:
         """Import a source file into the configured OV semantic folder."""
 
+    def add_resource_to(self, path: str, target_uri: str, *, wait: bool = True,
+                        timeout: int = 600) -> Any:
+        """Import a source file to an exact, caller-owned URI."""
+
+    def ensure_directory(self, uri: str) -> None:
+        """Ensure a semantic parent directory exists."""
+
     def wait_for_resource(self, uri: str, *, timeout: int = 600, interval: float = 2.0) -> None:
         """Poll asynchronous OV processing until semantic navigation is ready."""
 
@@ -106,6 +113,21 @@ class LocalMemoryProvider:
         target = self._path(parent.rstrip("/") + "/" + source.name)
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, target)
+
+    def add_resource_to(self, path: str, target_uri: str, *, wait: bool = True,
+                        timeout: int = 600) -> None:
+        source = Path(path)
+        if not source.is_file():
+            raise FileNotFoundError(path)
+        target = self._path(target_uri)
+        if target.exists():
+            raise FileExistsError(target_uri)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, target)
+
+    def ensure_directory(self, uri: str) -> None:
+        path = self._path(uri)
+        path.mkdir(parents=True, exist_ok=True)
 
     def wait_for_resource(self, uri: str, *, timeout: int = 600, interval: float = 2.0) -> None:
         return None
@@ -305,6 +327,22 @@ class OpenVikingMemoryProvider:
         if wait:
             args.append("--wait")
         return self._run(args)
+
+    def add_resource_to(self, path: str, target_uri: str, *, wait: bool = True,
+                        timeout: int = 600) -> Any:
+        """Import to an exact URI; never let OV choose a short fingerprint path."""
+        args = ["add-resource", path, "--to", target_uri]
+        if wait:
+            args.extend(["--wait", "--timeout", str(max(1, int(timeout)))])
+        return self._run(args)
+
+    def ensure_directory(self, uri: str) -> None:
+        """Create the semantic parent, treating an existing directory as success."""
+        try:
+            self._run(["mkdir", uri])
+        except MemoryUnavailable as exc:
+            if not any(token in str(exc).lower() for token in ("already exists", "already_exists", "exists")):
+                raise
 
     @staticmethod
     def _semantic_ready(payload: Any) -> bool:

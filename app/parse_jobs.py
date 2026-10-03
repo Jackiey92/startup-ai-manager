@@ -42,8 +42,12 @@ class ParseJobManager:
         self.db_path = db_path
         self.worker = worker
         self.cancel_parser = cancel_parser or (lambda _file_hash: False)
-        requested = workers if workers is not None else int(os.environ.get("SAM_PARSE_WORKERS", "2"))
-        upper_bound = max(1, int(os.environ.get("SAM_PARSE_WORKERS_MAX", "4")))
+        requested = workers if workers is not None else int(
+            os.environ.get("SAM_PARSE_CONCURRENCY", os.environ.get("SAM_PARSE_WORKERS", "2"))
+        )
+        upper_bound = max(1, int(os.environ.get(
+            "SAM_PARSE_CONCURRENCY_MAX", os.environ.get("SAM_PARSE_WORKERS_MAX", "4")
+        )))
         count = min(requested, upper_bound)
         if count < 1:
             raise ValueError("SAM_PARSE_WORKERS must be positive")

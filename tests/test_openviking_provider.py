@@ -75,6 +75,26 @@ def test_add_resource_handles_missing_parent_without_plain_parent_fallback(tmp_p
     assert "--parent" not in [item for item in calls[0] if item != "--parent-auto-create"]
 
 
+def test_add_resource_to_uses_exact_target_and_parent_is_separate(tmp_path):
+    source = tmp_path / "parsed.md"
+    source.write_text("中文正文", encoding="utf-8")
+    runner = fake_runner_factory([
+        (0, json.dumps({"ok": True}), ""),
+        (0, json.dumps({"ok": True}), ""),
+    ])
+    provider = OpenVikingMemoryProvider(runner=runner)
+    parent = "viking://resources/技术与产品"
+    target = parent + "/" + "a" * 64 + ".md"
+    provider.ensure_directory(parent)
+    provider.add_resource_to(str(source), target, wait=True, timeout=37)
+    (mkdir, _), (add, _) = runner.calls
+    assert mkdir[1:3] == ["mkdir", parent]
+    assert add[1:4] == ["add-resource", str(source), "--to"]
+    assert add[4] == target
+    assert "--parent" not in add and "--parent-auto-create" not in add
+    assert add[add.index("--timeout") + 1] == "37"
+
+
 def test_async_resource_processing_polls_until_ready_without_resubmitting(tmp_path):
     source = tmp_path / "annual.md"
     source.write_text("财务收入 3.26亿元", encoding="utf-8")
