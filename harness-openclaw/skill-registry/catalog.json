@@ -1,0 +1,42 @@
+{
+  "catalog_version": "phase1",
+  "scan_root": "skills",
+  "skills": [
+    {
+      "skill_id": "document-ingest",
+      "name": "document-ingest",
+      "description": "Ingest PDF, DOC/DOCX, XLS/XLSX and PPT/PPTX into local L2 evidence with provenance.",
+      "version": "unversioned",
+      "source": "document-ingest/SKILL.md",
+      "content_sha256": "f90a67e84375b1a529e94d871e4dfe67c0f1904eec2d84b5d46d098d4b9fff33",
+      "roles": [
+        "file_processor"
+      ],
+      "visibility": "workspace"
+    },
+    {
+      "skill_id": "finance-fact-extraction",
+      "name": "finance-fact-extraction",
+      "description": "Extract finance fact candidates without changing digits or units.",
+      "version": "unversioned",
+      "source": "finance-fact-extraction/SKILL.md",
+      "content_sha256": "4ef64679624a31946334d90624112e47292cf58b0d76907cb5a40fe2fc771ae5",
+      "roles": [
+        "finance_analyst"
+      ],
+      "visibility": "workspace"
+    }
+  ],
+  "rejected": [
+    {
+      "kind": "skill",
+      "path": "business-prose-extraction/SKILL.md",
+      "error": "skill document must start with frontmatter"
+    },
+    {
+      "kind": "skill",
+      "path": "document-classifier/SKILL.md",
+      "error": "frontmatter.description must be a non-empty string"
+    }
+  ]
+}

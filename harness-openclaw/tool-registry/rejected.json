@@ -1,0 +1,8 @@
+[
+  {
+    "kind": "tool",
+    "name": "sam_promote",
+    "path": "harness-openclaw/plugins/sam-memory/openclaw.plugin.json",
+    "error": "runtime fact object is open-ended; not representable by Phase 0 schema subset"
+  }
+]

@@ -1,0 +1,32 @@
+{
+  "phase": "phase1",
+  "activation": "deployment-owned; not enabled by this catalog scan",
+  "identity": {
+    "run_as_user": "sam-runner",
+    "forbid_users": ["root", "Administrator"],
+    "workspace_root": "${SAM_PROJECT_ROOT}",
+    "allowed_paths": ["${SAM_PROJECT_ROOT}"],
+    "credential_access": "deny",
+    "full_disk_access": "deny"
+  },
+  "network": {
+    "default_policy": "deny",
+    "local_bind": ["127.0.0.1", "::1"],
+    "external_egress": "allowlist_only",
+    "external_allowlist": [],
+    "internal_information_exfiltration_lock": true
+  },
+  "tool_search": {
+    "enabled": false,
+    "owner_phase": "phase2"
+  },
+  "heavy_sandbox": {
+    "enabled": false,
+    "enable_when": [
+      "employee_self_authored_code_or_commands",
+      "cloud_multi_tenant_execution",
+      "untrusted_file_execution"
+    ],
+    "executor": "openclaw-native-isolated-execution-chain"
+  }
+}

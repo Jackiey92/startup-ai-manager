@@ -37,7 +37,7 @@ SECURITY_LEVELS = frozenset({"read_only", "controlled_write", "sensitive_write"}
 # ledger data is intentionally absent from every write set.
 ROLE_ZONE_ALLOWLIST: dict[str, dict[str, frozenset[str]]] = {
     "file_processor": {
-        "read": frozenset({"raw_objects", "runtime_outbox"}),
+        "read": frozenset({"raw_objects", "runtime_outbox", "l2_staging", "ov_resources"}),
         "write": frozenset({"runtime_outbox", "l2_staging", "ov_resources"}),
     },
     "finance_analyst": {
@@ -83,9 +83,16 @@ def _expect_string(value: Any, path: str) -> str:
     return value
 
 
-def _expect_unique_strings(value: Any, path: str, allowed: frozenset[str]) -> tuple[str, ...]:
-    if not isinstance(value, list) or not value:
-        raise ContractError(f"{path} must be a non-empty array")
+def _expect_unique_strings(
+    value: Any,
+    path: str,
+    allowed: frozenset[str],
+    *,
+    require_nonempty: bool = True,
+) -> tuple[str, ...]:
+    if not isinstance(value, list) or (require_nonempty and not value):
+        requirement = "non-empty " if require_nonempty else ""
+        raise ContractError(f"{path} must be a {requirement}array")
     if any(not isinstance(item, str) or not item for item in value):
         raise ContractError(f"{path} must contain only non-empty strings")
     if len(set(value)) != len(value):
@@ -274,8 +281,12 @@ def validate_tool_manifest(manifest: Mapping[str, Any]) -> dict[str, Any]:
     if security not in SECURITY_LEVELS:
         raise ContractError(f"tool manifest.security_level must be one of {sorted(SECURITY_LEVELS)}")
     roles = _expect_unique_strings(values["roles"], "tool manifest.roles", ROLES)
-    read_zones = _expect_unique_strings(values["read_zones"], "tool manifest.read_zones", ZONES)
-    write_zones = _expect_unique_strings(values["write_zones"], "tool manifest.write_zones", ZONES)
+    read_zones = _expect_unique_strings(
+        values["read_zones"], "tool manifest.read_zones", ZONES, require_nonempty=False,
+    )
+    write_zones = _expect_unique_strings(
+        values["write_zones"], "tool manifest.write_zones", ZONES, require_nonempty=False,
+    )
     _expect_string(values["provenance"], "tool manifest.provenance")
     for role in roles:
         read_forbidden = set(read_zones) - ROLE_ZONE_ALLOWLIST[role]["read"]
