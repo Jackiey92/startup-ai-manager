@@ -10,8 +10,10 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
 import re
+import secrets
 import time
 from typing import Any
+from uuid import uuid4
 
 from ..db.database import connect
 from ..source_map import _coord
@@ -191,12 +193,14 @@ class EntityBridgeService:
         company_name, aliases = self._model_scope(roster)
         raw_blocks = _text_blocks(manifest)
         created = _now()
+        # Independent artifact identity. ``run_id`` remains in the row shape
+        # only as a backwards-compatible grouping token; it is not a FK.
+        run_id = secrets.randbits(63) or 1
+        artifact_id = f"{company_id}:{file_hash}:{uuid4().hex}"
 
-        # Semantic work must not hold a database write transaction open.  A
-        # slow employee session used to leave the parent run uncommitted while
-        # other parse workers attempted their own attribution writes.  Build
-        # the immutable child payloads first, then persist parent and children
-        # in one short, explicit transaction below.
+        # Semantic work must not hold a database write transaction open. Build
+        # the immutable child payloads first, then persist this employee/file
+        # artifact in one short transaction below.
         expanded_blocks = []
         for block_type, content, page, span, structure in raw_blocks:
             expanded_blocks.append((block_type, content, page, span, structure))
@@ -240,41 +244,47 @@ class EntityBridgeService:
             )
 
         with connect(self.db_path) as conn:
-            # Serialize the parent/child write section.  The parent is
-            # inserted and read back before any child insert, while the whole
-            # batch remains atomic.
+            # Each employee/file artifact is independent.  The only FK in
+            # this write is the immutable source_files evidence reference;
+            # no shared entity_bridge_runs parent is required.
             conn.execute("BEGIN IMMEDIATE")
             if conn.execute(
                 "SELECT 1 FROM source_files WHERE file_hash=?", (file_hash,)
             ).fetchone() is None:
                 raise KeyError(f"source file not committed: {file_hash}")
-            cur = conn.execute(
-                "INSERT INTO entity_bridge_runs(company_id,file_hash,status,block_count,created_at) VALUES (?,?,?,0,?)",
-                (company_id, file_hash, "running", created),
+            conn.execute(
+                """INSERT INTO entity_bridge_artifacts
+                   (artifact_id,run_id,company_id,file_hash,status,block_count,created_at)
+                   VALUES (?,?,?,?,?,?,?)""",
+                (artifact_id, run_id, company_id, file_hash, "running", 0, created),
             )
-            run_id = int(cur.lastrowid)
-            parent = conn.execute(
-                "SELECT id FROM entity_bridge_runs WHERE id=?", (run_id,)
-            ).fetchone()
-            if parent is None:
-                raise RuntimeError("entity bridge parent run was not persisted")
             for (index, block_type, content, page, span, classification,
                  relation, subject, reason, source, needs_review) in classified_blocks:
                 conn.execute(
                     """INSERT INTO entity_bridge_blocks
-                       (run_id,company_id,file_hash,block_index,block_type,content,source_page,source_span,
+                       (run_id,artifact_id,company_id,file_hash,block_index,block_type,content,source_page,source_span,
                        classification,relation,subject,reason,source,needs_review,status,created_at)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'pending',?)""",
-                    (run_id, company_id, file_hash, index, block_type, content, page, span,
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'pending',?)""",
+                    (run_id, artifact_id, company_id, file_hash, index, block_type, content, page, span,
                      classification, relation, subject, reason, source, needs_review, created),
                 )
             conn.execute(
-                "UPDATE entity_bridge_runs SET status='completed',block_count=?,completed_at=? WHERE id=?",
-                (len(classified_blocks), _now(), run_id),
+                """UPDATE entity_bridge_artifacts
+                   SET status='completed', block_count=?, completed_at=?
+                   WHERE artifact_id=?""",
+                (len(classified_blocks), _now(), artifact_id),
             )
             conn.commit()
-            row = conn.execute("SELECT * FROM entity_bridge_runs WHERE id=?", (run_id,)).fetchone()
-        return dict(row)
+        return {
+            "id": run_id,
+            "run_id": run_id,
+            "artifact_id": artifact_id,
+            "company_id": company_id,
+            "file_hash": file_hash,
+            "status": "completed",
+            "block_count": len(classified_blocks),
+            "created_at": created,
+        }
 
     def list(self, *, company_id: str, run_id: int | None = None) -> list[dict[str, Any]]:
         if not company_id:

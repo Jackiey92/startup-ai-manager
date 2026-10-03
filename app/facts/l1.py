@@ -89,9 +89,11 @@ class FactExtractionService:
 
     def _blocks(self, company_id: str, file_hash: str, bridge_run_id: int | None):
         sql = """SELECT b.*, f.original_name FROM entity_bridge_blocks b
-                 JOIN entity_bridge_runs r ON r.id=b.run_id
                  JOIN source_files f ON f.file_hash=b.file_hash
-                 WHERE b.company_id=? AND b.file_hash=? AND r.status='completed'
+                 WHERE b.company_id=? AND b.file_hash=?
+                   AND (NOT EXISTS (SELECT 1 FROM entity_bridge_runs r WHERE r.id=b.run_id)
+                        OR EXISTS (SELECT 1 FROM entity_bridge_runs r
+                                   WHERE r.id=b.run_id AND r.status='completed'))
                    AND (b.classification='self' OR
                         (b.classification='related' AND b.relation IN ('并表子公司','控股子公司','全资子公司','子公司')))"""
         params = [company_id, file_hash]
@@ -110,19 +112,35 @@ class FactExtractionService:
             raise ValueError("company_id must be injected by the host")
         blocks = self._blocks(company_id, file_hash, bridge_run_id)
         selected_run = bridge_run_id or (blocks[0]["run_id"] if blocks else None)
+        artifact_id = blocks[0].get("artifact_id") if blocks else None
         with connect(self.db_path) as conn:
             conn.execute("BEGIN IMMEDIATE")
+            legacy_parent_id = None
             if selected_run is not None:
+                artifact = conn.execute(
+                    """SELECT artifact_id FROM entity_bridge_artifacts
+                       WHERE run_id=? AND company_id=? AND file_hash=? AND status='completed'""",
+                    (selected_run, company_id, file_hash),
+                ).fetchone()
+                if artifact is not None:
+                    artifact_id = str(artifact["artifact_id"])
+                # New artifacts use a non-FK grouping token.  Preserve the
+                # legacy parent reference only when an old row genuinely
+                # exists; never manufacture a parent to satisfy a child FK.
                 parent = conn.execute(
-                    """SELECT 1 FROM entity_bridge_runs
+                    """SELECT id FROM entity_bridge_runs
                        WHERE id=? AND company_id=? AND file_hash=? AND status='completed'""",
                     (selected_run, company_id, file_hash),
                 ).fetchone()
-                if parent is None:
-                    raise KeyError(f"completed entity bridge run not committed: {selected_run}")
+                if parent is not None:
+                    legacy_parent_id = int(parent["id"])
+                elif artifact is None and not blocks:
+                    raise KeyError(f"bridge artifact not committed: {selected_run}")
             cur = conn.execute(
-                "INSERT INTO fact_runs(company_id,file_hash,bridge_run_id,status,created_at) VALUES (?,?,?,?,?)",
-                (company_id, file_hash, selected_run, "running", _now()),
+                """INSERT INTO fact_runs
+                   (company_id,file_hash,bridge_run_id,bridge_artifact_id,status,created_at)
+                   VALUES (?,?,?,?,?,?)""",
+                (company_id, file_hash, legacy_parent_id, artifact_id, "running", _now()),
             )
             run_id = int(cur.lastrowid)
             filename = blocks[0].get("original_name", "") if blocks else ""

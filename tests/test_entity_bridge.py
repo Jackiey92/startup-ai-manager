@@ -107,9 +107,8 @@ def test_bridge_requires_employee_or_explicit_compatibility_model(tmp_path: Path
 def test_concurrent_attribution_and_fact_writes_commit_parent_before_children(tmp_path: Path):
     """Exercise the same four-worker SQLite path as the parse queue.
 
-    The attribution run and its immutable blocks must never be split across
-    connections: every child must see its committed run and source parent.
-    The subsequent fact run has the same dependency on the bridge parent.
+    Each employee/file artifact is independent: no child needs a shared
+    bridge-run parent, while every row still references its source parent.
     """
     db = tmp_path / "concurrent.db"
     init_db(db)
@@ -146,13 +145,19 @@ def test_concurrent_attribution_and_fact_writes_commit_parent_before_children(tm
         results = list(executor.map(process, range(4)))
 
     with connect(db) as conn:
-        assert conn.execute("SELECT COUNT(*) FROM entity_bridge_runs").fetchone()[0] == 4
+        assert conn.execute("SELECT COUNT(*) FROM entity_bridge_runs").fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM entity_bridge_artifacts").fetchone()[0] == 4
         assert conn.execute("SELECT COUNT(*) FROM entity_bridge_blocks").fetchone()[0] == 4
         assert conn.execute("SELECT COUNT(*) FROM fact_runs").fetchone()[0] == 4
         assert conn.execute(
             """SELECT COUNT(*) FROM entity_bridge_blocks b
-               JOIN entity_bridge_runs r ON r.id=b.run_id
                JOIN source_files s ON s.file_hash=b.file_hash"""
+        ).fetchone()[0] == 4
+        assert conn.execute(
+            "SELECT COUNT(DISTINCT artifact_id) FROM entity_bridge_blocks"
+        ).fetchone()[0] == 4
+        assert conn.execute(
+            "SELECT COUNT(*) FROM fact_runs WHERE bridge_artifact_id IS NOT NULL"
         ).fetchone()[0] == 4
         assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
     assert len({item[0] for item in results}) == 4

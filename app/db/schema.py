@@ -186,9 +186,27 @@ CREATE TABLE IF NOT EXISTS entity_bridge_runs (
 CREATE INDEX IF NOT EXISTS idx_entity_bridge_runs_company
     ON entity_bridge_runs(company_id, created_at DESC, id DESC);
 
+-- Independent per employee/file attribution artifact. This is deliberately
+-- not a child of entity_bridge_runs; its only evidence FK is source_files.
+CREATE TABLE IF NOT EXISTS entity_bridge_artifacts (
+    artifact_id  TEXT PRIMARY KEY,
+    run_id       INTEGER NOT NULL UNIQUE,
+    company_id   TEXT NOT NULL,
+    file_hash    TEXT NOT NULL REFERENCES source_files(file_hash),
+    status       TEXT NOT NULL DEFAULT 'completed',
+    block_count  INTEGER NOT NULL DEFAULT 0,
+    created_at   TEXT NOT NULL,
+    completed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_entity_bridge_artifacts_file
+    ON entity_bridge_artifacts(company_id, file_hash, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS entity_bridge_blocks (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
-    run_id         INTEGER NOT NULL REFERENCES entity_bridge_runs(id),
+    -- ``run_id`` is a compatibility grouping token only.  New writes do not
+    -- depend on the legacy entity_bridge_runs parent table.
+    run_id         INTEGER NOT NULL,
+    artifact_id    TEXT NOT NULL,
     company_id     TEXT NOT NULL,
     file_hash      TEXT NOT NULL REFERENCES source_files(file_hash),
     block_index    INTEGER NOT NULL,
@@ -218,6 +236,7 @@ CREATE TABLE IF NOT EXISTS fact_runs (
     company_id      TEXT NOT NULL,
     file_hash       TEXT NOT NULL REFERENCES source_files(file_hash),
     bridge_run_id   INTEGER REFERENCES entity_bridge_runs(id),
+    bridge_artifact_id TEXT,
     status          TEXT NOT NULL DEFAULT 'completed',
     candidate_count INTEGER NOT NULL DEFAULT 0,
     fact_count      INTEGER NOT NULL DEFAULT 0,

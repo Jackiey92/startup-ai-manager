@@ -130,6 +130,12 @@ def _migrate_facts(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE facts ADD COLUMN period TEXT NOT NULL DEFAULT 'unspecified'")
     if "confirm_mode" not in columns:
         conn.execute("ALTER TABLE facts ADD COLUMN confirm_mode TEXT NOT NULL DEFAULT 'manual'")
+    fact_run_columns = {
+        str(row["name"])
+        for row in conn.execute("PRAGMA table_info(fact_runs)").fetchall()
+    }
+    if fact_run_columns and "bridge_artifact_id" not in fact_run_columns:
+        conn.execute("ALTER TABLE fact_runs ADD COLUMN bridge_artifact_id TEXT")
 
 
 def _migrate_todos(conn: sqlite3.Connection) -> None:
@@ -189,28 +195,46 @@ def _migrate_entity_roster(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_entity_bridge(conn: sqlite3.Connection) -> None:
-    """Add audit fields to an existing 2.1.a bridge table."""
+    """Migrate bridge rows to independent per-file employee artifacts.
+
+    The old table made every immutable block depend on a shared
+    ``entity_bridge_runs`` parent.  That parent ordering was unnecessary for
+    attribution and exposed concurrent workers to FK failures.  Keep the
+    historical table for reads, but remove only that parent dependency; the
+    source-file FK remains the immutable evidence guard.
+    """
     columns = {str(row["name"]) for row in conn.execute("PRAGMA table_info(entity_bridge_blocks)").fetchall()}
     if not columns:
         return
-    if "reason" not in columns:
-        conn.execute("ALTER TABLE entity_bridge_blocks ADD COLUMN reason TEXT")
-    if "source" not in columns:
-        conn.execute("ALTER TABLE entity_bridge_blocks ADD COLUMN source TEXT NOT NULL DEFAULT 'deterministic'")
     definition = conn.execute(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='entity_bridge_blocks'"
     ).fetchone()
-    if definition and "'employee'" not in str(definition[0]):
-        # SQLite cannot alter a CHECK constraint. Rebuild only this bridge
-        # audit table so employee provenance is representable for existing
-        # databases; the immutable source objects and R1 tables are untouched.
+    foreign_keys = conn.execute("PRAGMA foreign_key_list(entity_bridge_blocks)").fetchall()
+    has_run_parent = any(str(row["table"]) == "entity_bridge_runs" for row in foreign_keys)
+    needs_rebuild = (
+        definition is not None
+        and (
+            "'employee'" not in str(definition[0])
+            or has_run_parent
+            or "artifact_id" not in columns
+            or "reason" not in columns
+            or "source" not in columns
+        )
+    )
+    if needs_rebuild:
+        # SQLite cannot alter CHECK/FK constraints. Rebuild only this bridge
+        # audit table; source_files and all R1 tables remain untouched.
         conn.execute("DROP INDEX IF EXISTS idx_entity_bridge_blocks_run")
         conn.execute("DROP INDEX IF EXISTS idx_entity_bridge_blocks_review")
+        artifact_expr = "artifact_id" if "artifact_id" in columns else "CAST(run_id AS TEXT)"
+        reason_expr = "reason" if "reason" in columns else "NULL"
+        source_expr = "source" if "source" in columns else "'deterministic'"
         conn.executescript(
-            """
+            f"""
             CREATE TABLE entity_bridge_blocks_new (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                run_id INTEGER NOT NULL REFERENCES entity_bridge_runs(id),
+                run_id INTEGER NOT NULL,
+                artifact_id TEXT NOT NULL,
                 company_id TEXT NOT NULL,
                 file_hash TEXT NOT NULL REFERENCES source_files(file_hash),
                 block_index INTEGER NOT NULL,
@@ -230,10 +254,10 @@ def _migrate_entity_bridge(conn: sqlite3.Connection) -> None:
                 created_at TEXT NOT NULL
             );
             INSERT INTO entity_bridge_blocks_new
-                (id,run_id,company_id,file_hash,block_index,block_type,content,source_page,source_span,
+                (id,run_id,artifact_id,company_id,file_hash,block_index,block_type,content,source_page,source_span,
                  classification,relation,subject,reason,source,needs_review,decision,status,created_at)
-            SELECT id,run_id,company_id,file_hash,block_index,block_type,content,source_page,source_span,
-                   classification,relation,subject,reason,source,needs_review,decision,status,created_at
+            SELECT id,run_id,{artifact_expr},company_id,file_hash,block_index,block_type,content,source_page,source_span,
+                   classification,relation,subject,{reason_expr},{source_expr},needs_review,decision,status,created_at
             FROM entity_bridge_blocks;
             DROP TABLE entity_bridge_blocks;
             ALTER TABLE entity_bridge_blocks_new RENAME TO entity_bridge_blocks;
