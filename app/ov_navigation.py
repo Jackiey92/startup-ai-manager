@@ -32,7 +32,7 @@ def verify_narrative_item(item: dict[str, Any], blocks: list[dict[str, Any]]) ->
                                  "span": block.get("source_span"), "quote": str(item.get("quote")).strip()}}
     return None
 
-class NarrativeFolderService:
+class OVNavigationService:
     """Render folder navigation directly into OV; SQLite is not a prose store."""
     def __init__(self, db_path, memory: MemoryProvider | None = None, *, root: str = MEMORY_ROOT):
         self.db_path = db_path

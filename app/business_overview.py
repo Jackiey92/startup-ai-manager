@@ -13,7 +13,7 @@ import sqlite3
 from typing import Any, Iterable
 
 from .db.database import connect
-from .ports import MemoryProvider, LocalMemoryProvider
+from .ports import MemoryProvider, LocalMemoryProvider, MemoryUnavailable
 from .memory_paths import MEMORY_ROOT
 
 
@@ -433,7 +433,7 @@ class BusinessOverviewService:
         query_prefix = "viking://" if isinstance(self.memory, LocalMemoryProvider) else prefix
         try:
             items = self.memory.query(prefix=query_prefix)
-        except (FileNotFoundError, OSError):
+        except (FileNotFoundError, MemoryUnavailable, OSError):
             return []
         for item in items:
             uri = str(item.get("uri", ""))
@@ -487,7 +487,7 @@ class BusinessOverviewService:
                 "products": [], "product_line_count": None, "max_trl": None,
                 "invention_patent_count": None, "software_copyright_count": None,
                 "business_model": None, "positioning": None, "summary": None,
-                "insight": None, "source_files": [], "narrative_folders": narratives,
+                "insight": None, "source_files": [], "narrative_documents": narratives,
             }
         manifests = self.manifests(company_id=company_id)
         extracted = [extract_business_overview(manifest) for manifest in manifests]

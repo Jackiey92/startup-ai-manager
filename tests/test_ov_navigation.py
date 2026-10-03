@@ -2,7 +2,7 @@ from pathlib import Path
 from app.db import init_db
 from app.entities import EntityBridgeService, EntityRosterService
 from app.harness.staging import StagingStore
-from app.narratives import NarrativeFolderService, verify_narrative_item
+from app.ov_navigation import OVNavigationService, verify_narrative_item
 from app.storage import SourceFileStore
 
 class FakeWorker:
@@ -25,7 +25,7 @@ def items(): return [
  {'entity':'常州未蓝新能源有限公司','category':'供应链与运营','kind':'fact','content':'子公司负责电池材料供应。','quote':'常州未蓝新能源有限公司负责电池材料供应'}]
 
 def test_folder_documents_are_entity_scoped_idempotent(tmp_path):
- db,stored,run=setup(tmp_path); svc=NarrativeFolderService(db); worker=FakeWorker(items())
+ db,stored,run=setup(tmp_path); svc=OVNavigationService(db); worker=FakeWorker(items())
  first=svc.rebuild(company_id='acme',file_hash=stored.file_hash,bridge_run_id=run['id'],worker=worker); svc.rebuild(company_id='acme',file_hash=stored.file_hash,bridge_run_id=run['id'],worker=worker)
  rows=svc.list(company_id='acme'); assert len(rows)==4 and first['item_count']==5
  tech=[r for r in rows if r['folder']=='技术与产品'][0]; assert '低温烧结' in tech['l1_overview'] and tech['citations'][0]['quote']
@@ -34,6 +34,6 @@ def test_folder_documents_are_entity_scoped_idempotent(tmp_path):
  assert '（观点·公司自称）' in svc.list(company_id='acme',folder='其他')[0]['l1_overview']
 
 def test_bad_quote_entity_or_unmarked_plan_is_rejected(tmp_path):
- db,stored,run=setup(tmp_path); blocks=NarrativeFolderService(db)._blocks('acme',stored.file_hash,run['id'])
+ db,stored,run=setup(tmp_path); blocks=OVNavigationService(db)._blocks('acme',stored.file_hash,run['id'])
  bad=[{'entity':'未蓝科技有限公司','category':'技术原理','kind':'fact','content':'x','quote':'不存在'}, {'entity':'其他','category':'技术原理','kind':'fact','content':'x','quote':'采用低温烧结技术'}, {'entity':'未蓝科技有限公司','category':'其他','kind':'fact','content':'计划2025年营收','quote':'公司计划2025年营收做到1000万元'}]
  assert [verify_narrative_item(x,blocks) for x in bad]==[None,None,None]

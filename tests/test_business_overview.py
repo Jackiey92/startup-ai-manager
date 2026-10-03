@@ -102,8 +102,8 @@ def test_business_overview_reads_folder_navigation_from_ov(tmp_path: Path) -> No
     uri = f"{MEMORY_ROOT}/narratives/acme/Acme/技术与产品/L1/overview.md"
     memory.put(uri, "# L1 Overview\n\n[]\n\n- 技术证据", metadata={"layer": "L1"})
     result = BusinessOverviewService(tmp_path / "missing.db", memory).overview(company_id="acme")
-    assert result["narrative_folders"][0]["abstract_uri"].endswith("/L0/abstract.md")
-    assert "技术证据" in result["narrative_folders"][0]["overview"]
+    assert result["narrative_documents"][0]["abstract_uri"].endswith("/L0/abstract.md")
+    assert "技术证据" in result["narrative_documents"][0]["overview"]
 
 
 def test_business_overview_page_is_empty_before_first_parse(tmp_path: Path, monkeypatch) -> None:
