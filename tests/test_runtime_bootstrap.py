@@ -47,6 +47,13 @@ def test_prepare_runtime_mounts_plugin_and_writes_fresh_9_6_shape(tmp_path: Path
         "sam_document_ingest",
     }
     assert "sam_promote" not in config["tools"]["allow"]
+    assert config["tools"]["toolSearch"] == {
+        "enabled": True,
+        "mode": "tools",
+        "searchDefaultLimit": 5,
+        "maxSearchLimit": 10,
+    }
+    assert config["tools"]["codeMode"]["enabled"] is False
     assert config["agents"]["defaults"]["models"]["token-plan/${SAM_LEADER_MODEL}"]["params"]["enable_thinking"] is False
 
 

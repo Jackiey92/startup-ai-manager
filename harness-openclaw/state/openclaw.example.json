@@ -49,7 +49,14 @@
       "sam_thread_list",
       "sam_thread_open",
       "sam_document_ingest"
-    ]
+    ],
+    "toolSearch": {
+      "enabled": true,
+      "mode": "tools",
+      "searchDefaultLimit": 5,
+      "maxSearchLimit": 10
+    },
+    "codeMode": { "enabled": false }
   },
   "models": {
     "mode": "merge",
