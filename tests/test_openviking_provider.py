@@ -97,6 +97,30 @@ def test_async_resource_processing_polls_until_ready_without_resubmitting(tmp_pa
     assert [command[1] for command in calls] == ["add-resource", "stat", "stat"]
 
 
+def test_add_resource_without_uri_polls_deterministic_child_not_parent(tmp_path):
+    source = tmp_path / "report.md"
+    source.write_text("中文正文", encoding="utf-8")
+    calls = []
+    responses = [
+        (0, json.dumps({"ok": True}), ""),
+        (0, json.dumps({"status": "ready", "overview_ready": True, "abstract_ready": True}), ""),
+    ]
+
+    def runner(command, **kwargs):
+        calls.append(command)
+        response = responses.pop(0)
+        return subprocess.CompletedProcess(command, response[0], response[1], response[2])
+
+    provider = OpenVikingMemoryProvider(runner=runner)
+    result = provider.add_resource(str(source), parent="viking://resources/财务", wait=False)
+    assert "uri" not in result
+    target = "viking://resources/财务/report.md"
+    provider.wait_for_resource(target, timeout=2, interval=0)
+    assert calls[0][1] == "add-resource"
+    assert calls[1][1:3] == ["stat", target]
+    assert all(command[2] != "viking://resources" for command in calls[1:])
+
+
 def test_openviking_provider_rejects_failed_transport():
     runner = fake_runner_factory([(1, "", "connection refused")])
     provider = OpenVikingMemoryProvider(runner=runner)

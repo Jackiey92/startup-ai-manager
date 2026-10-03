@@ -23,7 +23,7 @@ from app.db.database import init_db as init_core_db
 from app.classifier import ClassificationService
 from app.facts import ConsolidationService, FactExtractionService
 from app.ov_navigation import OVNavigationService
-from app.entities import EntityBridgeService
+from app.entities import EntityBridgeService, EntityRosterService
 from app.guidance import GuideJobCoordinator, ImportGuideService, ModelUnavailable
 from app.harness.staging import StagingStore
 from app.memory import ExtractionMemoryService, add_parsed_resource
@@ -98,6 +98,12 @@ def dashboard_preferences() -> DashboardPreferenceStore:
 def init_db() -> None:
     """Initialize the canonical source/fact/classification ledger only."""
     init_core_db(MAIN_DB)
+
+
+def _has_declared_self(company_id: str) -> bool:
+    """Require an explicit host identity before content attribution begins."""
+    rows = EntityRosterService(MAIN_DB).list(company_id=company_id, status="active")
+    return any(row.get("origin") == "declared" and row.get("entity_type") == "self" for row in rows)
 
 
 # Ensure the durable queue table exists for both the Flask entry point and the
@@ -199,6 +205,8 @@ def _parse_job_worker(job: dict, progress, cancel_event) -> None:
     fact_service: FactExtractionService | None = None
     prepared_facts = None
     try:
+        if not _has_declared_self(job["company_id"]):
+            raise ValueError("请先登记本公司名称")
         progress(stage="parsing", message="正在解析文档")
         # Cancellation can arrive while the worker is transitioning from
         # engine setup to the private bridge.  Re-check immediately before
@@ -237,14 +245,15 @@ def _parse_job_worker(job: dict, progress, cancel_event) -> None:
             # OV's local runtime does not parse PDF bytes.  Preserve the
             # immutable PDF in SAM's object store, but ingest MinerU's parsed
             # page markdown so OV can build L2/L1/L0 navigation.
-            resource_result = add_parsed_resource(
+            resource_result, resource_uri = add_parsed_resource(
                 extraction.memory, payload,
                 parent=f"viking://resources/{extraction.classify_folder(payload, skills_root=RUNTIME_CONFIG.skill_root)}",
+                resource_name=f"{payload.get('source_id') or job['file_hash']}.md",
             )
             wait_for_resource = getattr(extraction.memory, "wait_for_resource", None)
             if wait_for_resource is not None:
                 wait_for_resource(
-                    str(resource_result.get("uri") if isinstance(resource_result, dict) else "viking://resources"),
+                    resource_uri,
                     timeout=600,
                     interval=2.0,
                 )
@@ -482,6 +491,26 @@ def files_page():
     return render_template("files.html", **_page_context(company_id=_company_id()))
 
 
+@app.route("/api/entity-roster", methods=["GET", "POST"])
+def api_entity_roster():
+    """Read or explicitly register the authenticated company's own name."""
+    company_id = _company_id()
+    service = EntityRosterService(MAIN_DB)
+    if request.method == "GET":
+        return {"company_id": company_id, "entities": service.list(company_id=company_id)}
+    payload = request.get_json(silent=True) or {}
+    entity_name = payload.get("entity_name")
+    aliases = payload.get("aliases", [])
+    if not isinstance(entity_name, str) or not entity_name.strip():
+        return {"error": "entity_name is required", "message": "请填写本公司全称"}, 400
+    if isinstance(aliases, str):
+        aliases = [item.strip() for item in aliases.replace("，", ",").split(",") if item.strip()]
+    if not isinstance(aliases, list) or not all(isinstance(item, str) for item in aliases):
+        return {"error": "aliases must be a list of strings"}, 400
+    row = service.declare(company_id=company_id, entity_name=entity_name, aliases=aliases)
+    return {"company_id": company_id, "entity": row}, 201
+
+
 @app.route("/inbox")
 def inbox_page():
     """Upload handoff queue; parsing itself remains in the worker pool."""
@@ -624,6 +653,9 @@ def api_upload():
     """Store an immutable original and enqueue parsing without blocking HTTP."""
     if request.method == "OPTIONS":
         return ("", 204)
+    company_id = str(request.form.get("company_id") or os.environ.get("SAM_COMPANY_ID", "default"))
+    if not _has_declared_self(company_id):
+        return {"error": "company_not_registered", "message": "请先登记本公司名称"}, 409
     upload = request.files.get("file")
     if upload is None or not upload.filename:
         return {"error": "no file"}, 400
@@ -649,7 +681,6 @@ def api_upload():
         harness_format = "docx" if upload.filename.lower().endswith(".docx") else "doc"
     else:
         harness_format = file_format
-    company_id = str(request.form.get("company_id") or os.environ.get("SAM_COMPANY_ID", "default"))
     job = _PARSE_MANAGER.create(
         company_id=company_id, file_hash=stored.file_hash,
         original_name=upload.filename, file_format=file_format,

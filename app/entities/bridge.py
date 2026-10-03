@@ -122,6 +122,28 @@ def classify_block(content: str, roster: list[dict[str, Any]]) -> tuple[str, str
     return "ambiguous", None, None
 
 
+def _split_entity_sections(content: str, roster: list[dict[str, Any]]) -> list[str]:
+    """Split a prose line when parent metrics precede subsidiary metrics.
+
+    MinerU commonly emits an entire bullet as one text item.  Treating the
+    line as one bridge block would assign the parent's values to the child
+    merely because the relationship phrase appears later in the sentence.
+    Coordinates remain attached to both derived sections; no source text is
+    discarded or rewritten.
+    """
+    text = str(content or "")
+    relation_positions = [text.find(term) for term in _SUBSIDIARY_RELATIONS if text.find(term) > 0]
+    if not relation_positions:
+        return [text]
+    cut = min(relation_positions)
+    before, after = text[:cut].strip(), text[cut:].strip()
+    # Only split when the prefix already contains a numeric metric.  A plain
+    # relationship statement should remain one reviewable bridge block.
+    if not before or not re.search(r"\d", before):
+        return [text]
+    return [before, after]
+
+
 def _validate_model_result(result: Any) -> dict[str, Any]:
     if not isinstance(result, dict) or set(result) != {"label", "subject", "reason"}:
         raise ValueError("invalid model classification shape")
@@ -188,7 +210,11 @@ class EntityBridgeService:
                 (company_id, file_hash, "running", created),
             )
             run_id = int(cur.lastrowid)
-            for index, (block_type, content, page, span) in enumerate(raw_blocks):
+            expanded_blocks = []
+            for block_type, content, page, span in raw_blocks:
+                sections = _split_entity_sections(content, roster) if block_type == "text" else [content]
+                expanded_blocks.extend((block_type, section, page, span) for section in sections)
+            for index, (block_type, content, page, span) in enumerate(expanded_blocks):
                 classification, relation, subject = classify_block(content, roster)
                 reason = None
                 source = "deterministic"
@@ -216,7 +242,7 @@ class EntityBridgeService:
                 )
             conn.execute(
                 "UPDATE entity_bridge_runs SET status='completed',block_count=?,completed_at=? WHERE id=?",
-                (len(raw_blocks), _now(), run_id),
+                (len(expanded_blocks), _now(), run_id),
             )
             conn.commit()
             row = conn.execute("SELECT * FROM entity_bridge_runs WHERE id=?", (run_id,)).fetchone()

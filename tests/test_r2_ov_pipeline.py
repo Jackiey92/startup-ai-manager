@@ -27,13 +27,14 @@ def test_add_parsed_resource_sends_markdown_not_pdf_bytes():
         def add_resource(self, path, *, parent, wait):
             calls.append((Path(path).suffix, Path(path).read_text(encoding="utf-8"), parent, wait))
 
-    add_parsed_resource(Capture(), {
+    _result, target = add_parsed_resource(Capture(), {
         "source_id": "report", "filename": "report.pdf", "format": "pdf",
         "file_hash": "a" * 64, "parse_summary": {"raw_bytes_external": False, "full_text_external": False},
         "pages": [{"page_no": 1, "text_items": [{"text": "财务收入 3.26亿元"}], "tables": []}],
     }, parent="viking://resources/财务")
     assert calls and calls[0][0] == ".md" and not calls[0][1].startswith("%PDF")
     assert "财务收入" in calls[0][1] and calls[0][2] == "viking://resources/财务"
+    assert target == "viking://resources/财务/report.md"
 
 
 def test_r2_pipeline_imports_resource_and_verifies_finance_facts(tmp_path: Path):

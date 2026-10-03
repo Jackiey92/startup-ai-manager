@@ -2,6 +2,30 @@
 {% block crumb %}文件柜{% endblock %}
 {% block content %}
 <div class="page-head"><div><h1>文件柜</h1><p>按解析后的内容证据归类；未归类文件可人工修正。</p></div></div>
+<section class="card" aria-labelledby="company-registration-title">
+  <div class="card-head"><h2 id="company-registration-title">登记本公司</h2></div>
+  <p class="muted">上传前请先登记本公司全称；别名可选。</p>
+  <form id="entity-roster-form" class="filterbar">
+    <input name="entity_name" required placeholder="本公司全称" aria-label="本公司全称">
+    <input name="aliases" placeholder="别名（逗号分隔）" aria-label="本公司别名">
+    <button class="button primary" type="submit">保存登记</button>
+    <span id="entity-roster-message" class="muted" role="status"></span>
+  </form>
+</section>
 <div class="filterbar"><select id="file-module-filter"><option value="">全部模块</option><option value="finance">财务</option><option value="sales">销售</option><option value="marketing">市场</option><option value="hr">人员</option><option value="__none__">未归类</option></select><input id="file-filter" placeholder="筛选文件名" aria-label="筛选文件"></div>
 <div id="files-list">{% if files %}{% for file in files %}<article class="file-row" data-module="{{ file.module or '' }}"><div><a class="file-name" href="{{ url_for('detail', file_hash=file.file_hash) }}">{{ file.original_name }}</a><small class="hash">{{ file.file_hash }}</small></div><div><span class="badge {{ file.module or 'muted' }}">{{ module_labels.get(file.module, file.module or '未归类') }}</span></div><div>{{ file.basis or '—' }}</div><div>{{ '%.0f'|format((file.confidence or 0)*100) }}%</div><div class="file-actions"><button class="button small" data-file-confirm="{{ file.file_hash }}">标记已核对</button><button class="button small" data-file-classify="{{ file.file_hash }}">人工归类</button></div></article>{% endfor %}{% else %}<div class="empty">暂无已解析资料。</div>{% endif %}</div>
+<script>
+document.getElementById('entity-roster-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const message = document.getElementById('entity-roster-message');
+  const data = new FormData(form);
+  const response = await fetch('/api/entity-roster?company_id={{ company_id|urlencode }}', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({entity_name: data.get('entity_name'), aliases: String(data.get('aliases') || '').split(/[,，]/).map(s => s.trim()).filter(Boolean)})
+  });
+  const payload = await response.json();
+  message.textContent = response.ok ? '登记成功，可开始上传。' : (payload.message || payload.error || '登记失败');
+});
+</script>
 {% endblock %}
