@@ -309,10 +309,13 @@ def _parse_job_worker(job: dict, progress, cancel_event) -> None:
         # by the API.  No engine/model call is made in the critical section.
         critical_started = True
         progress(stage="consolidating", message="正在写入事实", critical=True)
-        fact_service.commit(prepared_facts)
+        fact_result = fact_service.commit(prepared_facts)
         prepared_facts = None
         progress(stage="consolidating", current=total or 0, total=total,
-                 message="事实写入完成", critical_end=True)
+                 message=(
+                     f"事实写入完成；{fact_result['unresolved_handoff']['count']} 个事实待经理处理"
+                     if fact_result.get("unresolved_handoff") else "事实写入完成"
+                 ), critical_end=True)
         try:
             MapBuilder(app.extensions["sam_memory_provider"]).rebuild_map(
                 job["company_id"], source_ids=(str(payload["source_id"]),)

@@ -3,7 +3,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import json
+import os
 import re
+import tempfile
+from pathlib import Path
 
 from ..db.database import connect
 from .consolidation import ConsolidationResult, ConsolidationService
@@ -31,12 +35,57 @@ def normalize_finance_text(text: str) -> str:
 class PreparedFactExtraction:
     run_id: int
     candidates: tuple[ExtractedFact, ...]
+    unresolved: tuple[dict, ...] = ()
 
 
 class FactExtractionService:
-    def __init__(self, db_path, *, authorizer=None):
+    def __init__(self, db_path, *, authorizer=None, handoff_root=None):
         self.db_path = db_path
         self.consolidation = ConsolidationService(db_path, authorizer=authorizer)
+        self.handoff_root = Path(handoff_root) if handoff_root else Path(db_path).parent / "runtime_outbox"
+
+    @staticmethod
+    def _unresolved_block(block: dict, *, reason: str, detail: str | None = None) -> dict:
+        """Build a manager handoff without inventing a metric or value."""
+        return {
+            "status": "unresolved",
+            "reason": reason,
+            "blocking": detail or "employee produced no verifiable finance conclusion",
+            "source": {
+                "file_hash": str(block.get("file_hash") or ""),
+                "page": block.get("source_page"),
+                "span": block.get("source_span"),
+                "text": str(block.get("content") or ""),
+                "entity": block.get("subject"),
+                "classification": block.get("classification"),
+            },
+        }
+
+    def _write_unresolved_handoff(self, prepared: PreparedFactExtraction) -> dict | None:
+        if not prepared.unresolved:
+            return None
+        file_hash = str(prepared.unresolved[0].get("source", {}).get("file_hash") or "unknown")
+        directory = self.handoff_root / "unresolved" / "finance_analyst"
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / f"{file_hash}.json"
+        payload = {
+            "contract_version": "phase3.v1",
+            "stage": "2b_facts",
+            "status": "unresolved",
+            "role": "finance_analyst",
+            "artifact_id": f"{file_hash}:fact-run:{prepared.run_id}:unresolved",
+            "source_file_hash": file_hash,
+            "path": f"runtime_outbox/unresolved/finance_analyst/{file_hash}.json",
+            "items": list(prepared.unresolved),
+        }
+        with tempfile.NamedTemporaryFile(
+            "w", encoding="utf-8", dir=directory, prefix=f".{file_hash}.", suffix=".tmp", delete=False,
+        ) as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+            temporary = handle.name
+        os.replace(temporary, path)
+        return {"path": payload["path"], "artifact_id": payload["artifact_id"], "count": len(prepared.unresolved)}
 
     def _blocks(self, company_id: str, file_hash: str, bridge_run_id: int | None):
         sql = """SELECT b.*, f.original_name FROM entity_bridge_blocks b
@@ -70,6 +119,7 @@ class FactExtractionService:
             filename = blocks[0].get("original_name", "") if blocks else ""
         period = _period({"filename": filename})
         candidates = []
+        unresolved: list[dict] = []
         employee = worker or (EmployeeRunner() if use_worker else None)
         for block in blocks:
             block_period = period_from_text(block.get("content", ""), period)
@@ -80,26 +130,30 @@ class FactExtractionService:
                     proposed = employee.run(skill="finance-fact-extraction", text=normalized_block["content"],
                                             company_id=company_id, thread_id=thread_id)
                     verified = verify_candidates(proposed, [normalized_block], company_id=company_id)
-                    # A healthy employee may return an empty/partial payload
-                    # (for example after a model timeout). Never let that
-                    # suppress the deterministic finance extractor.
                     candidates.extend(verified)
-                    # An employee can return candidates that are all rejected
-                    # by the provenance verifier (bad quote, unit, entity,
-                    # or period).  That is equivalent to an empty verified
-                    # result for the deterministic fallback; do not lose a
-                    # docx/text fact merely because the model answered.
                     if not verified:
-                        candidates.extend(extract_block_facts(
-                            normalized_block, company_id=company_id, period=block_period,
+                        unresolved.append(self._unresolved_block(
+                            block,
+                            reason="employee_empty" if not proposed else "employee_candidates_unverified",
+                            detail=("employee returned no candidates" if not proposed
+                                    else "employee candidates failed source verification"),
                         ))
                     continue
-                except WorkerUnavailable:
-                    pass
-                except Exception:
-                    pass
+                except WorkerUnavailable as exc:
+                    unresolved.append(self._unresolved_block(
+                        block, reason="employee_unavailable", detail=str(exc) or "employee unavailable",
+                    ))
+                    continue
+                except Exception as exc:
+                    unresolved.append(self._unresolved_block(
+                        block, reason="employee_error", detail=str(exc) or "employee failed",
+                    ))
+                    continue
+            # Explicit legacy/non-employee mode remains available for callers
+            # while it is being inventoried. It is not a fallback for the
+            # employee path and is not used by the upload worker.
             candidates.extend(extract_block_facts(normalized_block, company_id=company_id, period=block_period))
-        return PreparedFactExtraction(run_id=run_id, candidates=tuple(candidates))
+        return PreparedFactExtraction(run_id=run_id, candidates=tuple(candidates), unresolved=tuple(unresolved))
 
     def commit(self, prepared: PreparedFactExtraction) -> dict:
         """Apply a prepared batch in the short local-write critical section."""
@@ -113,7 +167,10 @@ class FactExtractionService:
             )
             conn.commit()
             row = conn.execute("SELECT * FROM fact_runs WHERE id=?", (prepared.run_id,)).fetchone()
-        return dict(row)
+        result = dict(row)
+        result["unresolved"] = list(prepared.unresolved)
+        result["unresolved_handoff"] = self._write_unresolved_handoff(prepared)
+        return result
 
     def abort(self, prepared: PreparedFactExtraction, *, status: str = "canceled") -> None:
         if status not in {"canceled", "failed"}:

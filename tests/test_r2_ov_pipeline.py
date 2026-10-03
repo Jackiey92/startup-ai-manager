@@ -64,8 +64,8 @@ def test_r2_pipeline_imports_resource_and_verifies_finance_facts(tmp_path: Path)
     })
     EntityRosterService(db).declare(company_id="acme", entity_name="主公司有限公司")
     bridge = EntityBridgeService(db).run(company_id="acme", file_hash=stored.file_hash)
-    # Empty employee output is the real degraded-model case; deterministic
-    # extraction must still produce verified operating facts.
+    # Empty employee output is an unresolved manager handoff; no code-side
+    # extractor is allowed to guess facts when the employee has no conclusion.
     class EmptyEmployee:
         def run(self, **_):
             return []
@@ -93,6 +93,7 @@ def test_r2_pipeline_imports_resource_and_verifies_finance_facts(tmp_path: Path)
     assert memory.read(f"viking://resources/{folder}/parsed.md").startswith("第1页")
     assert "概览已就绪" in memory.read(f"viking://resources/{folder}/overview.md")
     assert "OV_READY" in memory.read(f"viking://resources/{folder}/abstract.md")
-    assert run["fact_count"] >= 3
-    assert {item["attribute"] for item in facts} >= {"营业收入", "净利润", "研发投入"}
+    assert run["fact_count"] == 0
+    assert run["unresolved"]
+    assert facts == []
     assert not critical

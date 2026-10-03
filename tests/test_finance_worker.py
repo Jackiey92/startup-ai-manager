@@ -103,7 +103,7 @@ def test_worker_human_quote_without_machine_coordinates_is_backfilled(tmp_path: 
     )
 
 
-def test_worker_tampering_is_rejected_but_deterministic_facts_survive(tmp_path: Path):
+def test_worker_tampering_is_rejected_without_code_fallback(tmp_path: Path):
     for index, candidate in enumerate((
         _candidate(unit="万元"),
         _candidate(unit=None),
@@ -116,14 +116,13 @@ def test_worker_tampering_is_rejected_but_deterministic_facts_survive(tmp_path: 
         fake = _FakeEmployee([candidate])
         run = FactExtractionService(db).extract(company_id="acme", file_hash=stored.file_hash,
                                                 bridge_run_id=bridge["id"], use_worker=True, worker=fake)
-        facts = FactExtractionService(db).list_facts(company_id="acme")
-        assert run["fact_count"] == 2
-        assert {(fact["attribute"], fact["value"]) for fact in facts} == {
-            ("营业收入", "3.26"), ("净利润", "0.58"),
-        }
+        assert run["fact_count"] == 0
+        assert run["unresolved"] and run["unresolved_handoff"]["count"] == 1
+        assert run["unresolved"][0]["source"]["span"] == "page=1; locator=text/0"
+        assert FactExtractionService(db).list_facts(company_id="acme") == []
 
 
-def test_docx_falls_back_when_employee_candidates_fail_verification(tmp_path: Path):
+def test_docx_emits_unresolved_when_employee_candidates_fail_verification(tmp_path: Path):
     db = tmp_path / "app.db"
     init_db(db)
     store = SourceFileStore(tmp_path / "objects", db)
@@ -143,11 +142,18 @@ def test_docx_falls_back_when_employee_candidates_fail_verification(tmp_path: Pa
         company_id="acme", file_hash=stored.file_hash, bridge_run_id=bridge["id"],
         use_worker=True, worker=_FakeEmployee([invalid]),
     )
-    facts = FactExtractionService(db).list_facts(company_id="acme")
-    assert run["fact_count"] == 1
-    assert {(fact["attribute"], fact["value"], fact["period"]) for fact in facts} == {
-        ("营业收入", "3.26", "2024"),
+    assert run["fact_count"] == 0
+    assert run["unresolved"][0]["reason"] == "employee_candidates_unverified"
+    assert run["unresolved"][0]["source"] == {
+        "file_hash": stored.file_hash,
+        "page": 1,
+        "span": "page=1; locator=text/0",
+        "text": text,
+        "entity": "主公司有限公司",
+        "classification": "self",
     }
+    handoff = tmp_path / "runtime_outbox" / "unresolved" / "finance_analyst" / f"{stored.file_hash}.json"
+    assert handoff.exists()
 
 
 def test_worker_keeps_parent_and_subsidiary_entities_separate(tmp_path: Path):
