@@ -69,11 +69,8 @@ class ExtractionMemoryService:
         manifest_content = json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
         self.memory.put(l2_manifest_uri, manifest_content, metadata={"layer": "2a", "level": "L2", "source_id": source_id})
         self.memory.put(l2_document_uri, document_markdown or self._markdown(manifest), metadata={"layer": "2a", "level": "L2", "kind": "mapping", "source_id": source_id})
-        references = f"- L2 manifest: `{l2_manifest_uri}`\n- L2 extraction: `{l2_document_uri}`\n"
-        l1 = f"# L1 Overview\n\nGenerated: {_now()}\n\nThis overview contains references only; facts remain in L2 until verified.\n\n{references}"
-        l0 = f"# L0 Abstract\n\nGenerated: {_now()}\n\nSource: `{l1_uri}`\n\nEvidence remains at:\n{references}"
-        self.memory.put(l1_uri, l1, metadata={"layer": "2a", "level": "L1", "source_id": source_id})
-        self.memory.put(l0_uri, l0, metadata={"layer": "2a", "level": "L0", "source_id": source_id})
+        # L1/L0 are OV-generated folder navigation documents.  SAM retains
+        # only these URI routes here; it must never duplicate their正文.
         return ExtractionRecord(source_id, l2_manifest_uri, l2_document_uri, l1_uri, l0_uri)
 
     def classify_folder(self, manifest: dict[str, Any], *, skills_root: str = "skills") -> str:

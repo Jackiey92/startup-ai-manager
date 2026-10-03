@@ -88,7 +88,7 @@ def consolidation_service() -> ConsolidationService:
 
 def business_overview_service() -> BusinessOverviewService:
     """Read-only deterministic business profile extracted from parsed L2."""
-    return BusinessOverviewService(MAIN_DB)
+    return BusinessOverviewService(MAIN_DB, app.extensions["sam_memory_provider"])
 
 
 def dashboard_preferences() -> DashboardPreferenceStore:

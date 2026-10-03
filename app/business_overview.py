@@ -13,6 +13,8 @@ import sqlite3
 from typing import Any, Iterable
 
 from .db.database import connect
+from .ports import MemoryProvider, LocalMemoryProvider
+from .memory_paths import MEMORY_ROOT
 
 
 # The UI consumes this mapping; keeping it here prevents stage wording from
@@ -418,8 +420,30 @@ def extract_business_overview(manifest: dict[str, Any]) -> dict[str, Any]:
 class BusinessOverviewService:
     """Read parsed manifests scoped to one company and merge evidence."""
 
-    def __init__(self, db_path):
+    def __init__(self, db_path, memory: MemoryProvider | None = None):
         self.db_path = db_path
+        self.memory = memory
+
+    def narrative_documents(self, *, company_id: str) -> list[dict[str, Any]]:
+        """Read current L1/L0 navigation from OV; no local prose cache."""
+        if self.memory is None:
+            return []
+        prefix = f"{MEMORY_ROOT}/narratives/{company_id}"
+        result = []
+        query_prefix = "viking://" if isinstance(self.memory, LocalMemoryProvider) else prefix
+        try:
+            items = self.memory.query(prefix=query_prefix)
+        except (FileNotFoundError, OSError):
+            return []
+        for item in items:
+            uri = str(item.get("uri", ""))
+            if not uri.endswith("/L1/overview.md"):
+                continue
+            content = str(item.get("content", ""))
+            parts = content.split("\n\n", 2)
+            result.append({"uri": uri, "abstract_uri": uri.replace("/L1/overview.md", "/L0/abstract.md"),
+                           "overview": parts[-1] if parts else "", "content": content})
+        return result
 
     def manifests(self, *, company_id: str) -> list[dict[str, Any]]:
         try:
@@ -457,6 +481,14 @@ class BusinessOverviewService:
         return manifests
 
     def overview(self, *, company_id: str) -> dict[str, Any]:
+        narratives = self.narrative_documents(company_id=company_id)
+        if narratives:
+            return {
+                "products": [], "product_line_count": None, "max_trl": None,
+                "invention_patent_count": None, "software_copyright_count": None,
+                "business_model": None, "positioning": None, "summary": None,
+                "insight": None, "source_files": [], "narrative_folders": narratives,
+            }
         manifests = self.manifests(company_id=company_id)
         extracted = [extract_business_overview(manifest) for manifest in manifests]
         products: list[dict[str, Any]] = []

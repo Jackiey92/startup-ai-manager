@@ -1,4 +1,5 @@
 import json
+import pytest
 
 from app.memory.extraction import ConflictScanner, ExtractionMemoryService
 from app.ports import LocalMemoryProvider
@@ -28,13 +29,15 @@ def manifest(source_id="pdf-1", candidate_facts=None):
     }
 
 
-def test_2a_writes_l2_l1_l0_and_references(tmp_path):
+def test_2a_writes_l2_and_keeps_l1_l0_as_routes(tmp_path):
     memory = LocalMemoryProvider(tmp_path)
     record = ExtractionMemoryService(memory).ingest("acme", manifest())
 
     assert json.loads(memory.read(record.l2_manifest_uri))["source_id"] == "pdf-1"
-    assert "L2 manifest" in memory.read(record.l1_uri)
-    assert record.l2_document_uri in memory.read(record.l0_uri)
+    with pytest.raises(FileNotFoundError):
+        memory.read(record.l1_uri)
+    with pytest.raises(FileNotFoundError):
+        memory.read(record.l0_uri)
     assert memory.get_2b("acme", "cash") is None
 
 
