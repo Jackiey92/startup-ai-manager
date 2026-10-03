@@ -17,7 +17,6 @@ sys.path.insert(0, str(ROOT))
 from app.db import init_db
 from app.entities import EntityBridgeService, EntityRosterService
 from app.facts import FactExtractionService
-from app.narratives import NarrativeFolderService
 from app.runtime_config import RuntimeConfig
 from app.source_map import SourceMapService
 
@@ -82,12 +81,6 @@ def _parser() -> argparse.ArgumentParser:
     decide_fact.add_argument("todo_id", type=int)
     decide_fact.add_argument("choose", help="candidate, existing, or an explicit value")
     decide_fact.add_argument("--confirm", action="store_true", help="confirm the fact decision")
-    narratives = sub.add_parser("narratives", help="R2 folder-level L1/L0 documents")
-    narratives.add_argument("--company-id", dest="narrative_company_id", help="host-injected company scope")
-    narratives_sub = narratives.add_subparsers(dest="narrative_command", required=True)
-    narratives_list = narratives_sub.add_parser("list")
-    narratives_list.add_argument("--entity")
-    narratives_list.add_argument("--folder")
     return parser
 
 
@@ -97,11 +90,7 @@ def main(argv: list[str] | None = None) -> int:
     config = RuntimeConfig.from_env(project_root=ROOT)
     service = SourceMapService(config.main_db, objects_path=config.objects_dir)
     try:
-        if args.command == "narratives":
-            company_id = getattr(args, "narrative_company_id", None) or args.company_id
-            if not company_id: raise ValueError("company_id must be injected by the host")
-            result = NarrativeFolderService(config.main_db).list(company_id=company_id, entity=args.entity, folder=args.folder)
-        elif args.command == "facts":
+        if args.command == "facts":
             company_id = getattr(args, "facts_company_id", None) or args.company_id
             if not company_id:
                 raise ValueError("company_id must be injected by the host")

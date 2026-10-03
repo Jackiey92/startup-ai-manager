@@ -29,7 +29,6 @@ def init_db(db_path: Path = DEFAULT_DB_PATH) -> None:
         _migrate_todos(conn)
         _migrate_entity_roster(conn)
         _migrate_entity_bridge(conn)
-        _retire_atomic_prose_facts(conn)
         conn.executescript(SCHEMA)
         conn.executemany(
             "INSERT OR IGNORE INTO modules(code,name,sort_order) VALUES (?,?,?)",
@@ -193,13 +192,6 @@ def _migrate_entity_bridge(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE entity_bridge_blocks ADD COLUMN reason TEXT")
     if "source" not in columns:
         conn.execute("ALTER TABLE entity_bridge_blocks ADD COLUMN source TEXT NOT NULL DEFAULT 'deterministic'")
-
-
-def _retire_atomic_prose_facts(conn: sqlite3.Connection) -> None:
-    """Remove the unshipped R2 atomic store; L1/L0 are folder documents."""
-    exists = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='prose_facts'").fetchone()
-    if exists:
-        conn.execute("DROP TABLE prose_facts")
 
 
 if __name__ == "__main__":
