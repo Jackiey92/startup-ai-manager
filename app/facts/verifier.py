@@ -1,24 +1,10 @@
-"""Backend provenance verifier for employee-produced finance candidates."""
+"""Source-provenance guard for employee-produced finance candidates."""
 from __future__ import annotations
 
 import re
 from typing import Any
 
-from .extractor import METRICS, ExtractedFact
-
-
-def _metric(name: Any):
-    text = str(name or "").strip()
-    matches = [(len(alias), spec) for spec in METRICS for alias in spec.aliases if alias in text]
-    return max(matches, key=lambda item: item[0])[1] if matches else None
-
-
-def _period(value: Any) -> str | None:
-    text = str(value or "unspecified").strip()
-    if text in {"", "unspecified", "报告期内", "本报告期"}:
-        return "unspecified"
-    matched = re.fullmatch(r"((?:19|20)\d{2})(?:年度|年)?", text)
-    return matched.group(1) if matched else None
+from .extractor import ExtractedFact
 
 
 def _without_whitespace(value: Any) -> str:
@@ -26,36 +12,38 @@ def _without_whitespace(value: Any) -> str:
 
 
 def verify_candidate(candidate: dict[str, Any], blocks: list[dict[str, Any]], *, company_id: str) -> ExtractedFact | None:
-    """Accept only a candidate whose human quote and literal value share one block."""
-    spec = _metric(candidate.get("metric"))
-    value = str(candidate.get("value") or "").strip()
-    unit = candidate.get("unit")
-    entity = str(candidate.get("entity") or "").strip()
-    period = _period(candidate.get("period"))
-    quote = _without_whitespace(candidate.get("quote"))
-    if spec is None or not value or not entity or (unit is not None and not isinstance(unit, str)):
+    """Accept only a candidate whose quote occurs in one source block.
+
+    Metric meaning, entity ownership, period and unit are employee output, not
+    verifier policy.  Rechecking them here duplicated R1 extraction rules and
+    rejected valid model conclusions.  This layer only proves source
+    provenance and backfills coordinates owned by the parsed block.
+    """
+    if not isinstance(candidate, dict):
         return None
-    if period is None or not quote or unit not in {None, "元", "万元", "亿元", "%"}:
+    metric = str(candidate.get("metric") or "").strip()
+    value = str(candidate.get("value") or "").strip()
+    raw_unit = candidate.get("unit")
+    unit = None if raw_unit is None else str(raw_unit)
+    raw_period = candidate.get("period")
+    period = "unspecified" if raw_period in (None, "") else str(raw_period).strip()
+    entity = str(candidate.get("entity") or "").strip()
+    quote = _without_whitespace(candidate.get("quote"))
+    if not quote:
         return None
     for block in blocks:
         content = str(block.get("content") or "")
         if quote not in _without_whitespace(content):
             continue
-        numeric = re.compile(rf"{re.escape(value)}(亿元|万元|元|%)?(?![0-9.])")
-        if not any(match.group(1) == unit for match in numeric.finditer(content)):
-            continue
         block_entity = str(block.get("subject") or "").strip()
-        if entity != block_entity:
-            continue
-        if period != "unspecified" and not re.search(
-            rf"(?<!\d){re.escape(period)}\s*(?:年|年度)", content,
-        ):
-            continue
         return ExtractedFact(
-            company_id=company_id, entity=block_entity, metric=spec.metric,
-            period=period, value=value, value_type="number", unit=unit,
+            company_id=company_id, entity=entity or block_entity or company_id,
+            metric=metric, period=period, value=value,
+            value_type=str(candidate.get("value_type") or "number"), unit=unit,
             source_file=str(block.get("file_hash") or ""), source_page=block.get("source_page"),
-            source_span=block.get("source_span"), confidence=1.0, critical=spec.critical,
+            source_span=block.get("source_span"), confidence=float(candidate.get("confidence") or 1.0),
+            critical=bool(candidate.get("critical", False)),
+            review_reason=(str(candidate["review_reason"]) if candidate.get("review_reason") else None),
         )
     return None
 

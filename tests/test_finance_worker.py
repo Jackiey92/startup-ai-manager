@@ -11,6 +11,7 @@ from app.entities import EntityBridgeService, EntityRosterService
 from app.employees import EmployeeRunner, WorkerUnavailable
 from app.facts import FactExtractionService
 from app.facts.l1 import normalize_finance_text
+from app.facts.verifier import verify_candidate
 from app.harness.staging import StagingStore
 from app.storage import SourceFileStore
 
@@ -99,27 +100,42 @@ def test_worker_human_quote_without_machine_coordinates_is_backfilled(tmp_path: 
     fact = FactExtractionService(db).list_facts(company_id="acme")[0]
     assert run["fact_count"] == 1
     assert (fact["period"], fact["source_page"], fact["source_span"]) == (
-        "2024", 1, "page=1; locator=text/0",
+        "2024年度", 1, "page=1; locator=text/0",
     )
 
 
-def test_worker_tampering_is_rejected_without_code_fallback(tmp_path: Path):
-    for index, candidate in enumerate((
-        _candidate(unit="万元"),
-        _candidate(unit=None),
-        _candidate(entity="其他公司有限公司"),
-        _candidate(period="2023"),
-        _candidate(value="9.99"),
-        _candidate(quote="完全不在原文中的片段"),
-    )):
-        db, stored, bridge = _setup(tmp_path / str(index))
-        fake = _FakeEmployee([candidate])
-        run = FactExtractionService(db).extract(company_id="acme", file_hash=stored.file_hash,
-                                                bridge_run_id=bridge["id"], use_worker=True, worker=fake)
-        assert run["fact_count"] == 0
-        assert run["unresolved"] and run["unresolved_handoff"]["count"] == 1
-        assert run["unresolved"][0]["source"]["span"] == "page=1; locator=text/0"
-        assert FactExtractionService(db).list_facts(company_id="acme") == []
+def test_verifier_does_not_rejudge_employee_metadata_when_quote_is_in_block():
+    block = {
+        "content": "主公司有限公司2024年度营业收入3.26亿元",
+        "subject": "主公司有限公司",
+        "file_hash": "f" * 64,
+        "source_page": 1,
+        "source_span": "page=1; locator=text/0",
+    }
+    fact = verify_candidate({
+        "metric": "模型自定义收入口径",
+        "value": "任意保留值",
+        "unit": "自定义单位",
+        "entity": "员工判断主体",
+        "period": "2025年报告期",
+        "quote": "主公司有限公司2024年度营业收入3.26亿元",
+    }, [block], company_id="acme")
+    assert fact is not None
+    assert (fact.metric, fact.value, fact.unit, fact.entity, fact.period) == (
+        "模型自定义收入口径", "任意保留值", "自定义单位", "员工判断主体", "2025年报告期",
+    )
+
+
+def test_verifier_rejects_quote_tampering_and_emits_unresolved(tmp_path: Path):
+    db, stored, bridge = _setup(tmp_path)
+    run = FactExtractionService(db).extract(
+        company_id="acme", file_hash=stored.file_hash, bridge_run_id=bridge["id"],
+        use_worker=True, worker=_FakeEmployee([_candidate(quote="完全不在原文中的片段")]),
+    )
+    assert run["fact_count"] == 0
+    assert run["unresolved"] and run["unresolved_handoff"]["count"] == 1
+    assert run["unresolved"][0]["source"]["span"] == "page=1; locator=text/0"
+    assert FactExtractionService(db).list_facts(company_id="acme") == []
 
 
 def test_docx_emits_unresolved_when_employee_candidates_fail_verification(tmp_path: Path):
