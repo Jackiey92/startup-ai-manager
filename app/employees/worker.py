@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Callable
 
 from ..runtime_config import RuntimeConfig
@@ -36,13 +37,20 @@ class EmployeeRunner:
     @staticmethod
     def _strip_json_fence(raw: str) -> str:
         """Remove one outer Markdown JSON fence without changing payload data."""
-        lines = raw.strip().splitlines()
+        raw = raw.strip()
+        lines = raw.splitlines()
         if len(lines) < 3:
-            return raw.strip()
+            return raw
         opening = lines[0].strip().lower()
-        if opening not in {"```", "```json"} or lines[-1].strip() != "```":
-            return raw.strip()
-        return "\n".join(lines[1:-1]).strip()
+        if opening in {"```", "```json"} and lines[-1].strip() == "```":
+            return "\n".join(lines[1:-1]).strip()
+        # Some gateway/model adapters add a short textual preface around the
+        # otherwise valid fenced response. Only accept one complete JSON fence;
+        # arbitrary prose is never treated as a candidate payload.
+        match = re.fullmatch(r"(?is).*?```(?:json)?\s*(.*?)\s*```.*", raw)
+        if match:
+            return match.group(1).strip()
+        return raw
 
     @staticmethod
     def _payload(raw: Any) -> list[dict[str, Any]]:
@@ -54,16 +62,50 @@ class EmployeeRunner:
         if isinstance(raw, dict) and ("candidates" in raw or "items" in raw):
             raw = raw.get("candidates", raw.get("items"))
         elif isinstance(raw, dict):
-            result = raw.get("result")
-            payloads = result.get("payloads") if isinstance(result, dict) else None
-            if not isinstance(payloads, list) or not payloads:
-                raise WorkerUnavailable("employee returned invalid OpenClaw envelope")
-            candidates: list[dict[str, Any]] = []
-            for payload in payloads:
-                if not isinstance(payload, dict) or not isinstance(payload.get("text"), str):
-                    raise WorkerUnavailable("employee returned invalid OpenClaw payload")
-                candidates.extend(EmployeeRunner._payload(payload["text"]))
-            return candidates
+            # OpenClaw CLI versions have emitted the same payload under
+            # result.payloads and top-level payloads. Content/text/data are
+            # accepted only as transport wrappers; business candidate objects
+            # still must arrive through candidates/items.
+            for key in ("result", "payloads", "content", "text", "payload", "data"):
+                if key not in raw or raw[key] in (None, ""):
+                    continue
+                if key == "payloads":
+                    payloads = raw[key]
+                    if not isinstance(payloads, list) or not payloads:
+                        raise WorkerUnavailable("employee returned invalid OpenClaw payloads")
+                    candidates: list[dict[str, Any]] = []
+                    for payload in payloads:
+                        if not isinstance(payload, dict):
+                            raise WorkerUnavailable("employee returned invalid OpenClaw payload")
+                        value = next(
+                            (payload[name] for name in ("text", "content", "payload", "data")
+                             if name in payload and payload[name] not in (None, "")),
+                            None,
+                        )
+                        if value is None:
+                            raise WorkerUnavailable("employee returned invalid OpenClaw payload")
+                        candidates.extend(EmployeeRunner._payload(value))
+                    return candidates
+                try:
+                    return EmployeeRunner._payload(raw[key])
+                except WorkerUnavailable:
+                    continue
+            raise WorkerUnavailable("employee returned invalid OpenClaw envelope")
+        if isinstance(raw, list):
+            if not raw:
+                return []
+            text_blocks = (
+                all(isinstance(item, dict) and isinstance(item.get("text"), str) for item in raw)
+                and all(
+                    set(item).issubset({"text", "type", "annotations", "_meta"})
+                    for item in raw
+                )
+            )
+            if text_blocks:
+                candidates: list[dict[str, Any]] = []
+                for payload in raw:
+                    candidates.extend(EmployeeRunner._payload(payload["text"]))
+                return candidates
         if not isinstance(raw, list) or not all(isinstance(item, dict) for item in raw):
             raise WorkerUnavailable("employee returned invalid candidates")
         return raw

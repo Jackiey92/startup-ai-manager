@@ -240,6 +240,27 @@ def test_employee_runner_unwraps_openclaw_payload_envelope():
     ) == [first]
 
 
+@pytest.mark.parametrize("raw_factory", [
+    lambda candidate: {"payloads": [{"text": json.dumps({"candidates": [candidate]}, ensure_ascii=False)}]},
+    lambda candidate: {"result": {"content": [{"type": "text", "text": json.dumps({"candidates": [candidate]}, ensure_ascii=False)}]}},
+    lambda candidate: {"data": {"payload": json.dumps([candidate], ensure_ascii=False)}},
+])
+def test_employee_runner_unwraps_supported_openclaw_transport_variants(raw_factory):
+    candidate = _candidate()
+    runner = EmployeeRunner(runner=lambda **_: raw_factory(candidate))
+    assert runner.run(
+        skill="finance-fact-extraction", text="block", company_id="acme",
+    ) == [candidate]
+
+
+def test_employee_runner_rejects_unknown_transport_wrapper():
+    runner = EmployeeRunner(
+        runner=lambda **_: {"answer": {"candidates": [_candidate()]}}, retries=0,
+    )
+    with pytest.raises(WorkerUnavailable, match="invalid OpenClaw envelope"):
+        runner.run(skill="finance-fact-extraction", text="block", company_id="acme")
+
+
 @pytest.mark.parametrize("raw", [
     lambda candidate: "```json\n" + json.dumps({"candidates": [candidate]}, ensure_ascii=False) + "\n```",
     lambda candidate: json.dumps({"candidates": [candidate]}, ensure_ascii=False),
@@ -289,7 +310,7 @@ def test_employee_runner_bounds_invalid_envelope_retry():
         return {"status": "ok", "result": {"payloads": [{"text": "not-json"}]}}
 
     runner = EmployeeRunner(runner=always_bad, retries=1)
-    with pytest.raises(WorkerUnavailable, match="invalid JSON"):
+    with pytest.raises(WorkerUnavailable, match="invalid OpenClaw envelope"):
         runner.run(skill="finance-fact-extraction", text="block", company_id="acme")
     assert len(calls) == 2
 
