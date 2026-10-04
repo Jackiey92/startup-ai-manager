@@ -273,6 +273,16 @@ def test_employee_runner_accepts_bare_json_and_one_outer_json_fence(raw):
     ) == [candidate]
 
 
+def test_employee_runner_preserves_outer_openclaw_envelope_with_inner_fenced_text():
+    candidate = _candidate()
+    inner = "```json\n" + json.dumps({"candidates": [candidate]}, ensure_ascii=False) + "\n```"
+    raw = json.dumps({"status": "ok", "result": {"payloads": [{"text": inner}]}}, ensure_ascii=False)
+    runner = EmployeeRunner(runner=lambda **_: raw)
+    assert runner.run(
+        skill="finance-fact-extraction", text="block", company_id="acme",
+    ) == [candidate]
+
+
 def test_employee_runner_rejects_invalid_json_after_fence_unwrap():
     runner = EmployeeRunner(runner=lambda **_: "```json\nnot-json\n```")
     with pytest.raises(WorkerUnavailable, match="invalid JSON"):

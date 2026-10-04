@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import re
 from typing import Any, Callable
 
 from ..runtime_config import RuntimeConfig
@@ -44,12 +43,10 @@ class EmployeeRunner:
         opening = lines[0].strip().lower()
         if opening in {"```", "```json"} and lines[-1].strip() == "```":
             return "\n".join(lines[1:-1]).strip()
-        # Some gateway/model adapters add a short textual preface around the
-        # otherwise valid fenced response. Only accept one complete JSON fence;
-        # arbitrary prose is never treated as a candidate payload.
-        match = re.fullmatch(r"(?is).*?```(?:json)?\s*(.*?)\s*```.*", raw)
-        if match:
-            return match.group(1).strip()
+        # Do not search for a fence inside an OpenClaw JSON envelope. An
+        # envelope may legitimately contain a fenced employee response in a
+        # nested text field; stripping that inner fence here corrupts the outer
+        # JSON before it can be decoded and traversed.
         return raw
 
     @staticmethod
