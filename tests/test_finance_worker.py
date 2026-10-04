@@ -45,6 +45,20 @@ class _FakeEmployee:
         return self.candidates
 
 
+def test_finance_worker_receives_upstream_entity_attribution(tmp_path: Path):
+    db, stored, bridge = _setup(tmp_path)
+    fake = _FakeEmployee([_candidate()])
+    FactExtractionService(db).extract(
+        company_id="acme", file_hash=stored.file_hash, bridge_run_id=bridge["id"],
+        use_worker=True, worker=fake,
+    )
+    payload = json.loads(fake.calls[0]["text"])
+    assert payload["source_block"].startswith("主公司有限公司2024年度营业收入")
+    assert payload["attribution"] == {
+        "classification": "self", "subject": "主公司有限公司", "relation": None,
+    }
+
+
 def _candidate(metric="营业收入", value="3.26", unit="亿元", entity="主公司有限公司", period="2024",
                quote="主公司有限公司2024年度营业收入3.26亿元，净利润0.58亿元", **extra):
     return {"metric": metric, "value": value, "unit": unit, "entity": entity,

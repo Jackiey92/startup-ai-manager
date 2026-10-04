@@ -24,6 +24,14 @@ metadata:
 `unresolved` 说明卡点；不要用常识补数字、实体、期间或单位。示例：
 `{"candidates": [], "unresolved": {"reason": "missing_source_grounding", "blocking": "..."}}`。
 
+输入可能是宿主传入的 JSON 上下文，形如
+`{"source_block":"...", "attribution":{"classification":"self|related", "subject":"...", "relation":"..."}}`。
+只从 `source_block` 逐字引用和提取；`attribution` 是文件处理员工已经
+作出的主体归属交接，不是让财务员工重判。若其中有完整 `subject`，候选的
+`entity` 必须沿用该主体（不得输出字面量 `unspecified`）；若主体确实为空，
+才可如实返回 `unspecified` 并交经理处理。关系信息只用于保留主体边界，不能
+把子公司数字并入母公司。不要把宿主上下文包装字段写进 `quote`。
+
 ## Semantic finance knowledge
 
 Recognize equivalent wording by meaning rather than requiring a fixed alias:

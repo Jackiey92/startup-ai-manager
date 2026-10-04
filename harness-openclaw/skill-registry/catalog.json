@@ -44,7 +44,7 @@
       "description": "Extract finance fact candidates without changing digits or units.",
       "version": "1.1.0",
       "source": "finance-fact-extraction/SKILL.md",
-      "content_sha256": "5b50c58d0713070d23ad4f260e69f8655d6f9ecc2efa98b956640acd62e843b1",
+      "content_sha256": "5be10c8d39e04eca3abd5d8d65b639538771ac89fa5782b67ab9b15c98e15041",
       "roles": [
         "finance_analyst"
       ],

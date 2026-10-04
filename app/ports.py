@@ -293,6 +293,18 @@ class OpenVikingMemoryProvider:
         try:
             return json.loads(raw)
         except json.JSONDecodeError:
+            # Some local ``ov`` wrappers echo the rendered command before the
+            # JSON payload on stdout (for example ``cmd: ov ls ...``).  Keep
+            # the transport provider JSON-first: discard only the non-JSON
+            # preamble, then decode the complete object/list.  Plain text
+            # reads remain untouched when no JSON document follows.
+            lines = raw.splitlines()
+            for index, line in enumerate(lines):
+                if line.lstrip().startswith(("{", "[")):
+                    try:
+                        return json.loads("\n".join(lines[index:]))
+                    except json.JSONDecodeError:
+                        break
             return raw
 
     @staticmethod

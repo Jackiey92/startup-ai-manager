@@ -10,6 +10,7 @@ import sqlite3
 import re
 import tempfile
 from pathlib import Path
+import json
 
 from ..db.database import connect
 from .consolidation import ConsolidationResult, ConsolidationService
@@ -167,7 +168,23 @@ class FactExtractionService:
             normalized_block["content"] = normalize_finance_text(block.get("content", ""))
             if use_worker:
                 try:
-                    proposed = employee.run(skill="finance-fact-extraction", text=normalized_block["content"],
+                    # Entity attribution is an upstream employee decision.  Do
+                    # not recreate it with a host-side alias/keyword rule;
+                    # carry the complete decision into the finance employee's
+                    # bounded context so its candidate entity follows the
+                    # already-attributed evidence block instead of becoming a
+                    # literal ``unspecified`` placeholder.  The source text
+                    # remains verbatim (apart from MinerU spacing cleanup),
+                    # and verifier still checks only its quote provenance.
+                    employee_text = json.dumps({
+                        "source_block": normalized_block["content"],
+                        "attribution": {
+                            "classification": normalized_block.get("classification"),
+                            "subject": normalized_block.get("subject"),
+                            "relation": normalized_block.get("relation"),
+                        },
+                    }, ensure_ascii=False)
+                    proposed = employee.run(skill="finance-fact-extraction", text=employee_text,
                                             company_id=company_id, thread_id=thread_id)
                     verified = verify_candidates(proposed, [normalized_block], company_id=company_id)
                     candidates.extend(verified)

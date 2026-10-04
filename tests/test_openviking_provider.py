@@ -209,3 +209,11 @@ def test_openviking_result_envelope_lists_items_and_ignores_scalar_result():
     provider = OpenVikingMemoryProvider(runner=runner)
     assert [row["uri"] for row in provider.query(prefix="viking://root")] == ["viking://a", "viking://b"]
     assert OpenVikingMemoryProvider._items({"ok": True, "result": "body"}) == []
+
+
+def test_openviking_provider_decodes_json_after_cli_command_echo():
+    runner = fake_runner_factory([
+        (0, 'cmd: ov ls viking://root -o json\n{"ok":true,"result":[{"uri":"viking://root/a"}]}', ""),
+    ])
+    provider = OpenVikingMemoryProvider(runner=runner)
+    assert provider.query(prefix="viking://root")[0]["uri"] == "viking://root/a"

@@ -61,6 +61,32 @@ class MapBuilder:
     def markdown_uri(self, company_id: str) -> str:
         return f"{self.root}/memory_maps/{_safe(company_id)}/map.md"
 
+    @staticmethod
+    def _source_ids_from_items(company_id: str, items: list[dict[str, Any]]) -> tuple[str, ...]:
+        """Extract source IDs from one provider listing response."""
+        company = _safe(company_id)
+        discovered: set[str] = set()
+        for item in items:
+            uri = _uri(item.get("uri")) if isinstance(item, dict) else None
+            if not uri or not (
+                uri.endswith("/L0") or uri.endswith("/L1")
+                or uri.endswith("/manifest.json") or uri.endswith("/abstract.md")
+                or uri.endswith("/L2") or uri.endswith("/mapping.md")
+            ):
+                continue
+            marker = f"/2a_extraction/{company}/"
+            if marker not in uri:
+                continue
+            discovered.add(uri.split(marker, 1)[-1].split("/", 1)[0])
+        return tuple(sorted(discovered))
+
+    def _listed_source_ids(self, company_id: str) -> tuple[str, ...]:
+        """Read currently enumerable 2A source IDs without trusting a cache."""
+        company = _safe(company_id)
+        return self._source_ids_from_items(
+            company, self.memory.query(prefix=f"{self.root}/2a_extraction/{company}")
+        )
+
     def rebuild_map(self, company_id: str, *, source_ids: tuple[str, ...] = (), fact_keys: tuple[str, ...] = ()) -> MemoryMapResult:
         company = _safe(company_id)
         degraded = False
@@ -72,18 +98,17 @@ class MapBuilder:
         except Exception:
             items = []
             degraded = True
-        discovered: set[str] = set()
-        for item in sorted(items, key=lambda v: str(v.get("uri", ""))):
-            uri = _uri(item.get("uri"))
-            if not uri or not (uri.endswith("/L0") or uri.endswith("/L1") or uri.endswith("/manifest.json") or uri.endswith("/abstract.md") or uri.endswith("/L2")):
-                continue
-            source_id = uri.split(f"/2a_extraction/{company}/", 1)[-1].split("/", 1)[0]
-            discovered.add(source_id)
+        discovered = set(self._source_ids_from_items(company, items)) if items else set()
         # The recursive listing is eventually consistent.  Explicit source
         # IDs are read by deterministic URI and therefore win over its view.
         candidates = sorted(discovered | {_safe(value) for value in source_ids})
         for source_id in candidates:
-            branch_uri = f"{self.root}/2a_extraction/{company}/{source_id}/L0/abstract.md"
+            # The parser-owned body is the L2 mapping.  OV owns the L0/L1
+            # sidecars at the resource URI, but SAM deliberately does not
+            # materialize those bodies in the 2A memory namespace.  Pointing
+            # the manager at the old L0 compatibility path made every source
+            # look dangling and left the agent with no readable正文.
+            branch_uri = f"{self.root}/2a_extraction/{company}/{source_id}/L2/mapping.md"
             if branch_uri in known:
                 continue
             known.append(branch_uri)
@@ -141,8 +166,14 @@ class MapBuilder:
                 }
                 # A deleted source/fact must not remain silently linked from a
                 # cached map. Rebuild when a previously live branch vanished.
-                if not any(item.get("dangling") for item in data.get("branches", [])) and set(source_ids) <= cached_source_ids:
+                listed_source_ids = self._listed_source_ids(company_id)
+                if (
+                    not any(item.get("dangling") for item in data.get("branches", []))
+                    and set(source_ids) <= cached_source_ids
+                    and set(listed_source_ids) <= cached_source_ids
+                ):
                     return MemoryMapResult(_safe(company_id), data, bool(data.get("degraded")))
+                source_ids = tuple(sorted(set(source_ids) | set(listed_source_ids)))
         except Exception:
             pass
         try:

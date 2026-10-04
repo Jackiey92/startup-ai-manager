@@ -48,11 +48,35 @@ def test_map_is_navigation_only_and_rebuild_is_deterministic(tmp_path):
 
 def test_map_marks_dangling_branch(tmp_path):
     memory = _memory(tmp_path)
-    uri = f"{ROOT}/2a_extraction/acme/source-1/L0/abstract.md"
+    uri = f"{ROOT}/2a_extraction/acme/source-1/L2/mapping.md"
     memory.delete(uri)
     result = MapBuilder(memory).rebuild_map("acme").map
     source = next(item for item in result["branches"] if item["kind"] == "2a")
     assert source["dangling"] is True
+
+
+def test_manager_can_read_parser_body_from_map_branch(tmp_path):
+    memory = _memory(tmp_path)
+    result = MapBuilder(memory).rebuild_map("acme")
+    source = next(item for item in result.map["branches"] if item["kind"] == "2a")
+    assert source["uri"].endswith("/L2/mapping.md")
+    body = MemoryMapTools(memory, FakeFiles(), "acme").memory_read(source["uri"])
+    assert "source_id" in body
+
+
+def test_cached_map_refreshes_when_parallel_import_adds_a_source(tmp_path):
+    memory = _memory(tmp_path)
+    builder = MapBuilder(memory)
+    builder.rebuild_map("acme")
+    ExtractionMemoryService(memory).ingest("acme", {
+        "source_id": "source-2", "filename": "brief.pdf", "format": "pdf",
+        "file_hash": "b" * 64, "pages": [],
+        "parse_summary": {"raw_bytes_external": False, "full_text_external": False},
+    })
+    refreshed = builder.load_or_rebuild("acme")
+    assert {item["uri"].split("/")[-3] for item in refreshed.map["branches"] if item["kind"] == "2a"} == {
+        "source-1", "source-2",
+    }
 
 
 def test_tools_enforce_company_scope_and_record_navigation(tmp_path):
