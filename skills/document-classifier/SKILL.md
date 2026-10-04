@@ -17,6 +17,7 @@ source locations, never from a filename keyword table. Return **bare JSON**:
 {
   "module": "...",
   "doc_type": "...",
+  "needs_review": false,
   "folder": "财务|技术与产品|客户与市场|法务|unclassified",
   "confidence": 0.0,
   "classification": "self|related|foreign|ambiguous",
@@ -38,6 +39,13 @@ support a decision; do not emit prototype codes such as `sales`, `marketing`,
 | `technology_product` | `product_spec`, `research_development`, `patent`, `quality_certification` |
 | `customer_market` | `customer_profile`, `sales_order`, `market_research`, `channel_campaign` |
 | `team_equity` | `personnel`, `compensation`, `equity`, `governance` |
+| `other` | `unclassified` |
+
+Use `other` + `unclassified` **only when the evidence cannot support any of
+the five functional modules**. In that case set `needs_review` to `true` and
+explain the missing evidence in `reason`; this is a review signal, not a
+generic fallback for an employee that omitted a decision. For a supported
+functional decision set `needs_review` to `false`.
 
 Only fields relevant to the requested operation need to be present. Preserve
 the original text and coordinates. If the evidence is insufficient, return

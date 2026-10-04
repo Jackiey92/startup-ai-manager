@@ -46,6 +46,7 @@ def init_db(db_path: Path | str | None = None) -> None:
         # fields absent from that old table.
         if _classification_needs_rebuild(conn):
             _migrate_file_classifications(conn)
+        _migrate_classification_review_flag(conn)
         _migrate_facts(conn)
         _migrate_todos(conn)
         _migrate_entity_roster(conn)
@@ -97,6 +98,7 @@ def _migrate_file_classifications(conn: sqlite3.Connection) -> None:
             module        TEXT REFERENCES modules(code),
             doc_type      TEXT REFERENCES doc_types(code),
             confidence    REAL NOT NULL DEFAULT 0.0,
+            needs_review  INTEGER NOT NULL DEFAULT 0 CHECK(needs_review IN (0, 1)),
             status        TEXT NOT NULL DEFAULT 'auto',
             classified_by TEXT NOT NULL DEFAULT 'auto',
             basis         TEXT NOT NULL DEFAULT 'name',
@@ -107,10 +109,10 @@ def _migrate_file_classifications(conn: sqlite3.Connection) -> None:
     conn.execute(
         """
         INSERT INTO file_classifications_new
-            (id, file_hash, company_id, module, doc_type, confidence, status,
+            (id, file_hash, company_id, module, doc_type, confidence, needs_review, status,
              classified_by, basis, created_at)
         SELECT id, file_hash, 'default', module, doc_type, confidence,
-               CASE WHEN status='pending' THEN 'auto' ELSE status END,
+               0, CASE WHEN status='pending' THEN 'auto' ELSE status END,
                classified_by, 'name', created_at
         FROM file_classifications
         """
@@ -137,6 +139,20 @@ def _classification_needs_rebuild(conn: sqlite3.Connection) -> bool:
     module_column = columns.get("module")
     module_not_null = bool(module_column["notnull"]) if module_column is not None else False
     return module_not_null or not {"company_id", "basis"}.issubset(columns)
+
+
+def _migrate_classification_review_flag(conn: sqlite3.Connection) -> None:
+    """Add the employee review marker without changing existing decisions."""
+    columns = {
+        str(row["name"])
+        for row in conn.execute("PRAGMA table_info(file_classifications)").fetchall()
+    }
+    if columns and "needs_review" not in columns:
+        conn.execute(
+            "ALTER TABLE file_classifications "
+            "ADD COLUMN needs_review INTEGER NOT NULL DEFAULT 0 "
+            "CHECK(needs_review IN (0, 1))"
+        )
 
 
 def _migrate_facts(conn: sqlite3.Connection) -> None:
@@ -199,14 +215,18 @@ def _migrate_module_dictionary(conn: sqlite3.Connection) -> None:
     if classification_exists:
         for old_code in old_modules:
             target = LEGACY_MODULE_MAP.get(old_code)
-            if target in module_codes:
+            if target in module_codes and target != "other":
                 conn.execute(
                     "UPDATE file_classifications SET module=? WHERE module=?",
                     (target, old_code),
                 )
             else:
                 conn.execute(
-                    "UPDATE file_classifications SET module=NULL, doc_type=NULL WHERE module=?",
+                    """
+                    UPDATE file_classifications
+                       SET module='other', doc_type='unclassified'
+                     WHERE module=?
+                    """,
                     (old_code,),
                 )
 
@@ -217,29 +237,23 @@ def _migrate_module_dictionary(conn: sqlite3.Connection) -> None:
     ]
     if classification_exists:
         for old_code in old_doc_types:
-            target = LEGACY_DOC_TYPE_MAP.get(old_code)
+            target = LEGACY_DOC_TYPE_MAP.get(old_code, "unclassified")
             if target in doc_type_codes:
                 conn.execute(
                     "UPDATE file_classifications SET doc_type=? WHERE doc_type=?",
                     (target, old_code),
                 )
-            else:
-                conn.execute(
-                    "UPDATE file_classifications SET doc_type=NULL WHERE doc_type=?",
-                    (old_code,),
-                )
 
-    # Clear any legacy doc type whose module was a placeholder even if a
-    # future migration adds a row not covered by the explicit code map.
+    # Any unmatched type is a review-only bucket.  Moving its module together
+    # with it preserves the doc_type -> parent_module contract.
     if classification_exists:
-        placeholders = tuple(code for code, target in LEGACY_MODULE_MAP.items() if target is None)
-        if placeholders:
-            marks = ",".join("?" for _ in placeholders)
-            conn.execute(
-                f"UPDATE file_classifications SET module=NULL, doc_type=NULL "
-                f"WHERE module IN ({marks})",
-                placeholders,
-            )
+        conn.execute(
+            """
+            UPDATE file_classifications
+               SET module='other', doc_type='unclassified'
+             WHERE doc_type='unclassified' AND module <> 'other'
+            """
+        )
 
     obsolete_doc_marks = ",".join("?" for _ in old_doc_types)
     if old_doc_types:
@@ -249,13 +263,14 @@ def _migrate_module_dictionary(conn: sqlite3.Connection) -> None:
         conn.execute(f"DELETE FROM modules WHERE code IN ({obsolete_module_marks})", old_modules)
 
     if classification_exists:
-        # Repair rows from pre-FK or hand-edited databases as well.  A
+        # Repair rows from pre-FK or hand-edited databases as well. A
         # dictionary migration must never leave a dangling reference or a
-        # doc_type whose parent differs from the row's module.
+        # doc_type whose parent differs from the row's module. These are old
+        # dictionary values, not a runtime rule for employee uncertainty.
         conn.execute(
             """
             UPDATE file_classifications
-               SET module=NULL, doc_type=NULL
+               SET module='other', doc_type='unclassified'
              WHERE module IS NOT NULL
                AND NOT EXISTS (
                    SELECT 1 FROM modules m WHERE m.code=file_classifications.module
@@ -265,7 +280,7 @@ def _migrate_module_dictionary(conn: sqlite3.Connection) -> None:
         conn.execute(
             """
             UPDATE file_classifications
-               SET doc_type=NULL
+               SET module='other', doc_type='unclassified'
              WHERE doc_type IS NOT NULL
                AND NOT EXISTS (
                    SELECT 1 FROM doc_types d

@@ -16,6 +16,7 @@ class ContentResult:
     doc_type: str | None
     confidence: float
     matched_terms: tuple[str, ...]
+    needs_review: bool = False
 
 
 def _now() -> str:
@@ -66,11 +67,13 @@ def classify_content(manifest: dict[str, Any], *, employee: SemanticEmployee | N
     except (TypeError, ValueError):
         confidence = 0.0
     matched = result.get("matched_terms") or ()
+    needs_review = result.get("needs_review") if isinstance(result.get("needs_review"), bool) else False
     return ContentResult(
         module if isinstance(module, str) and module.strip() else None,
         doc_type if isinstance(doc_type, str) and doc_type.strip() else None,
         max(0.0, min(1.0, confidence)),
         tuple(item for item in matched if isinstance(item, str)),
+        needs_review,
     )
 
 
@@ -110,6 +113,7 @@ class ClassificationService:
                 conn, file_hash=file_hash, company_id=company_id, module=result.module,
                 doc_type=result.doc_type, confidence=result.confidence, status="auto",
                 classified_by="employee" if self._employee is not None else "auto", basis="content",
+                needs_review=result.needs_review,
             )
             conn.commit()
             row = dict(conn.execute("SELECT * FROM file_classifications WHERE id=?", (row_id,)).fetchone())
@@ -133,7 +137,7 @@ class ClassificationService:
             row_id = self._insert(
                 conn, file_hash=file_hash, company_id=company_id, module=guess.module,
                 doc_type=guess.doc_type, confidence=guess.confidence, status="auto",
-                classified_by="auto", basis="name",
+                classified_by="auto", basis="name", needs_review=False,
             )
             conn.commit()
             return dict(conn.execute("SELECT * FROM file_classifications WHERE id=?", (row_id,)).fetchone())
@@ -177,7 +181,7 @@ class ClassificationService:
                 if include_history:
                     history = conn.execute(
                         """
-                        SELECT module, doc_type, confidence, status, classified_by, basis, created_at
+                        SELECT module, doc_type, confidence, needs_review, status, classified_by, basis, created_at
                         FROM file_classifications
                         WHERE file_hash=? AND company_id=? AND id != ?
                         ORDER BY id ASC
@@ -213,6 +217,7 @@ class ClassificationService:
             row_id = self._insert(
                 conn, file_hash=file_hash, company_id=company_id, module=module, doc_type=doc_type,
                 confidence=1.0, status="confirmed", classified_by="human", basis="human",
+                needs_review=False,
             )
             conn.commit()
             return dict(conn.execute("SELECT * FROM file_classifications WHERE id=?", (row_id,)).fetchone())
@@ -221,21 +226,23 @@ class ClassificationService:
     def _same(row, result: ContentResult, *, basis: str) -> bool:
         return (
             row["basis"] == basis and row["module"] == result.module
-            and row["doc_type"] == result.doc_type and row["status"] != "superseded"
+            and row["doc_type"] == result.doc_type
+            and int(row["needs_review"] or 0) == int(result.needs_review)
+            and row["status"] != "superseded"
         )
 
     @staticmethod
     def _insert(conn, *, file_hash: str, company_id: str, module: str | None,
                 doc_type: str | None, confidence: float, status: str,
-                classified_by: str, basis: str) -> int:
+                classified_by: str, basis: str, needs_review: bool = False) -> int:
         cur = conn.execute(
             """
             INSERT INTO file_classifications
                 (file_hash, company_id, module, doc_type, confidence, status,
-                 classified_by, basis, created_at)
-            VALUES (?,?,?,?,?,?,?,?,?)
+                 needs_review, classified_by, basis, created_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?)
             """,
             (file_hash, company_id, module, doc_type, confidence, status,
-             classified_by, basis, _now()),
+             int(needs_review), classified_by, basis, _now()),
         )
         return int(cur.lastrowid)

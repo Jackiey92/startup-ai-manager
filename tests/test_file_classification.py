@@ -26,7 +26,9 @@ class _ClassificationEmployee:
 
 
 def test_classification_paths_fail_closed_without_an_employee():
-    assert classify_content(_manifest("营业收入 净利润" )).module is None
+    result = classify_content(_manifest("营业收入 净利润" ))
+    assert result.module is None
+    assert result.needs_review is False
     assert classify_folder(text="营业收入 净利润") == "unclassified"
 
 
@@ -42,11 +44,37 @@ def test_functional_dictionary_has_five_modules_and_parented_doc_types(tmp_path:
         "technology_product": "技术与产品",
         "customer_market": "客户与市场",
         "team_equity": "团队股权",
+        "other": "其他",
     }
     assert doc_types
     assert {parent for _, parent in doc_types} == set(modules)
     assert not {"sales", "marketing", "hr", "module_5"} & set(modules)
     conn.close()
+
+
+class _ReviewEmployee:
+    def classify_document(self, *, text: str, **_):
+        return {
+            "module": "other",
+            "doc_type": "unclassified",
+            "confidence": 0.0,
+            "needs_review": True,
+            "reason": "没有足够证据判断职能",
+        }
+
+
+def test_other_bucket_is_explicit_employee_review_signal_not_backend_fallback(tmp_path: Path) -> None:
+    db_path = tmp_path / "review.db"
+    init_db(db_path)
+    store = SourceFileStore(tmp_path / "objects", db_path)
+    stored = store.put_bytes(b"unclear", original_name="unknown.bin")
+    service = ClassificationService(db_path, employee=_ReviewEmployee())
+    row = service.classify_parsed(
+        file_hash=stored.file_hash, company_id="acme", manifest=_manifest("无足够上下文的资料"),
+    )
+    assert row["module"] == "other"
+    assert row["doc_type"] == "unclassified"
+    assert row["needs_review"] == 1
 
 
 def _manifest(*texts: str) -> dict:
@@ -213,10 +241,14 @@ def test_legacy_non_nullable_module_ledger_is_migrated_without_losing_rows(tmp_p
             created_at TEXT NOT NULL
         );
         INSERT INTO modules VALUES ('sales','销售',1);
+        INSERT INTO modules VALUES ('module_5','待定义5',5);
         INSERT INTO doc_types VALUES ('customer','客户资料','sales',1);
         INSERT INTO source_files VALUES ('h','old.xlsx',NULL,1,'h','internal','active',NULL,'now');
+        INSERT INTO source_files VALUES ('h2','old2.xlsx',NULL,1,'h2','internal','active',NULL,'now');
         INSERT INTO file_classifications(file_hash,module,doc_type,confidence,status,classified_by,created_at)
             VALUES ('h','sales','customer',0.6,'pending','auto','now');
+        INSERT INTO file_classifications(file_hash,module,confidence,status,classified_by,created_at)
+            VALUES ('h2','module_5',0.1,'pending','auto','now');
         """
     )
     conn.commit()
@@ -232,4 +264,6 @@ def test_legacy_non_nullable_module_ledger_is_migrated_without_losing_rows(tmp_p
     assert row["doc_type"] == "customer_profile"
     assert row["basis"] == "name"
     assert row["status"] == "auto"
+    fallback = conn.execute("SELECT module, doc_type FROM file_classifications WHERE file_hash='h2'").fetchone()
+    assert tuple(fallback) == ("other", "unclassified")
     conn.close()

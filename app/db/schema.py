@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS file_classifications (
     module        TEXT REFERENCES modules(code),
     doc_type      TEXT REFERENCES doc_types(code),
     confidence    REAL NOT NULL DEFAULT 0.0,
+    needs_review  INTEGER NOT NULL DEFAULT 0 CHECK(needs_review IN (0, 1)),
     status        TEXT NOT NULL DEFAULT 'auto',      -- auto | confirmed | superseded
     classified_by TEXT NOT NULL DEFAULT 'auto',      -- auto | human
     basis         TEXT NOT NULL DEFAULT 'name',      -- name | content | human
@@ -265,6 +266,7 @@ MODULES = [
     ("technology_product", "技术与产品", 3),
     ("customer_market", "客户与市场", 4),
     ("team_equity", "团队股权", 5),
+    ("other", "其他", 6),
 ]
 
 DOC_TYPES = [
@@ -288,20 +290,21 @@ DOC_TYPES = [
     ("compensation", "薪酬", "team_equity", 2),
     ("equity", "股权", "team_equity", 3),
     ("governance", "治理与股东", "team_equity", 4),
+    ("unclassified", "未归类", "other", 1),
 ]
 
 # Historical dictionary values from the prototype. Known values are mapped
-# to their new functional owner; placeholder modules are intentionally
-# unclassified rather than guessed into a new business function.
+# to their new functional owner; unmatched prototype modules use the explicit
+# review bucket instead of becoming dangling foreign keys.
 LEGACY_MODULE_MAP = {
     "sales": "customer_market",
     "marketing": "customer_market",
     "hr": "team_equity",
     "finance": "finance",
-    "module_5": None,
-    "module_6": None,
-    "module_7": None,
-    "module_8": None,
+    "module_5": "other",
+    "module_6": "other",
+    "module_7": "other",
+    "module_8": "other",
 }
 
 LEGACY_DOC_TYPE_MAP = {
