@@ -258,6 +258,42 @@ def test_employee_runner_rejects_invalid_json_after_fence_unwrap():
         runner.run(skill="finance-fact-extraction", text="block", company_id="acme")
 
 
+def test_employee_runner_retries_transient_invalid_json_envelope_without_changing_request():
+    candidate = _candidate()
+    responses = iter([
+        {"status": "ok", "result": {"payloads": [{"text": "not-json"}]}},
+        "```json\n" + json.dumps({"candidates": [candidate]}, ensure_ascii=False) + "\n```",
+    ])
+    calls = []
+
+    def flaky(**kwargs):
+        calls.append(kwargs)
+        return next(responses)
+
+    runner = EmployeeRunner(runner=flaky)
+    assert runner.run(
+        skill="finance-fact-extraction", text="block", company_id="acme", thread_id="t1",
+    ) == [candidate]
+    assert len(calls) == 2
+    assert [(call["text"], call["scope"]) for call in calls] == [
+        ("block", {"company_id": "acme", "thread_id": "t1"}),
+        ("block", {"company_id": "acme", "thread_id": "t1"}),
+    ]
+
+
+def test_employee_runner_bounds_invalid_envelope_retry():
+    calls = []
+
+    def always_bad(**kwargs):
+        calls.append(kwargs)
+        return {"status": "ok", "result": {"payloads": [{"text": "not-json"}]}}
+
+    runner = EmployeeRunner(runner=always_bad, retries=1)
+    with pytest.raises(WorkerUnavailable, match="invalid JSON"):
+        runner.run(skill="finance-fact-extraction", text="block", company_id="acme")
+    assert len(calls) == 2
+
+
 @pytest.mark.parametrize("raw", [
     {"status": "ok", "result": {"payloads": []}},
     {"status": "ok", "result": {"payloads": [{"text": "not-json"}]}},

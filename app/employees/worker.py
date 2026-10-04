@@ -15,11 +15,16 @@ class WorkerUnavailable(RuntimeError):
 
 class EmployeeRunner:
     def __init__(self, *, config: RuntimeConfig | None = None, runtime=None,
-                 runner: Callable[..., Any] | None = None, timeout: int = 120):
+                 runner: Callable[..., Any] | None = None, timeout: int = 120,
+                 retries: int = 1):
         self.config = config or RuntimeConfig.from_env()
         self.runtime = runtime
         self.runner = runner
         self.timeout = max(1, int(timeout))
+        # A malformed transport envelope is occasionally produced by the
+        # gateway. Retry the unchanged request once, but keep this bounded so
+        # malformed output cannot turn into an unbounded business retry loop.
+        self.retries = max(0, min(2, int(retries)))
 
     def _skill(self, skill: str) -> str:
         path = self.config.skill_root / skill / "SKILL.md"
@@ -68,16 +73,23 @@ class EmployeeRunner:
             raise ValueError("company_id must be injected by the host")
         scope = {"company_id": company_id, "thread_id": thread_id}
         skill_text = self._skill(skill)
-        if self.runner is not None:
-            raw = self.runner(skill=skill, skill_text=skill_text, text=text, scope=scope,
-                              timeout=self.timeout)
-        else:
-            if self.runtime is None:
-                self.runtime = runtime_provider(self.config, StagingStore(self.config.main_db))
-            runtime = self.runtime
-            prompt = "Load the supplied employee skill and return only its required JSON candidates/items payload."
-            raw = runtime.run_agent_message(
-                prompt, context_text=skill_text + "\n\nBLOCK:\n" + text,
-                company_id=company_id, thread_id=thread_id, timeout=self.timeout,
-            )
-        return self._payload(raw)
+        for attempt in range(self.retries + 1):
+            if self.runner is not None:
+                raw = self.runner(skill=skill, skill_text=skill_text, text=text, scope=scope,
+                                  timeout=self.timeout)
+            else:
+                if self.runtime is None:
+                    self.runtime = runtime_provider(self.config, StagingStore(self.config.main_db))
+                runtime = self.runtime
+                prompt = "Load the supplied employee skill and return only its required JSON candidates/items payload."
+                raw = runtime.run_agent_message(
+                    prompt, context_text=skill_text + "\n\nBLOCK:\n" + text,
+                    company_id=company_id, thread_id=thread_id, timeout=self.timeout,
+                )
+            try:
+                return self._payload(raw)
+            except WorkerUnavailable:
+                if attempt >= self.retries:
+                    raise
+        # The loop either returns or re-raises the last payload error.
+        raise WorkerUnavailable("employee returned invalid JSON")
