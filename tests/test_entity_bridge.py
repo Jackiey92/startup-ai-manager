@@ -282,3 +282,52 @@ def test_employee_path_owns_entity_attribution_and_preserves_source_blocks(tmp_p
     assert all(row["source"] == "employee" for row in rows)
     assert all(row["subject"] == "员工判定主体" for row in rows)
     assert employee.calls[0]["company_id"] == "host"
+
+
+def test_real_manifest_body_items_are_preserved_and_sent_to_employee(tmp_path: Path):
+    """The bridge transports every MinerU text item, not just a heading."""
+    db = tmp_path / "body.db"
+    init_db(db)
+    stored = SourceFileStore(tmp_path / "objects", db).put_bytes(b"body", original_name="报表A.pdf")
+    StagingStore(db).save_manifest({
+        "file_hash": stored.file_hash,
+        "filename": stored.original_name,
+        "format": "pdf",
+        "parse_summary": {"status": "parsed"},
+        "pages": [{"page_no": 1, "text_items": [
+            {"text": "报表A 2025年度主要指标", "source_loc": {
+                "file_hash": stored.file_hash, "page_no": 1,
+                "bbox": [0.091, 0.10, 0.8, 0.12], "locator": "mineru:page/1/block/0",
+            }},
+            {"text": "营业收入3.26亿元，毛利率31.50%", "source_loc": {
+                "file_hash": stored.file_hash, "page_no": 1,
+                "bbox": [0.091, 0.13, 0.8, 0.15], "locator": "mineru:page/1/block/1",
+            }},
+        ], "tables": []}],
+    })
+    EntityRosterService(db).declare(company_id="host", entity_name="主公司有限公司")
+
+    class Employee:
+        def __init__(self):
+            self.calls = []
+
+        def attribute_block(self, *, text: str, **kwargs):
+            self.calls.append((text, kwargs))
+            return {
+                "label": "self", "subject": "主公司有限公司", "relation": None,
+                "reason": "employee fixture",
+            }
+
+    employee = Employee()
+    run = EntityBridgeService(db, employee=employee).run(
+        company_id="host", file_hash=stored.file_hash,
+    )
+    rows = EntityBridgeService(db).list(company_id="host", run_id=run["id"])
+    assert [row["content"] for row in rows] == [
+        "报表A 2025年度主要指标", "营业收入3.26亿元，毛利率31.50%",
+    ]
+    assert [row["source_span"] for row in rows] == [
+        "page=1; locator=mineru:page/1/block/0",
+        "page=1; locator=mineru:page/1/block/1",
+    ]
+    assert [text for text, _ in employee.calls] == [row["content"] for row in rows]

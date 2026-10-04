@@ -83,6 +83,14 @@ continues; a new heading or new relationship ends inheritance. Never use a
 generic token such as “公司” as an alias and never infer ownership from a
 bare number.
 
+Every supplied `text_item` is an evidence block, including headings, prose,
+and metric/body blocks. Preserve and judge each block; do not classify only the
+heading or silently drop the body text. Use the surrounding blocks available in
+the same employee session when a section's subject continues. If the supplied
+evidence still cannot establish attribution, return `ambiguous` with a reason
+for that block so it can become an unresolved handoff; never invent a subject
+or a business rule in the host.
+
 ## Contract
 
 The host supplies the source block, roster context, and output destination.

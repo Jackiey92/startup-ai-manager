@@ -20,7 +20,7 @@
       "description": "Classify parsed documents and attribute evidence blocks by meaning.",
       "version": "1.1.0",
       "source": "document-classifier/SKILL.md",
-      "content_sha256": "3dda7f1593298927d76a198045c71801d7b9dcf877568ad553de017622cffd97",
+      "content_sha256": "f595892417b1867245c1161333fdfbc16af7d8ee13ae34d18f2a52aa6090ca30",
       "roles": [
         "file_processor"
       ],
