@@ -253,6 +253,14 @@ def test_employee_runner_unwraps_supported_openclaw_transport_variants(raw_facto
     ) == [candidate]
 
 
+def test_employee_runner_accepts_bare_employee_decision_object():
+    decision = {"module": "finance", "doc_type": "financial_statement", "reason": "source evidence"}
+    runner = EmployeeRunner(runner=lambda **_: json.dumps(decision, ensure_ascii=False))
+    assert runner.run(
+        skill="document-classifier", text="block", company_id="acme",
+    ) == [decision]
+
+
 def test_employee_runner_rejects_unknown_transport_wrapper():
     runner = EmployeeRunner(
         runner=lambda **_: {"answer": {"candidates": [_candidate()]}}, retries=0,

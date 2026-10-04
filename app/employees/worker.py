@@ -87,6 +87,16 @@ class EmployeeRunner:
                     return EmployeeRunner._payload(raw[key])
                 except WorkerUnavailable:
                     continue
+            # A bare JSON object is the skill's direct decision form.  It is
+            # not an envelope when it has no recognized transport container;
+            # nested objects remain rejected so unknown wrapper shapes do not
+            # silently become business candidates.
+            if (
+                raw
+                and not {"status", "error", "message"}.intersection(raw)
+                and all(not isinstance(value, (dict, list)) for value in raw.values())
+            ):
+                return [raw]
             raise WorkerUnavailable("employee returned invalid OpenClaw envelope")
         if isinstance(raw, list):
             if not raw:
