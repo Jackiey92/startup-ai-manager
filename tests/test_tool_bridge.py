@@ -68,6 +68,21 @@ def test_promote_is_disabled_by_default_and_external_hash_is_rejected(tmp_path):
     assert bad_hash["error"]["code"] == "denied"
 
 
+def test_manager_bridge_is_global_read_only_and_never_promotes(tmp_path):
+    memory = LocalMemoryProvider(tmp_path / "memory")
+    digest = "a" * 64
+    other_uri = f"{ROOT}/2a_extraction/other/source-2/L2/mapping.md"
+    memory.put(other_uri, "other revenue 3.26")
+    bridge = ToolBridge(
+        memory, Files(digest), company_id="acme", thread_id="manager-thread",
+        global_read_only=True,
+    )
+    read = handle_request(bridge, {"id": 1, "method": "sam_memory_read", "params": {"uri": other_uri}})
+    assert read == {"id": 1, "ok": True, "result": "other revenue 3.26"}
+    denied = handle_request(bridge, {"id": 2, "method": "sam_promote", "params": {"fact_key": "x", "fact": {"status": "verified"}}})
+    assert denied["ok"] is False and denied["error"]["code"] == "denied"
+
+
 def test_plugin_syntax_and_registration_shape():
     plugin = Path(__file__).parents[1] / "harness-openclaw" / "plugins" / "sam-memory" / "index.js"
     manifest = json.loads((plugin.parent / "openclaw.plugin.json").read_text())

@@ -139,11 +139,14 @@ function decodeScopePart(value) {
 
 function scopeFromSessionId(value) {
   if (typeof value !== "string") return null;
-  const match = /^sam-scope\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)\./.exec(value);
+  const match = /^(sam-scope|sam-manager)\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)\./.exec(value);
   if (!match) return null;
-  const companyId = decodeScopePart(match[1]);
-  const threadId = decodeScopePart(match[2]);
-  return companyId && threadId ? { companyId, threadId } : null;
+  const companyId = decodeScopePart(match[2]);
+  const threadId = decodeScopePart(match[3]);
+  if (!companyId || !threadId) return null;
+  return match[1] === "sam-manager"
+    ? { companyId, threadId, role: "manager" }
+    : { companyId, threadId };
 }
 
 // Scope is captured at the trusted before_tool_call boundary and consumed by
@@ -154,7 +157,7 @@ const pendingScopes = new Map();
 function rememberExecutionScope(event, context) {
   const toolName = event?.toolName;
   const callId = context?.toolCallId || event?.toolCallId;
-  if (!TOOL_NAMES.includes(toolName) || toolName === "sam_document_ingest" || typeof callId !== "string" || !callId) return;
+  if (!TOOL_NAMES.includes(toolName) || typeof callId !== "string" || !callId) return;
   const scope = scopeFromSessionId(context?.sessionId || context?.sessionKey || event?.sessionId || event?.sessionKey);
   if (scope) pendingScopes.set(callId, scope);
 }
@@ -179,6 +182,11 @@ function bridgeCall(name, input, scope = null) {
     if (scope?.companyId && scope?.threadId) {
       env.SAM_COMPANY_ID = scope.companyId;
       env.SAM_THREAD_ID = scope.threadId;
+    }
+    if (scope?.role === "manager") {
+      env.SAM_TOOL_SCOPE = "global_read_only";
+      // A manager can inspect, never promote or mutate through this bridge.
+      env.SAM_ALLOW_PROMOTE = "0";
     }
     const child = spawn(python, ["-m", "app.tool_bridge"], { cwd, env, stdio: ["pipe", "pipe", "pipe"] });
     let output = "";
@@ -238,9 +246,14 @@ function register(api) {
       parameters: schemas[name],
       inputSchema: schemas[name],
       optional: name === "sam_promote",
-      execute: async (...handlerArgs) => name === "sam_document_ingest"
-        ? documentIngestCall(extractParams(handlerArgs))
-        : bridgeCall(name, extractParams(handlerArgs), takeExecutionScope(handlerArgs[0])),
+      execute: async (...handlerArgs) => {
+        const scope = takeExecutionScope(handlerArgs[0]);
+        if (name === "sam_document_ingest") {
+          if (scope?.role === "manager") throw new Error("manager read-only scope");
+          return documentIngestCall(extractParams(handlerArgs));
+        }
+        return bridgeCall(name, extractParams(handlerArgs), scope);
+      },
     });
   }
 }

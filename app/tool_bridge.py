@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import sys
 from typing import Any, Callable, TextIO
 
@@ -35,6 +36,8 @@ class ToolBridge:
         company_id: str,
         thread_id: str,
         promote_allowed: bool = False,
+        global_read_only: bool = False,
+        source_catalog: tuple[tuple[str, str], ...] = (),
         map_tools_factory: Callable[..., MemoryMapTools] = MemoryMapTools,
         conversation_tools_factory: Callable[..., ConversationTools] = ConversationTools,
     ) -> None:
@@ -45,7 +48,12 @@ class ToolBridge:
         self.memory = memory
         self.files = files
         self.promote_allowed = bool(promote_allowed)
-        self.map_tools = map_tools_factory(memory, files, self.company_id)
+        self.global_read_only = bool(global_read_only)
+        self.source_catalog = tuple(source_catalog)
+        self.map_tools = map_tools_factory(
+            memory, files, self.company_id, global_read_only=self.global_read_only,
+            source_catalog=self.source_catalog,
+        )
         self.conversation_tools = conversation_tools_factory(memory, self.company_id, self.thread_id)
 
     def dispatch(self, method: str, params: dict[str, Any] | None = None) -> Any:
@@ -64,6 +72,8 @@ class ToolBridge:
             return self.map_tools.memory_search(self._string(params, "query"))
         if method == "sam_memory_map":
             self._no_extra(params)
+            if self.global_read_only:
+                return MapBuilder(self.memory).global_read_map(source_catalog=self.source_catalog)
             return MapBuilder(self.memory).load_or_rebuild(self.company_id).map
         if method == "sam_file_get":
             return self.map_tools.file_get(self._string(params, "file_hash"))
@@ -81,7 +91,7 @@ class ToolBridge:
             self._no_extra(params)
             return self.conversation_tools.thread_open(self.thread_id)
         if method == "sam_promote":
-            if not self.promote_allowed:
+            if self.global_read_only or not self.promote_allowed:
                 raise PermissionError("promotion is disabled")
             fact_key = self._string(params, "fact_key")
             fact = params.get("fact")
@@ -165,12 +175,22 @@ def from_environment() -> ToolBridge:
     thread = os.environ.get("SAM_THREAD_ID")
     if not thread:
         raise ValueError("SAM_THREAD_ID is required")
+    source_catalog: list[tuple[str, str]] = []
+    try:
+        with sqlite3.connect(config.main_db) as conn:
+            rows = conn.execute("SELECT company_id, file_hash FROM parse_jobs").fetchall()
+        source_catalog = [(str(company), str(file_hash)) for company, file_hash in rows]
+    except (OSError, sqlite3.Error):
+        # Listing is still attempted; a degraded catalog must not widen scope.
+        source_catalog = []
     return ToolBridge(
         memory,
         files,
         company_id=company,
         thread_id=thread,
         promote_allowed=os.environ.get("SAM_ALLOW_PROMOTE", "0").lower() in {"1", "true", "yes"},
+        global_read_only=os.environ.get("SAM_TOOL_SCOPE", "").strip().lower() == "global_read_only",
+        source_catalog=tuple(source_catalog),
     )
 
 

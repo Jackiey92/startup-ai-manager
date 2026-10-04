@@ -181,6 +181,109 @@ class MapBuilder:
         except Exception:
             return MemoryMapResult(_safe(company_id), {"company_id": _safe(company_id), "branches": [], "degraded": True}, True)
 
+    def global_read_map(self, *, source_catalog: tuple[tuple[str, str], ...] = ()) -> dict[str, Any]:
+        """Build an in-memory navigation view for the trusted manager scope.
+
+        This deliberately does not call ``put``: a manager may inspect every
+        project resource, but the read-only scope must not create or refresh a
+        cache as a side effect of ``sam_memory_map``.  The normal company map
+        remains the durable, company-scoped navigation artifact.
+        """
+        branches: list[dict[str, Any]] = []
+        degraded = False
+        seen: set[str] = set()
+        try:
+            items = self.memory.query(prefix=f"{self.root}/2a_extraction")
+        except Exception:
+            items = []
+            degraded = True
+        marker = f"{self.root}/2a_extraction/"
+        for item in items:
+            uri = _uri(item.get("uri")) if isinstance(item, dict) else None
+            if not uri or not uri.startswith(marker) or not uri.endswith("/L2/mapping.md"):
+                continue
+            relative = uri[len(marker):].split("/")
+            if len(relative) < 3:
+                continue
+            company_id, source_id = relative[0], relative[1]
+            if uri in seen:
+                continue
+            seen.add(uri)
+            branches.append({
+                "module": "source",
+                "title": f"资料 {company_id}/{source_id[:12]}",
+                "uri": uri,
+                "kind": "2a",
+                "company_id": company_id,
+                "source_id": source_id,
+                "has_children": True,
+                "dangling": False,
+            })
+        # Provider directory listings can lag (and some OV deployments reject
+        # recursive listing under a busy root).  The trusted host-side parse
+        # catalog is therefore an explicit read-only fallback: it contributes
+        # deterministic URIs, and each URI is still checked through the
+        # provider before being exposed to the employee.
+        for company_id, source_id in source_catalog:
+            company = _safe(company_id)
+            source = _safe(source_id)
+            uri = f"{self.root}/2a_extraction/{company}/{source}/L2/mapping.md"
+            if uri in seen:
+                continue
+            exists = self._exists(uri)
+            if not exists:
+                continue
+            seen.add(uri)
+            branches.append({
+                "module": "source",
+                "title": f"资料 {company}/{source[:12]}",
+                "uri": uri,
+                "kind": "2a",
+                "company_id": company,
+                "source_id": source,
+                "has_children": True,
+                "dangling": False,
+            })
+        try:
+            fact_items = self.memory.query(prefix=f"{self.root}/2b_facts")
+        except Exception:
+            fact_items = []
+            degraded = True
+        fact_companies: set[str] = set()
+        fact_marker = f"{self.root}/2b_facts/"
+        for item in fact_items:
+            uri = _uri(item.get("uri")) if isinstance(item, dict) else None
+            if uri and uri.startswith(fact_marker):
+                tail = uri[len(fact_marker):].split("/")
+                if tail and tail[0]:
+                    fact_companies.add(tail[0])
+        for company_id in sorted(fact_companies):
+            branches.append({
+                "module": "facts",
+                "title": f"已验证事实 {company_id}",
+                "uri": f"{self.root}/2b_facts/{company_id}",
+                "kind": "2b",
+                "company_id": company_id,
+                "has_children": True,
+                "dangling": False,
+            })
+        branches.sort(key=lambda item: (item["module"], item["uri"]))
+        data: dict[str, Any] = {
+            "scope": "global_read_only",
+            "read_only": True,
+            "updated_at": _now(),
+            "revision": self._revision(branches),
+            "branches": branches,
+            "files_index_uri": f"{self.root}/2a_extraction",
+            "degraded": degraded,
+        }
+        encoded = json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        while len(encoded) > self.max_chars and data["branches"]:
+            data["branches"].pop()
+            data["truncated"] = True
+            encoded = json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return data
+
     def _exists(self, uri: str) -> bool:
         try:
             self.memory.read(uri)
@@ -197,16 +300,19 @@ class MapBuilder:
 
 
 class MemoryMapTools:
-    """Tool-shaped facade with strict company URI and file-hash boundaries."""
+    """Tool-shaped facade with strict company or trusted global-read boundaries."""
 
-    def __init__(self, memory: MemoryProvider, files: SourceFileStore, company_id: str, *, source_ids: tuple[str, ...] = ()):
+    def __init__(self, memory: MemoryProvider, files: SourceFileStore, company_id: str, *, source_ids: tuple[str, ...] = (), global_read_only: bool = False, source_catalog: tuple[tuple[str, str], ...] = ()):
         self.memory, self.files, self.company_id = memory, files, _safe(company_id)
+        self.global_read_only = bool(global_read_only)
+        self.source_catalog = tuple(source_catalog)
         self.scope = f"{ROOT}/"
         self.company_prefixes = (
             f"{ROOT}/memory_maps/{self.company_id}/",
             f"{ROOT}/2a_extraction/{self.company_id}/",
             f"{ROOT}/2b_facts/{self.company_id}/",
         )
+        self.global_prefixes = (f"{ROOT}/", "viking://resources/")
         self.navigation: list[str] = []
         self._file_hashes: set[str] = set()
         for source_id in source_ids:
@@ -230,7 +336,12 @@ class MemoryMapTools:
             self._file_hashes = set()
 
     def _check_uri(self, uri: str) -> str:
-        if not isinstance(uri, str) or not uri.startswith(self.company_prefixes):
+        if not isinstance(uri, str):
+            raise PermissionError("memory URI is outside company scope")
+        if self.global_read_only:
+            if not uri.startswith(self.global_prefixes):
+                raise PermissionError("memory URI is outside global read scope")
+        elif not uri.startswith(self.company_prefixes):
             raise PermissionError("memory URI is outside company scope")
         return uri
 
@@ -247,19 +358,35 @@ class MemoryMapTools:
             # Search both navigation metadata and extracted L2.  A map branch
             # must be discoverable without guessing its URI.
             rows = []
-            for prefix in (
+            prefixes = self.global_prefixes if self.global_read_only else (
                 f"{ROOT}/memory_maps/{self.company_id}",
                 f"{ROOT}/2a_extraction/{self.company_id}",
-            ):
+            )
+            for prefix in prefixes:
                 rows.extend(self.memory.search(query, prefix=prefix))
         except Exception as exc:
-            raise RuntimeError("memory search unavailable") from exc
+            if not self.global_read_only:
+                raise RuntimeError("memory search unavailable") from exc
+            # Some OV versions reject recursive search at a project root even
+            # though exact reads work.  The trusted catalog lets the manager
+            # retain global read semantics without widening to arbitrary URIs.
+            rows = []
+            needle = str(query).lower()
+            for company_id, source_id in self.source_catalog:
+                uri = f"{ROOT}/2a_extraction/{_safe(company_id)}/{_safe(source_id)}/L2/mapping.md"
+                try:
+                    content = self.memory.read(uri)
+                except Exception:
+                    continue
+                if needle in str(content).lower():
+                    rows.append({"uri": uri})
         uris = []
         for row in rows:
             uri = row.get("uri") if isinstance(row, dict) else None
             if isinstance(uri, str) and (
-                uri.startswith(self.company_prefixes[0])
-                or uri.startswith(self.company_prefixes[1])
+                uri.startswith(self.global_prefixes) if self.global_read_only else (
+                    uri.startswith(self.company_prefixes[0]) or uri.startswith(self.company_prefixes[1])
+                )
             ):
                 uris.append(uri)
         self.navigation.extend(uris)
@@ -268,7 +395,7 @@ class MemoryMapTools:
     def file_get(self, file_hash: str) -> dict[str, Any]:
         if not isinstance(file_hash, str) or not re.fullmatch(r"[0-9a-f]{64}", file_hash):
             raise ValueError("invalid file hash")
-        if file_hash not in self._file_hashes:
+        if not self.global_read_only and file_hash not in self._file_hashes:
             raise PermissionError("file is outside company scope")
         try:
             stored = self.files.get(file_hash)

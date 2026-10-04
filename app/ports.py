@@ -27,7 +27,8 @@ class RuntimeProvider(Protocol):
 
     def run_agent_message(self, message: str, *, context_text: str | None = None,
                           company_id: str | None = None, thread_id: str | None = None,
-                          allow_promote: bool = False, timeout: int = 600) -> str:
+                          allow_promote: bool = False, timeout: int = 600,
+                          access_role: str = "employee") -> str:
         """Run one agent turn and return its serialized result."""
 
 

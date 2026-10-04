@@ -19,7 +19,10 @@ class FakeFile:
 
 class FakeFiles:
     def __init__(self):
-        self.rows = {"a" * 64: FakeFile("a" * 64, "report.pdf", "application/pdf", 10, "aa/report")}
+        self.rows = {
+            "a" * 64: FakeFile("a" * 64, "report.pdf", "application/pdf", 10, "aa/report"),
+            "b" * 64: FakeFile("b" * 64, "brief.pdf", "application/pdf", 12, "bb/brief"),
+        }
 
     def get(self, file_hash):
         return self.rows[file_hash]
@@ -91,3 +94,25 @@ def test_tools_enforce_company_scope_and_record_navigation(tmp_path):
     with pytest.raises(ValueError):
         tools.file_get("not-a-hash")
     assert all(item.startswith("viking://") for item in tools.navigation)
+
+
+def test_manager_global_read_scope_reads_other_company_without_writing_map(tmp_path):
+    memory = _memory(tmp_path)
+    ExtractionMemoryService(memory).ingest("other", {
+        "source_id": "source-2", "filename": "brief.pdf", "format": "pdf",
+        "file_hash": "b" * 64, "pages": [],
+        "parse_summary": {"raw_bytes_external": False, "full_text_external": False},
+    })
+    tools = MemoryMapTools(memory, FakeFiles(), "acme", global_read_only=True)
+    other_uri = f"{ROOT}/2a_extraction/other/source-2/L2/mapping.md"
+    assert "source-2" in tools.memory_read(other_uri)
+    assert other_uri in tools.memory_search("brief")
+    assert tools.file_get("b" * 64)["original_name"] == "brief.pdf"
+    global_map = MapBuilder(memory).global_read_map(source_catalog=(('acme', 'a' * 64), ('other', 'b' * 64)))
+    assert global_map["scope"] == "global_read_only"
+    assert global_map["read_only"] is True
+    assert {item["company_id"] for item in global_map["branches"] if item["kind"] == "2a"} == {"acme", "other"}
+    with pytest.raises(FileNotFoundError):
+        memory.read(f"{ROOT}/memory_maps/_global_read_only/map.json")
+    with pytest.raises(PermissionError):
+        tools.memory_read("viking://untrusted/outside")

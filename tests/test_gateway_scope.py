@@ -51,3 +51,14 @@ const b = p.scopeFromSessionId({('sam-scope.' + _part('b') + '.' + _part('t2') +
 console.log(JSON.stringify({{a, b, different: a.companyId !== b.companyId && a.threadId !== b.threadId}}));
 """
     assert _node(expression)["different"] is True
+
+
+def test_manager_session_derives_trusted_global_read_role() -> None:
+    expression = f"""
+const p = require({str(PLUGIN)!r})._private;
+const scope = p.scopeFromSessionId({('sam-manager.' + _part('all') + '.' + _part('manager-thread') + '.x')!r});
+console.log(JSON.stringify(scope));
+"""
+    assert _node(expression) == {
+        "companyId": "all", "threadId": "manager-thread", "role": "manager",
+    }

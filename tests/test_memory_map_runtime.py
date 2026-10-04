@@ -54,6 +54,24 @@ def test_agent_scope_is_injected_outside_prompt(tmp_path: Path):
     assert "acme" not in calls[-1][0][calls[-1][0].index("--message") + 1]
 
 
+def test_manager_agent_scope_is_distinct_and_read_only(tmp_path: Path):
+    calls = []
+
+    def runner(command, **kwargs):
+        calls.append((command, kwargs))
+        return subprocess.CompletedProcess(command, 0, json.dumps({"meta": {"finalAssistantVisibleText": "ok"}}), "")
+
+    config = RuntimeConfig.from_env(project_root=Path(__file__).parents[1], env={"SAM_PROFILE": "local"})
+    config = replace(config, state_dir=tmp_path / "state", config_path=tmp_path / "state" / "openclaw.json")
+    adapter = OpenClawAdapter(StagingStore(db_path=tmp_path / "missing.db"), config=config, runner=runner)
+    adapter.run_agent_message("经理问题", company_id="acme", thread_id="manager-thread", access_role="manager")
+    env = calls[-1][1]["env"]
+    session_id = calls[-1][0][calls[-1][0].index("--session-id") + 1]
+    assert session_id.startswith("sam-manager.")
+    assert env["SAM_TOOL_SCOPE"] == "global_read_only"
+    assert env["SAM_ALLOW_PROMOTE"] == "0"
+
+
 def test_scoped_employee_calls_reuse_one_openclaw_session(tmp_path: Path):
     calls = []
 

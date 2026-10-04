@@ -36,7 +36,7 @@ _GATEWAY_LOCK = Lock()
 _GATEWAY_PROCESSES: dict[str, tuple[subprocess.Popen, object]] = {}
 
 
-def _scope_session_id(company_id: str | None, thread_id: str | None, nonce: str) -> str:
+def _scope_session_id(company_id: str | None, thread_id: str | None, nonce: str, *, access_role: str = "employee") -> str:
     """Encode trusted request scope into the OpenClaw session identity.
 
     The resident Gateway has one process environment and cannot receive a new
@@ -48,7 +48,8 @@ def _scope_session_id(company_id: str | None, thread_id: str | None, nonce: str)
         return "oc-" + nonce
     def part(value: str) -> str:
         return base64.urlsafe_b64encode(str(value).encode("utf-8")).decode("ascii").rstrip("=")
-    return f"sam-scope.{part(company_id)}.{part(thread_id)}.{nonce}"
+    prefix = "sam-manager" if access_role == "manager" else "sam-scope"
+    return f"{prefix}.{part(company_id)}.{part(thread_id)}.{nonce}"
 
 
 def _stop_gateways() -> None:
@@ -159,12 +160,16 @@ class OpenClawAdapter(RuntimeProvider):
 
     def run_agent_message(self, message: str, *, context_text: str | None = None,
                           company_id: str | None = None, thread_id: str | None = None,
-                          allow_promote: bool = False, timeout: int = 600) -> str:
+                          allow_promote: bool = False, timeout: int = 600,
+                          access_role: str = "employee") -> str:
+        if access_role not in {"employee", "manager"}:
+            raise ValueError("invalid runtime access role")
         prompt = message
         if context_text:
             prompt = context_text.rstrip() + "\n\n用户问题：" + message
         return self._invoke_agent(prompt, timeout=timeout, company_id=company_id,
-                                  thread_id=thread_id, allow_promote=allow_promote)
+                                  thread_id=thread_id, allow_promote=allow_promote,
+                                  access_role=access_role)
 
     def ensure_runtime_ready(self, *, timeout: int = 90) -> None:
         """Health-probe the owned Gateway before a parse worker starts work."""
@@ -195,7 +200,8 @@ class OpenClawAdapter(RuntimeProvider):
         return task_path
 
     def _invoke_agent(self, message: str, timeout: int, *, company_id: str | None = None,
-                      thread_id: str | None = None, allow_promote: bool = False) -> str:
+                      thread_id: str | None = None, allow_promote: bool = False,
+                      access_role: str = "employee") -> str:
         env = self._base_env()
         if self.config.openclaw_mode == "gateway":
             # The Gateway ownership fingerprint includes the effective model
@@ -206,10 +212,13 @@ class OpenClawAdapter(RuntimeProvider):
         if thread_id is not None:
             env["SAM_THREAD_ID"] = str(thread_id)
         env["SAM_ALLOW_PROMOTE"] = "1" if allow_promote else "0"
+        # This value is not taken from a model message.  It is only set by the
+        # trusted manager entry point and consumed by the plugin's scope hook.
+        env["SAM_TOOL_SCOPE"] = "global_read_only" if access_role == "manager" else "company"
         cache_dir = self.root / "cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
         env["XDG_CACHE_HOME"] = str(cache_dir)
-        session_id = self._session_id(company_id, thread_id)
+        session_id = self._session_id(company_id, thread_id, access_role=access_role)
         cmd = [self.config.node_bin, str(self.config.openclaw_entry), "agent",
                "--agent", self.config.agent_id, "--session-id", session_id, "--json",
                "--message", message, "--timeout", str(timeout)]
@@ -256,16 +265,16 @@ class OpenClawAdapter(RuntimeProvider):
             env[self.config.model_api_key_env] = env["SAM_GUIDE_MODEL_API_KEY"]
         return env
 
-    def _session_id(self, company_id: str | None, thread_id: str | None) -> str:
+    def _session_id(self, company_id: str | None, thread_id: str | None, *, access_role: str = "employee") -> str:
         if company_id is None or thread_id is None:
             import uuid
-            return _scope_session_id(company_id, thread_id, uuid.uuid4().hex)
-        key = (str(company_id), str(thread_id))
+            return _scope_session_id(company_id, thread_id, uuid.uuid4().hex, access_role=access_role)
+        key = (str(company_id), str(thread_id), access_role)
         with self._session_lock:
             session_id = self._session_ids.get(key)
             if session_id is None:
                 import uuid
-                session_id = _scope_session_id(company_id, thread_id, uuid.uuid4().hex)
+                session_id = _scope_session_id(company_id, thread_id, uuid.uuid4().hex, access_role=access_role)
                 self._session_ids[key] = session_id
             return session_id
 

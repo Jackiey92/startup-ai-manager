@@ -676,7 +676,7 @@ def api_chat():
         except Exception:
             map_data["degraded"] = True
         assembled = ContextAssembler(memory, company_id=company_id, thread_id=thread_id, agent_config=agent_config).assemble(question)
-        context_text = assembled["prompt"] + "\n\n可用公司范围工具：memory_map()、memory_read(uri)、memory_search(query)、file_get(file_hash)、conversation_read(start,end)、thread_list()、thread_open()、promote(...)。工具只读当前 company/thread scope，promote 仅显式授权时调用。"
+        context_text = assembled["prompt"] + "\n\n经理只读工具：memory_map()、memory_read(uri)、memory_search(query)、file_get(file_hash)、conversation_read(start,end)、thread_list()、thread_open()。经理可读取全局资料，但禁止 sam_document_ingest 与 promote，不写入或提升任何事实；工具参数仍只传各自契约字段。"
         context_stats = assembled["stats"]
     except Exception:
         context_text = "公司记忆地图（仅导航，不含事实正文）：\n" + map_json[:12000] + "\n\n当前上下文 degraded。"
@@ -700,6 +700,7 @@ def api_chat():
         raw = adapter.run_agent_message(
             question, context_text=context_text, company_id=company_id,
             thread_id=thread_id, allow_promote=False, timeout=600,
+            access_role="manager",
         )
         data = json.loads(raw)
     except Exception:
