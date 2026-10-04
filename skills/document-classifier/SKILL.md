@@ -34,6 +34,7 @@ support a decision; do not emit prototype codes such as `sales`, `marketing`,
 
 | module | allowed doc_type values |
 |---|---|
+| `company_overview` | `subsidiary_profile`, `business_overview`, `development_milestones` |
 | `finance` | `financial_statement`, `audit_report`, `tax_document`, `budget_forecast` |
 | `legal` | `contract`, `litigation`, `compliance`, `intellectual_property` |
 | `technology_product` | `product_spec`, `research_development`, `patent`, `quality_certification` |
@@ -41,8 +42,15 @@ support a decision; do not emit prototype codes such as `sales`, `marketing`,
 | `team_equity` | `personnel`, `compensation`, `equity`, `governance` |
 | `other` | `unclassified` |
 
+Use `company_overview` only for a panoramic introduction of the company and
+its group: subsidiary profiles, a broad business overview, or a development
+milestone history. A single functional source block (for example one contract,
+financial statement, product specification, or customer file) stays in its
+functional module even when it mentions the company. Do not infer this module
+from a generic company name.
+
 Use `other` + `unclassified` **only when the evidence cannot support any of
-the five functional modules**. In that case set `needs_review` to `true` and
+the six functional modules**. In that case set `needs_review` to `true` and
 explain the missing evidence in `reason`; this is a review signal, not a
 generic fallback for an employee that omitted a decision. For a supported
 functional decision set `needs_review` to `false`.
@@ -54,7 +62,9 @@ the original text and coordinates. If the evidence is insufficient, return
 ## Folder and document knowledge
 
 Use semantic meaning to place a source in 财务, 技术与产品, 客户与市场, or
-法务. Financial evidence includes statements, cash flow, revenue, profit,
+法务. The company-overview module is a ledger classification for panoramic
+introductions; it is not a new OV folder. Company-overview evidence must be
+panoramic as described above; financial evidence includes statements, cash flow, revenue, profit,
 assets and liabilities; technical evidence includes R&D, products, patents
 and specifications; customer/market evidence includes customers, sales,
 orders, channels and campaigns; legal evidence includes contracts, disputes,

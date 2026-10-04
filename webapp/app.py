@@ -403,6 +403,7 @@ _PARSE_MANAGER = ParseJobManager(
 
 
 MODULE_LABELS = {
+    "company_overview": "公司概况",
     "finance": "财务",
     "legal": "法务",
     "technology_product": "技术与产品",

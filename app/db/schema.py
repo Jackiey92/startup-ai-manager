@@ -261,15 +261,19 @@ CREATE TABLE IF NOT EXISTS dashboard_preferences (
 """
 
 MODULES = [
-    ("finance", "财务", 1),
-    ("legal", "法务", 2),
-    ("technology_product", "技术与产品", 3),
-    ("customer_market", "客户与市场", 4),
-    ("team_equity", "团队股权", 5),
-    ("other", "其他", 6),
+    ("company_overview", "公司概况", 1),
+    ("finance", "财务", 2),
+    ("legal", "法务", 3),
+    ("technology_product", "技术与产品", 4),
+    ("customer_market", "客户与市场", 5),
+    ("team_equity", "团队股权", 6),
+    ("other", "其他", 7),
 ]
 
 DOC_TYPES = [
+    ("subsidiary_profile", "下属公司简介", "company_overview", 1),
+    ("business_overview", "业务概述", "company_overview", 2),
+    ("development_milestones", "发展大事记", "company_overview", 3),
     ("financial_statement", "财务报表", "finance", 1),
     ("audit_report", "审计报告", "finance", 2),
     ("tax_document", "税务资料", "finance", 3),

@@ -32,13 +32,14 @@ def test_classification_paths_fail_closed_without_an_employee():
     assert classify_folder(text="营业收入 净利润") == "unclassified"
 
 
-def test_functional_dictionary_has_five_modules_and_parented_doc_types(tmp_path: Path) -> None:
+def test_functional_dictionary_has_company_overview_first_and_parented_doc_types(tmp_path: Path) -> None:
     db_path = tmp_path / "dictionary.db"
     init_db(db_path)
     conn = sqlite3.connect(db_path)
     modules = dict(conn.execute("SELECT code, name FROM modules").fetchall())
     doc_types = conn.execute("SELECT code, parent_module FROM doc_types").fetchall()
     assert modules == {
+        "company_overview": "公司概况",
         "finance": "财务",
         "legal": "法务",
         "technology_product": "技术与产品",
@@ -46,9 +47,92 @@ def test_functional_dictionary_has_five_modules_and_parented_doc_types(tmp_path:
         "team_equity": "团队股权",
         "other": "其他",
     }
+    assert conn.execute(
+        "SELECT code, sort_order FROM modules ORDER BY sort_order"
+    ).fetchall() == [
+        ("company_overview", 1),
+        ("finance", 2),
+        ("legal", 3),
+        ("technology_product", 4),
+        ("customer_market", 5),
+        ("team_equity", 6),
+        ("other", 7),
+    ]
+    assert conn.execute(
+        "SELECT code FROM doc_types WHERE parent_module='company_overview' ORDER BY sort_order"
+    ).fetchall() == [
+        ("subsidiary_profile",),
+        ("business_overview",),
+        ("development_milestones",),
+    ]
     assert doc_types
     assert {parent for _, parent in doc_types} == set(modules)
     assert not {"sales", "marketing", "hr", "module_5"} & set(modules)
+    conn.close()
+
+
+def test_company_overview_is_an_employee_choice_not_a_backend_content_rule(tmp_path: Path) -> None:
+    db_path = tmp_path / "overview.db"
+    init_db(db_path)
+    store = SourceFileStore(tmp_path / "objects", db_path)
+    stored = store.put_bytes(b"overview", original_name="overview.md")
+
+    class _OverviewEmployee:
+        def classify_document(self, *, text: str, **_):
+            assert "集团" in text
+            return {
+                "module": "company_overview",
+                "doc_type": "business_overview",
+                "confidence": 0.9,
+                "needs_review": False,
+            }
+
+    row = ClassificationService(db_path, employee=_OverviewEmployee()).classify_parsed(
+        file_hash=stored.file_hash,
+        company_id="acme",
+        manifest=_manifest("集团业务概况与下属公司简介"),
+    )
+    assert (row["module"], row["doc_type"], row["needs_review"]) == (
+        "company_overview", "business_overview", 0,
+    )
+
+
+def test_unknown_legacy_module_never_leaves_a_dangling_parent(tmp_path: Path) -> None:
+    db_path = tmp_path / "legacy-overview.db"
+    conn = sqlite3.connect(db_path)
+    conn.executescript(
+        """
+        CREATE TABLE source_files (
+            file_hash TEXT PRIMARY KEY, original_name TEXT NOT NULL,
+            mime_type TEXT, size_bytes INTEGER NOT NULL, storage_path TEXT NOT NULL,
+            origin_zone TEXT NOT NULL DEFAULT 'internal', status TEXT NOT NULL DEFAULT 'active',
+            uploaded_by TEXT, uploaded_at TEXT NOT NULL
+        );
+        CREATE TABLE modules (code TEXT PRIMARY KEY, name TEXT NOT NULL, sort_order INTEGER NOT NULL DEFAULT 0);
+        CREATE TABLE doc_types (code TEXT PRIMARY KEY, name TEXT NOT NULL, parent_module TEXT NOT NULL, sort_order INTEGER NOT NULL DEFAULT 0);
+        CREATE TABLE file_classifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, file_hash TEXT NOT NULL,
+            module TEXT NOT NULL, doc_type TEXT, confidence REAL NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'pending', classified_by TEXT NOT NULL DEFAULT 'auto',
+            created_at TEXT NOT NULL
+        );
+        INSERT INTO modules VALUES ('old_company','旧公司概况',1);
+        INSERT INTO doc_types VALUES ('old_company_intro','旧简介','old_company',1);
+        INSERT INTO source_files VALUES ('legacy-overview','old.md',NULL,1,'legacy-overview','internal','active',NULL,'now');
+        INSERT INTO file_classifications(file_hash,module,doc_type,confidence,status,classified_by,created_at)
+            VALUES ('legacy-overview','old_company','old_company_intro',0.1,'pending','auto','now');
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    init_db(db_path)
+    conn = sqlite3.connect(db_path)
+    row = conn.execute(
+        "SELECT module, doc_type FROM file_classifications WHERE file_hash='legacy-overview'"
+    ).fetchone()
+    assert row == ("other", "unclassified")
+    assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
     conn.close()
 
 

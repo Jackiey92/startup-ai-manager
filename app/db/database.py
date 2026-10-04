@@ -186,7 +186,7 @@ def _migrate_todos(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_module_dictionary(conn: sqlite3.Connection) -> None:
-    """Move prototype dictionary rows to the functional five-module model.
+    """Move prototype dictionary rows to the current functional dictionary.
 
     Existing classification rows are rewritten before obsolete dictionary
     parents are removed.  Known prototype values retain their meaning;
