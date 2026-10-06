@@ -266,46 +266,6 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
 /* 表格横滑容器（桌面端不滚动） */
 .table-wrap{width:100%;}
 
-/* ============ 主动式资料导入向导 ============ */
-.import-mask{position:fixed;inset:0;background:rgba(25,29,45,.48);backdrop-filter:blur(3px);z-index:180;display:none;align-items:center;justify-content:center;padding:20px;}
-.import-mask.open{display:flex;animation:in .18s ease;}
-.import-wizard{width:min(940px,100%);max-height:min(720px,calc(100dvh - 40px));overflow:hidden;background:#fff;border:1px solid rgba(255,255,255,.65);border-radius:18px;box-shadow:0 24px 80px rgba(20,28,60,.28);display:flex;flex-direction:column;position:relative;}
-.import-head{display:flex;align-items:flex-start;gap:16px;padding:22px 26px 16px;border-bottom:1px solid var(--border-2);flex:none;}
-.import-eyebrow{font-size:11px;color:var(--primary);font-weight:700;letter-spacing:.6px;margin-bottom:4px;}
-.import-head h2{font-size:20px;letter-spacing:-.3px;}
-.import-head p{font-size:12px;color:var(--t3);margin-top:5px;}
-.import-close{width:32px;height:32px;border:1px solid var(--border);border-radius:9px;background:#fff;color:var(--t2);display:grid;place-items:center;cursor:pointer;margin-left:auto;flex:none;}
-.import-close:hover{border-color:#c4cdff;color:var(--primary);}
-.import-progress{display:flex;align-items:center;gap:14px;padding:14px 26px;border-bottom:1px solid var(--border-2);background:#fbfcff;flex:none;}
-.import-ring{width:50px;height:50px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(var(--primary) calc(var(--progress,0) * 1%),#e9ecf5 0);position:relative;flex:none;}
-.import-ring::after{content:"";position:absolute;inset:5px;border-radius:50%;background:#fbfcff;}
-.import-ring b{position:relative;z-index:1;font-size:12px;color:var(--primary);}
-.import-progress-txt{min-width:0;}
-.import-progress-txt b{font-size:13px;display:block;}
-.import-progress-txt span{font-size:11.5px;color:var(--t3);display:block;margin-top:3px;}
-.import-progress-bar{height:6px;flex:1;min-width:90px;background:#e9ecf5;border-radius:9px;overflow:hidden;}
-.import-progress-bar i{display:block;width:0;height:100%;border-radius:9px;background:var(--grad);transition:width .25s ease;}
-.import-body{display:grid;grid-template-columns:238px 1fr;min-height:0;flex:1;}
-.import-steps{padding:18px 13px 20px 18px;border-right:1px solid var(--border-2);overflow-y:auto;background:#fcfcfe;}
-.import-step{width:100%;display:flex;align-items:flex-start;gap:10px;border:0;background:transparent;border-radius:10px;padding:10px 9px;text-align:left;font-family:inherit;cursor:pointer;color:var(--t2);}
-.import-step:hover{background:#f1f3ff;}
-.import-step.current{background:#eef1ff;color:var(--primary);}
-.import-step.done{color:var(--green);}
-.import-step-num{width:24px;height:24px;border:1px solid #d8dce8;border-radius:50%;display:grid;place-items:center;flex:none;font-size:11px;font-weight:700;background:#fff;color:var(--t3);}
-.import-step.current .import-step-num{border-color:var(--primary);background:var(--primary);color:#fff;}
-.import-step.done .import-step-num{border-color:#b8e8c5;background:#e8f7eb;color:var(--green);}
-.import-step.done .import-step-num::before{content:"✓";}.import-step.done .import-step-num{font-size:0;}
-.import-step-copy{min-width:0;}.import-step-copy b{font-size:12.5px;display:block;line-height:1.3;}.import-step-copy span{font-size:10.5px;display:block;margin-top:3px;color:var(--t3);line-height:1.35;}.import-step.current .import-step-copy span{color:#7181d9;}
-.import-main{padding:24px 28px 20px;overflow-y:auto;min-width:0;}
-.import-main::-webkit-scrollbar{width:7px;}.import-main::-webkit-scrollbar-thumb{background:#d7d9de;border-radius:8px;}
-.import-step-kicker{font-size:11px;color:var(--t3);font-weight:600;}.import-main h3{font-size:21px;margin-top:4px;letter-spacing:-.3px;}.import-main .step-note{font-size:12px;color:var(--t3);margin-top:5px;}
-.import-reasons{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin:19px 0 16px;}.import-reason{border:1px solid var(--border);border-radius:11px;padding:13px 14px;background:#fff;}.import-reason .label{font-size:11px;font-weight:700;color:var(--primary);display:flex;align-items:center;gap:6px;}.import-reason .label::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;}.import-reason p{font-size:12.5px;line-height:1.55;color:var(--t2);margin-top:6px;}
-.import-drop{border:1px dashed #b9c4ff;border-radius:13px;background:#f8f9ff;padding:20px;text-align:center;transition:.15s;}.import-drop.drag{border-color:var(--primary);background:#eef1ff;}.import-drop strong{font-size:13px;display:block;}.import-drop p{font-size:11.5px;color:var(--t3);margin-top:5px;}.import-pick{margin-top:12px;border:1px solid var(--primary);background:#fff;color:var(--primary);border-radius:8px;padding:8px 15px;font:600 12px var(--fs);cursor:pointer;}.import-pick:hover{background:#eef1ff;}
-.import-files{display:flex;flex-direction:column;gap:7px;margin-top:12px;}.import-file{display:flex;align-items:center;gap:9px;border:1px solid var(--border-2);border-radius:8px;padding:8px 10px;font-size:12px;}.import-file .name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.import-file .status{margin-left:auto;color:var(--t3);font-size:11px;white-space:nowrap;}.import-file.ok .status{color:var(--green);}.import-file.err .status{color:var(--red);}
-.import-foot{display:flex;align-items:center;gap:9px;margin-top:19px;padding-top:15px;border-top:1px solid var(--border-2);}.import-foot .hint{font-size:11px;color:var(--t3);margin-right:auto;}.import-nav{height:34px;padding:0 14px;border-radius:8px;border:1px solid var(--border);background:#fff;color:var(--t2);font:600 12px var(--fs);cursor:pointer;}.import-nav:hover:not(:disabled){border-color:#c4cdff;color:var(--primary);}.import-nav.primary{border-color:var(--primary);background:var(--primary);color:#fff;}.import-nav:disabled{opacity:.45;cursor:not-allowed;}
-.import-resume{font-size:11px;color:var(--t3);margin-top:10px;}
-.import-chat-float{position:absolute;right:22px;bottom:22px;z-index:2;display:flex;align-items:center;gap:7px;border:1px solid #dbe2ff;background:#fff;color:var(--primary);border-radius:99px;padding:8px 12px;box-shadow:0 8px 24px rgba(77,107,254,.18);font:600 12px var(--fs);cursor:pointer;}.import-chat-float:hover{background:#eef1ff;}
-
 /* ============ 企业成长信息 ============ */
 .growth-card{margin-top:16px;}
 .growth-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:13px;}
@@ -357,18 +317,6 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
   .ext-grid{grid-template-columns:1fr 1fr;}
   .drive-stats{grid-template-columns:1fr 1fr;}
   .cal-wrap{grid-template-columns:1fr;}
-
-  /* ---- 导入向导：手机端改为上下结构 ---- */
-  .import-mask{padding:0;align-items:stretch;}
-  .import-wizard{max-height:none;height:100dvh;border-radius:0;border:0;}
-  .import-head{padding:16px 15px 13px;}
-  .import-head h2{font-size:18px;}.import-head p{font-size:11px;}
-  .import-progress{padding:11px 15px;gap:10px;}.import-ring{width:42px;height:42px;}.import-ring::after{inset:4px;}.import-progress-bar{min-width:56px;}
-  .import-body{display:flex;flex-direction:column;}
-  .import-steps{display:flex;gap:5px;padding:10px 12px 9px;border-right:0;border-bottom:1px solid var(--border-2);overflow-x:auto;overflow-y:hidden;flex:none;}
-  .import-step{width:132px;min-width:132px;padding:7px 6px;gap:7px;}.import-step-copy b{font-size:11px;}.import-step-copy span{font-size:9.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.import-step-num{width:21px;height:21px;font-size:10px;}
-  .import-main{padding:17px 14px calc(18px + env(safe-area-inset-bottom));}.import-main h3{font-size:19px;}.import-reasons{grid-template-columns:1fr;gap:8px;margin:14px 0 12px;}.import-reason{padding:11px 12px;}.import-reason p{font-size:12px;}.import-drop{padding:18px 12px;}.import-foot{margin-top:14px;}.import-foot .hint{font-size:10px;}.import-nav{padding:0 11px;}
-  .import-chat-float{right:13px;bottom:calc(13px + env(safe-area-inset-bottom));}
 }
 
 /* ---- 手机（≤760px）：抽屉导航 + 全单列 ---- */
@@ -688,8 +636,6 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
   .cal-num{display:inline-block;font-size:12.5px;color:var(--t1);}
   .cal-cell.today .cal-num{background:var(--primary);color:#fff;border-radius:50%;width:20px;height:20px;line-height:20px;text-align:center;}
   .cal-cell.blank{background:transparent;border:none;}
-  /* 初期版本只展示四个主入口；其余模块保留实现，待产品阶段开放。 */
-  .deferred-module,.deferred-screen{display:none!important;}
 </style>
 </head>
 <body>
@@ -704,15 +650,15 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
 
     <nav class="nav" id="navAccordion">
       <!-- 企业综合（第一） -->
-      <button class="ov-item active" data-go="bizov">
+      <button class="ov-item active" data-go="overview">
         <span class="ah-ic" style="background:var(--grad);color:#fff"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l2.2 5.8L20 10.8l-5.8 2.2L12 19l-2.2-6L4 10.8l5.8-2z"/></svg></span>
-        业务<span class="g-dot"></span>
+        企业综合<span class="g-dot"></span>
       </button>
 
       <div class="nav-label">业务模块</div>
 
-      <!-- 1 企业基本信息（暂隐，资料导入作为系统入口） -->
-      <div class="acc deferred-module">
+      <!-- 1 企业基本信息 -->
+      <div class="acc">
         <button class="acc-head">
           <span class="ah-ic" style="background:#e8efff;color:var(--primary)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l7-4 7 4v14"/></svg></span>
           企业基本信息
@@ -754,8 +700,8 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
           <button class="sub-item" data-go="hr"><span class="dot"></span>期权激励 ESOP</button>
         </div>
       </div>
-      <!-- 4 生产（暂隐） -->
-      <div class="acc deferred-module">
+      <!-- 4 生产 -->
+      <div class="acc">
         <button class="acc-head">
           <span class="ah-ic" style="background:#e6fbfa;color:var(--cyan)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none"stroke="currentColor" stroke-width="2"><path d="M2 20h20M4 20V8l5 3V8l5 3V8l6 4v8"/></svg></span>
           生产
@@ -768,8 +714,8 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
           <button class="sub-item" data-go="prod"><span class="dot"></span>质量管控</button>
         </div>
       </div>
-      <!-- 5 采购（暂隐） -->
-      <div class="acc deferred-module">
+      <!-- 5 采购 -->
+      <div class="acc">
         <button class="acc-head">
           <span class="ah-ic" style="background:#fff3e6;color:var(--orange)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><path d="M3 6h18M16 10a4 4 0 01-8 0"/></svg></span>
           采购
@@ -781,8 +727,8 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
           <button class="sub-item" data-go="purch"><span class="dot"></span>采购价格与合同</button>
         </div>
       </div>
-      <!-- 6 销售（暂隐，业务模块后续承载） -->
-      <div class="acc deferred-module">
+      <!-- 6 销售 -->
+      <div class="acc">
         <button class="acc-head">
           <span class="ah-ic" style="background:#e8efff;color:var(--primary)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg></span>
           销售
@@ -808,8 +754,8 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
           <button class="sub-item" data-go="mkt"><span class="dot"></span>营销渠道</button>
         </div>
       </div>
-      <!-- 8 财务（暂隐） -->
-      <div class="acc deferred-module">
+      <!-- 8 财务 -->
+      <div class="acc">
         <button class="acc-head">
           <span class="ah-ic" style="background:#e8f7eb;color:var(--green)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></span>
           财务
@@ -823,8 +769,8 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
           <button class="sub-item" data-go="fin"><span class="dot"></span>成本费用归集</button>
         </div>
       </div>
-      <!-- 9 融资（暂隐） -->
-      <div class="acc deferred-module">
+      <!-- 9 融资 -->
+      <div class="acc">
         <button class="acc-head">
           <span class="ah-ic" style="background:#f0ecff;color:var(--purple)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l9 5v10l-9 5-9-5V7z"/></svg></span>
           融资
@@ -849,17 +795,17 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
         </button>
       </div>
 
-      <!-- 系统入口：资料导入始终保留，其他系统工具暂隐 -->
-      <div class="nav-label">系统入口</div>
-      <button class="sys-item import-entry" id="importNavBtn" type="button">
+      <!-- 系统板块 -->
+      <div class="nav-label">系统</div>
+      <button class="sys-item" data-go="ext">
         <span class="ah-ic" style="background:#f0ecff;color:var(--purple)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span>
-        资料导入<span class="g-dot" style="background:var(--primary)"></span>
+        扩展<span class="g-dot" style="background:var(--purple)"></span>
       </button>
-      <button class="sys-item deferred-module" data-go="cal">
+      <button class="sys-item" data-go="cal">
         <span class="ah-ic" style="background:#fff3e6;color:var(--orange)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
         日程
       </button>
-      <button class="sys-item deferred-module" data-go="drive">
+      <button class="sys-item" data-go="drive">
         <span class="ah-ic" style="background:#e8f7eb;color:var(--green)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg></span>
         云盘
       </button>
@@ -882,13 +828,13 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
       <div class="gsearch"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>搜索企业资料、指标、文件…</div>
       <span class="sp"></span>
       <button class="iconbtn" title="通知"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg></button>
-      <button class="tbtn pri" id="importWizardBtn"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>上传企业资料</button>
+      <button class="tbtn pri"><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>导入资料</button>
     </header>
 
     <div class="content">
 
     <!-- ================= 企业综合屏 ================= -->
-    <div class="screen deferred-screen" id="overview">
+    <div class="screen active" id="overview">
       <div class="ov-scroll">
         <!-- hero -->
         <div class="hero">
@@ -1143,7 +1089,7 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
     </div>
 
     <!-- ================= 企业基本信息 ================= -->
-    <div class="screen deferred-screen" id="info">
+    <div class="screen" id="info">
       <div class="board-scroll">
         <div class="sec-head"><h2>企业基本信息</h2><span class="sub">工商登记 · 注册资本 · 治理结构</span></div>
         <div class="insight info"><span class="ai-badge">✦ AI</span><span class="itxt">近 12 个月发生 <b>2 次</b>变更（注册资本、经营范围）；登记信息、股东名册与出资进度<b>勾稽一致</b>。</span><span class="ibasis">查看依据</span></div>
@@ -1173,7 +1119,7 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
     </div>
 
     <!-- ================= 业务概览 ================= -->
-    <div class="screen active" id="bizov">
+    <div class="screen" id="bizov">
       <div class="board-scroll">
         <div class="sec-head"><h2>业务概览</h2><span class="sub">业务画像 · 产品矩阵 · 技术与知识产权</span></div>
         <div class="insight"><span class="ai-badge">✦ AI</span><span class="itxt">核心产品 A 型进入小批量（TRL 7）；<b>1 项师生共创专利权属待确认</b>，建议融资交割前补齐。</span><span class="ibasis">查看依据</span></div>
@@ -1225,7 +1171,7 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
     </div>
 
     <!-- ================= 生产 ================= -->
-    <div class="screen deferred-screen" id="prod">
+    <div class="screen" id="prod">
       <div class="board-scroll">
         <div class="sec-head"><h2>生产</h2><span class="sub">生产计划 · 产能良率 · 库存质量</span></div>
         <div class="insight"><span class="ai-badge">✦ AI</span><span class="itxt">产能利用率 <b>68.0%</b>、良品率 96.2%；A 型订单交期集中于 Q4，建议排产预留缓冲。</span><span class="ibasis">查看依据</span></div>
@@ -1246,7 +1192,7 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
     </div>
 
     <!-- ================= 采购 ================= -->
-    <div class="screen deferred-screen" id="purch">
+    <div class="screen" id="purch">
       <div class="board-scroll">
         <div class="sec-head"><h2>采购</h2><span class="sub">供应商 · 采购订单 · 价格合同</span></div>
         <div class="insight info"><span class="ai-badge">✦ AI</span><span class="itxt">合格供应商 <b>26 家</b>；PO-2026-022 已到货未付款，请注意付款节点与现金安排。</span><span class="ibasis">查看依据</span></div>
@@ -1267,7 +1213,7 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
     </div>
 
     <!-- ================= 销售 ================= -->
-    <div class="screen deferred-screen" id="sales">
+    <div class="screen" id="sales">
       <div class="board-scroll">
         <div class="sec-head"><h2>销售</h2><span class="sub">客户 · 销售订单 · 回款管理</span></div>
         <div class="insight info"><span class="ai-badge">✦ AI</span><span class="itxt">在手订单 <b>386.00 万</b>，销售金额与收入勾稽一致；综合回款率 76.5%，关注 2 笔逾期应收。</span><span class="ibasis">查看依据</span></div>
@@ -1381,7 +1327,7 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
     </div>
 
     <!-- ================= 财务 ================= -->
-    <div class="screen deferred-screen" id="fin">
+    <div class="screen" id="fin">
       <div class="board-scroll">
         <div class="sec-head"><h2>财务</h2><span class="sub">三表 · 成本费用 · 凭证</span></div>
         <div class="insight"><span class="ai-badge">✦ AI</span><span class="itxt">净利润仍为负但<b>同比收窄 26.1%</b>；现金跑道 7.4 个月，建议融资前控制月均净消耗。</span><span class="ibasis">查看依据</span></div>
@@ -1411,7 +1357,7 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
     </div>
 
     <!-- ================= 融资 ================= -->
-    <div class="screen deferred-screen" id="fund">
+    <div class="screen" id="fund">
       <div class="board-scroll">
         <div class="sec-head"><h2>融资</h2><span class="sub">融资历程 · Cap Table · 资料室</span></div>
         <div class="insight risk"><span class="ai-badge">✦ AI</span><span class="itxt"><b>跨板块风险：</b>创始团队持股 62.0% 且附完全棘轮反稀释条款，下一轮估值若下行将进一步稀释。</span><span class="ibasis">依据：投资协议 + Cap Table</span></div>
@@ -1448,7 +1394,7 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
     </div>
 
     <!-- ================= 扩展中心 ================= -->
-    <div class="screen deferred-screen" id="ext">
+    <div class="screen" id="ext">
       <div class="board-scroll">
         <div class="sec-head"><h2>扩展中心</h2><span class="sub">插件 · 技能 · MCP，按需接入外部数据与协作工具</span></div>
         <div class="ext-hint-bar">
@@ -1477,7 +1423,7 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
     </div>
 
     <!-- ================= 日程 ================= -->
-    <div class="screen deferred-screen" id="cal">
+    <div class="screen" id="cal">
       <div class="board-scroll">
         <div class="sec-head"><h2>日程</h2><span class="sub">工作事项 · 提醒 · 会议安排</span></div>
         <div class="cal-wrap">
@@ -1508,7 +1454,7 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
     </div>
 
     <!-- ================= 云盘 ================= -->
-    <div class="screen deferred-screen" id="drive">
+    <div class="screen" id="drive">
       <div class="board-scroll">
         <div class="sec-head"><h2>云盘</h2><span class="sub">企业资料 · 导入文件 · 协作空间</span></div>
         <div class="drive-stats">
@@ -1525,8 +1471,9 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
           </div>
           <span class="sp"></span>
           <button class="drive-btn" id="driveUploadBtn"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v4M17 8l-5-5-5 5M12 3v12"/></svg><span id="driveUploadLabel">上传</span></button>
+          <input type="file" id="driveFileInput" accept=".pdf,.xlsx,.xlsm,.xls" style="display:none">
           <button class="drive-btn">新建文件夹</button>
-          <button class="drive-btn primary" id="driveWizardBtn"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg>导入 AI 分析</button>
+          <button class="drive-btn primary" data-go="chat"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg>导入 AI 分析</button>
         </div>
         <div class="drive-files">
           <div class="table-wrap"><table><thead><tr><th>名称</th><th>大小</th><th>更新时间</th><th>来源</th><th class="b">操作</th></tr></thead><tbody id="driveFiles"></tbody></table></div>
@@ -1537,38 +1484,6 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
           <span class="drive-conn-chip" data-go="ext">＋ 接入更多存储 / 协作来源</span>
         </div>
       </div>
-    </div>
-
-    <!-- ============ AI 动态资料引导 ============ -->
-    <div class="import-mask" id="importMask" aria-hidden="true">
-      <section class="import-wizard" role="dialog" aria-modal="true" aria-labelledby="importTitle">
-        <div class="import-head">
-          <div><div class="import-eyebrow">STARTUP AI MANAGER · IMPORT GUIDE</div><h2 id="importTitle">上传企业资料</h2><p>AI 会根据已获得的资料实时给出下一步建议。</p></div>
-          <button class="import-close" id="importClose" type="button" aria-label="关闭导入向导">×</button>
-        </div>
-        <div class="import-progress">
-          <div class="import-ring" id="importRing" style="--progress:0"><b id="importRingText">0%</b></div>
-          <div class="import-progress-txt"><b id="importProgressTitle">资料完整度</b><span id="importProgressSub">正在向 AI 获取资料状态…</span></div>
-          <div class="import-progress-bar"><i id="importProgressBar"></i></div>
-        </div>
-        <div class="import-body">
-          <div class="import-main">
-            <div class="import-reasons">
-              <div class="import-reason"><div class="label">AI 导入建议</div><p id="importGuideText" aria-live="polite">正在生成个性化建议…</p></div>
-              <div class="import-reason"><div class="label">建议上传</div><p id="importNextAction">正在分析已有资料…</p></div>
-            </div>
-            <div class="import-drop" id="importDrop">
-              <strong>把企业资料拖到这里</strong><p>当前支持 PDF、Excel；上传后 AI 会更新资料状态与下一步建议。</p>
-              <button class="import-pick" id="importPick" type="button">选择文件</button>
-              <input type="file" id="importFileInput" multiple accept=".pdf,.xls,.xlsx,.xlsm" hidden>
-            </div>
-            <div class="import-files" id="importFiles"></div>
-            <div class="import-resume" id="importResume">资料状态以后台已存入的文件为准。</div>
-            <div class="import-foot"><span class="hint" id="importFootHint">上传后将自动刷新 AI 建议</span><button class="import-nav primary" id="importRefresh" type="button">刷新建议</button></div>
-          </div>
-        </div>
-        <button class="import-chat-float" id="importChatFloat" type="button"><span>✦</span>需要帮忙？问 AI</button>
-      </section>
     </div>
 
     <!-- 消息关注设置弹窗 -->
@@ -1908,7 +1823,10 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
   }).join('');
 
   /* ========== 真实上传：接入 OpenClaw harness ========== */
-  var HARNESS_API='/api/upload';
+  var HARNESS_API='http://127.0.0.1:5000/api/upload';
+  var uploadBtn=document.getElementById('driveUploadBtn'),
+      fileInput=document.getElementById('driveFileInput'),
+      uploadLabel=document.getElementById('driveUploadLabel');
 
   function fmtSize(bytes){
     if(bytes<1024)return bytes+' B';
@@ -1928,63 +1846,24 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
     tb.insertBefore(tr,tb.firstChild);
   }
 
-  /* ---------- AI 动态资料引导：业务方法只在后端 ---------- */
-  var GUIDE_API='/api/import-guide', importMask=document.getElementById('importMask'),
-      importInput=document.getElementById('importFileInput'), importFiles=document.getElementById('importFiles'),
-      importDrop=document.getElementById('importDrop'), uploadedFiles=[];
-  function renderGuide(guide){
-    var completeness=guide.completeness||{}, pct=Number(completeness.percent)||0;
-    document.getElementById('importRing').style.setProperty('--progress',pct);
-    document.getElementById('importRingText').textContent=pct+'%';
-    document.getElementById('importProgressBar').style.width=pct+'%';
-    document.getElementById('importProgressSub').textContent='已获得：'+(completeness.received||[]).join('、')+'；待补充：'+(completeness.missing||[]).join('、');
-    document.getElementById('importGuideText').textContent=guide.message;
-    document.getElementById('importNextAction').textContent=guide.next_action;
-    document.getElementById('importFootHint').textContent='AI 已根据后台资料状态更新建议';
-  }
-  function showGuideError(){
-    document.getElementById('importGuideText').textContent='AI 引导暂不可用，请稍后刷新。';
-    document.getElementById('importNextAction').textContent='资料已安全保存在后台，待 AI 服务恢复后会基于实际资料生成建议。';
-    document.getElementById('importFootHint').textContent='未使用浏览器内置步骤或模板替代 AI 引导';
-  }
-  function showGuidePending(){
-    document.getElementById('importGuideText').textContent='资料已解析，AI 正在根据真实内容生成引导…';
-    document.getElementById('importNextAction').textContent='稍后点击刷新获取基于解析证据的建议。';
-    document.getElementById('importFootHint').textContent='解析与 AI 引导已解耦，上传不会等待模型冷启动';
-  }
-  function refreshGuide(){
-    document.getElementById('importGuideText').textContent='正在向 AI 获取资料状态…';
-    return fetch(GUIDE_API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event:'open'})})
-      .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
-      .then(function(res){renderGuide(res.guide);})
-      .catch(showGuideError);
-  }
-  function renderImportFiles(){
-    importFiles.innerHTML=uploadedFiles.map(function(f){return '<div class="import-file '+(f.ok?'ok':'err')+'"><span>📄</span><span class="name">'+f.name+'</span><span class="status">'+(f.ok?'已上传':f.error)+'</span></div>';}).join('');
-  }
-  function openImportWizard(){importMask.classList.add('open');importMask.setAttribute('aria-hidden','false');refreshGuide();}
-  function closeImportWizard(){importMask.classList.remove('open');importMask.setAttribute('aria-hidden','true');}
-  function uploadImportFile(file){
+  uploadBtn.addEventListener('click',function(){fileInput.click();});
+  fileInput.addEventListener('change',function(){
+    var file=fileInput.files[0];if(!file)return;
     var fd=new FormData();fd.append('file',file);
-    var entry={name:file.name,ok:false,error:'上传中…'};uploadedFiles.push(entry);renderImportFiles();
-    return fetch(HARNESS_API,{method:'POST',body:fd}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(res){
-      entry.ok=true;entry.error='';prependFile({n:res.original_name,s:fmtSize(res.size),d:nowMMDD(),src:'本地上传',f:false});
-      if(res.guide)renderGuide(res.guide);else if(res.guide_status==='queued')showGuidePending();else showGuideError();
-    }).catch(function(err){entry.error=err.message||'上传失败';}).finally(renderImportFiles);
-  }
-  function handleImportFiles(files){if(!files||!files.length)return;Promise.all(Array.prototype.slice.call(files).map(uploadImportFile));importInput.value='';}
-  document.getElementById('importWizardBtn').addEventListener('click',openImportWizard);
-  document.getElementById('importNavBtn').addEventListener('click',openImportWizard);
-  document.getElementById('driveUploadBtn').addEventListener('click',openImportWizard);
-  document.getElementById('driveWizardBtn').addEventListener('click',openImportWizard);
-  document.getElementById('importClose').addEventListener('click',closeImportWizard);
-  document.getElementById('importChatFloat').addEventListener('click',function(){closeImportWizard();go('chat');});
-  document.getElementById('importPick').addEventListener('click',function(){importInput.click();});
-  importInput.addEventListener('change',function(){handleImportFiles(importInput.files);});
-  ['dragenter','dragover'].forEach(function(evt){importDrop.addEventListener(evt,function(e){e.preventDefault();importDrop.classList.add('drag');});});
-  ['dragleave','drop'].forEach(function(evt){importDrop.addEventListener(evt,function(e){e.preventDefault();importDrop.classList.remove('drag');if(evt==='drop')handleImportFiles(e.dataTransfer.files);});});
-  document.getElementById('importRefresh').addEventListener('click',refreshGuide);
-  importMask.addEventListener('click',function(e){if(e.target===importMask)closeImportWizard();});
+    uploadBtn.disabled=true;uploadLabel.textContent='解析中…';
+    fetch(HARNESS_API,{method:'POST',body:fd})
+      .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
+      .then(function(res){
+        prependFile({n:res.original_name,s:fmtSize(res.size),d:nowMMDD(),src:'本地上传',f:false});
+        uploadLabel.textContent='上传';
+        fileInput.value='';
+      })
+      .catch(function(){
+        uploadLabel.textContent='上传失败';
+        setTimeout(function(){uploadLabel.textContent='上传';},1800);
+      })
+      .finally(function(){uploadBtn.disabled=false;});
+  });
 
   /* ========== 消息关注 ========== */
   var NEWS=[
