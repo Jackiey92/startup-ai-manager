@@ -2,6 +2,7 @@ profile: local
 memory:
   provider: openviking
   base_url: http://127.0.0.1:1933
+  ovcli_config: harness-openclaw/state/sam-ovcli.conf
   templates_dir: custom-prompts
 model:
   default_model: qwen3.8-max

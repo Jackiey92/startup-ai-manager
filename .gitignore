@@ -21,6 +21,10 @@ node_modules/
 .DS_Store
 *.swp
 
+# Local agent dev instructions (Codex tool-layer identity lives in ~/.codex;
+# this project-notes file is local-only and must not ship with the product repo)
+AGENTS.md
+
 # App runtime data
 data/app.db
 data/app.db-*
@@ -32,6 +36,8 @@ data/sales_app/
 # OpenClaw runtime
 .sam-isolated/
 harness-openclaw/state/openclaw.json
+harness-openclaw/state/ov-data/
+harness-openclaw/state/sam-ovcli*.conf
 harness-openclaw/state/extensions/
 harness-openclaw/state/gateway.log
 harness-openclaw/state/agents/

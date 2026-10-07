@@ -7,13 +7,13 @@ from app.ports import OpenVikingMemoryProvider
 def test_map_builder_consumes_result_array_from_ls():
     responses = [
         # 2a recursive listing is present after eventual consistency settles.
-            {"ok": True, "result": [{"uri": "viking://user/default/memories/projects/10_startup_ai_manager/2a_extraction/fixco/src_a/L0/abstract.md"}, {"uri": "viking://user/default/memories/projects/10_startup_ai_manager/2a_extraction/fixco/src_a/L2/manifest.json"}]},
+            {"ok": True, "result": [{"uri": "viking://sam-test/product-root/2a_extraction/fixco/src_a/L0/abstract.md"}, {"uri": "viking://sam-test/product-root/2a_extraction/fixco/src_a/L2/manifest.json"}]},
         {"ok": True, "result": "# L0"},
         # 2b listing and exact fact read.
-        {"ok": True, "result": [{"uri": "viking://user/default/memories/projects/10_startup_ai_manager/2b_facts/fixco/registered_capital.json"}]},
+        {"ok": True, "result": [{"uri": "viking://sam-test/product-root/2b_facts/fixco/registered_capital.json"}]},
         {"ok": True, "result": json.dumps({"status": "verified", "value": 100})},
             {"ok": True, "result": "ok"},
-            {"ok": True, "result": [{"uri": "viking://user/default/memories/projects/10_startup_ai_manager/2b_facts/fixco/registered_capital.json"}]},
+            {"ok": True, "result": [{"uri": "viking://sam-test/product-root/2b_facts/fixco/registered_capital.json"}]},
             {"ok": True, "result": "ok"}, {"ok": True, "result": "ok"}, {"ok": True, "result": "ok"},
     ]
 

@@ -163,6 +163,7 @@ class RuntimeConfig:
     memory_base_url: str
     memory_base_url_env: str
     memory_api_key_env: str
+    memory_ovcli_config: Path
     memory_templates_dir: str
     tool_plugin_dir: Path
     tool_bridge_python: Path
@@ -175,6 +176,9 @@ class RuntimeConfig:
         env = env if env is not None else os.environ
         root = Path(project_root or env.get("SAM_PROJECT_ROOT", Path(__file__).resolve().parent.parent)).resolve()
         config = _read_config(root, env)
+        memory_root_uri = str(env.get("SAM_MEMORY_ROOT_URI", "")).rstrip("/")
+        if not memory_root_uri:
+            raise RuntimeError("Missing SAM_MEMORY_ROOT_URI; set the SAM product OV root explicitly")
         runtime = config.get("runtime", {})
         paths = config.get("paths", {})
         configured_root = _path(root, env.get("SAM_PROJECT_ROOT", paths.get("project_root")), root)
@@ -186,6 +190,7 @@ class RuntimeConfig:
         entry = _path(configured_root, env.get("SAM_OPENCLAW_ENTRY", paths.get("openclaw_entry")), configured_root / ".oc-runtime/node_modules/openclaw/openclaw.mjs", follow_symlinks=False)
         venv_bin = _path(configured_root, env.get("SAM_VENV_BIN", paths.get("venv_bin")), configured_root / ".venv/bin", follow_symlinks=False)
         state = _path(configured_root, env.get("SAM_OPENCLAW_STATE_DIR", paths.get("state_dir")), harness / "state")
+        ovcli_config = _path(configured_root, env.get("SAM_OVCLI_CONFIG", memory.get("ovcli_config")), state / "sam-ovcli.conf", follow_symlinks=False)
         config_path = _path(configured_root, env.get("SAM_OPENCLAW_CONFIG", paths.get("config_path")), state / "openclaw.json")
         plugin_dir = _path(configured_root, env.get("SAM_TOOL_PLUGIN_DIR", paths.get("tool_plugin_dir")), harness / "plugins" / "sam-memory")
         # The web/runtime venv intentionally remains separate from the parser
@@ -245,10 +250,11 @@ class RuntimeConfig:
             str(env.get(base_url_env, model.get("base_url", ""))), base_url_env, name_env, key_env,
             str(env.get(name_env, model.get("default_model", "auto"))),
             str(memory.get("provider", "local")),
-            str(env.get("SAM_OV_ROOT_URI", memory.get("root_uri", "viking://user/default/memories/projects/10_startup_ai_manager"))).rstrip("/"),
+            memory_root_uri,
             str(env.get("SAM_OV_BASE_URL", memory.get("base_url", "http://127.0.0.1:1933"))),
             str(memory.get("base_url_env", "SAM_OV_BASE_URL")),
             str(memory.get("api_key_env", "SAM_OV_API_KEY")),
+            ovcli_config,
             str(env.get("SAM_OV_TEMPLATES_DIR", memory.get("templates_dir", "custom-prompts"))),
             plugin_dir, bridge_python,
             agent_id,

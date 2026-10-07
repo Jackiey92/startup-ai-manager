@@ -5,6 +5,11 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_DIR"
 
+if [[ -z "${SAM_MEMORY_ROOT_URI:-}" ]]; then
+  echo "Missing SAM_MEMORY_ROOT_URI; set the SAM product OV root explicitly" >&2
+  exit 2
+fi
+
 select_node24() {
   local candidates=() candidate version major i
   if [[ -n "${SAM_NODE_BIN:-}" ]]; then

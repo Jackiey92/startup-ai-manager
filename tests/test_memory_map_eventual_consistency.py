@@ -31,7 +31,7 @@ def test_known_source_is_found_by_exact_read_while_ls_lags(tmp_path):
     # parser-owned L2 body so the manager can read the正文 immediately.
     result = MapBuilder(memory).rebuild_map("acme", source_ids=("fresh-source",))
     assert [item["uri"] for item in result.map["branches"]] == [
-        "viking://user/default/memories/projects/10_startup_ai_manager/2a_extraction/acme/fresh-source/L2/mapping.md"
+        "viking://sam-test/product-root/2a_extraction/acme/fresh-source/L2/mapping.md"
     ]
     assert result.map["branches"][0]["dangling"] is False
 

@@ -32,6 +32,7 @@ memory:
   base_url: http://127.0.0.1:1933
   base_url_env: SAM_OV_BASE_URL
   api_key_env: SAM_OV_API_KEY
+  ovcli_config: harness-openclaw/state/sam-ovcli.conf
   templates_dir: custom-prompts
 model:
   api: openai-completions

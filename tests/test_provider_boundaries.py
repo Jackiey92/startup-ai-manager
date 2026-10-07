@@ -45,7 +45,7 @@ def test_explicit_connect_path_overrides_sam_data_root(monkeypatch, tmp_path: Pa
 
 
 def test_local_profile_injects_paths_skills_and_local_sam_ov() -> None:
-    config = RuntimeConfig.from_env(project_root=ROOT, env={"SAM_PROFILE": "local"})
+    config = RuntimeConfig.from_env(project_root=ROOT, env={"SAM_MEMORY_ROOT_URI": "viking://sam-test/product-root", "SAM_PROFILE": "local"})
     assert config.project_root == ROOT
     assert config.harness_root == ROOT / "harness-openclaw"
     assert config.objects_dir == ROOT / "data" / "objects"
@@ -62,7 +62,7 @@ def test_local_profile_injects_paths_skills_and_local_sam_ov() -> None:
 
 
 def test_cloud_profile_is_a_portable_path_overlay() -> None:
-    config = RuntimeConfig.from_env(project_root=ROOT, env={"SAM_PROFILE": "cloud"})
+    config = RuntimeConfig.from_env(project_root=ROOT, env={"SAM_MEMORY_ROOT_URI": "viking://sam-test/product-root", "SAM_PROFILE": "cloud"})
     assert config.project_root == Path("/opt/sam/workspace")
     assert config.harness_root == Path("/opt/sam/workspace/harness-openclaw")
     assert config.main_db == Path("/opt/sam/workspace/data/app.db")
@@ -73,6 +73,7 @@ def test_environment_can_override_skill_map_and_model_names() -> None:
     config = RuntimeConfig.from_env(
         project_root=ROOT,
         env={
+            "SAM_MEMORY_ROOT_URI": "viking://sam-test/product-root",
             "SAM_PROFILE": "local",
             "SAM_SKILL_MAP": json.dumps({"pdf": "custom-pdf"}),
             "SAM_MODEL_NAME_ENV": "MODEL_NAME",
@@ -87,7 +88,7 @@ def test_environment_can_override_skill_map_and_model_names() -> None:
 def test_openclaw_gateway_port_has_explicit_env_alias() -> None:
     config = RuntimeConfig.from_env(
         project_root=ROOT,
-        env={"SAM_PROFILE": "local", "OPENCLAW_GATEWAY_PORT": "18791"},
+        env={"SAM_MEMORY_ROOT_URI": "viking://sam-test/product-root", "SAM_PROFILE": "local", "OPENCLAW_GATEWAY_PORT": "18791"},
     )
     assert config.gateway_port == 18791
 
@@ -98,7 +99,7 @@ def test_local_memory_enforces_verified_2b_and_supports_search(tmp_path: Path) -
         memory.put_fact("acme", "runway", {"status": "claimed", "months": 3})
     memory.put_fact("acme", "runway", {"status": "verified", "months": 12})
     assert memory.get_2b("acme", "runway")["months"] == 12
-    assert memory.search("months", prefix="viking://user/default")[0]["content"]
+    assert memory.search("months", prefix="viking://sam-test")[0]["content"]
 
 
 def test_application_sources_have_no_windows_runtime_literals() -> None:
@@ -115,7 +116,7 @@ def test_bridge_interpreter_keeps_venv_symlink_and_prefix() -> None:
         pytest.skip("isolated venv is not present in this checkout")
     config = RuntimeConfig.from_env(
         project_root=ROOT,
-        env={"SAM_PROFILE": "local", "SAM_TOOL_BRIDGE_PYTHON": str(interpreter)},
+        env={"SAM_MEMORY_ROOT_URI": "viking://sam-test/product-root", "SAM_PROFILE": "local", "SAM_TOOL_BRIDGE_PYTHON": str(interpreter)},
     )
     assert config.tool_bridge_python == interpreter
     assert "venv" in config.tool_bridge_python.parts
@@ -132,5 +133,5 @@ def test_default_bridge_prefers_isolated_parser_venv_when_present() -> None:
     isolated = ROOT / ".sam-isolated" / "venv" / "bin" / "python"
     if not isolated.is_file():
         pytest.skip("isolated venv is not present in this checkout")
-    config = RuntimeConfig.from_env(project_root=ROOT, env={"SAM_PROFILE": "local"})
+    config = RuntimeConfig.from_env(project_root=ROOT, env={"SAM_MEMORY_ROOT_URI": "viking://sam-test/product-root", "SAM_PROFILE": "local"})
     assert config.tool_bridge_python == isolated

@@ -29,6 +29,7 @@ def test_openviking_provider_uses_cli_and_injected_transport(tmp_path):
         base_url="https://ov.example.test",
         api_key="secret-for-test",
         runner=runner,
+        cli_config_path=tmp_path / "sam-ovcli.conf",
     )
 
     provider.put("viking://x.md", "hello", metadata={"layer": "2a"})
@@ -40,10 +41,53 @@ def test_openviking_provider_uses_cli_and_injected_transport(tmp_path):
     assert command[0] == "ov"
     assert "write" in command
     assert command[command.index("--mode") + 1] == "replace"
-    assert kwargs["env"]["OPENVIKING_URL"] == "https://ov.example.test"
-    assert kwargs["env"]["VIKINGBOT_ENDPOINT"] == "https://ov.example.test"
-    assert kwargs["env"]["VIKINGBOT_API_KEY"] == "secret-for-test"
+    assert "--processing-mode" not in command
+    assert "OPENVIKING_URL" not in kwargs["env"]
+    assert "VIKINGBOT_ENDPOINT" not in kwargs["env"]
+    assert "VIKINGBOT_API_KEY" not in kwargs["env"]
+    assert kwargs["env"]["OPENVIKING_CLI_CONFIG_FILE"] == str(tmp_path / "sam-ovcli.conf")
+    assert "OV_API_KEY" not in kwargs["env"]
+    assert "OPENVIKING_API_KEY" not in kwargs["env"]
+    assert json.loads((tmp_path / "sam-ovcli.conf").read_text()) == {
+        "url": "https://ov.example.test", "api_key": "secret-for-test"
+    }
     assert "secret-for-test" not in " ".join(command)
+
+
+def test_environment_is_allowlisted_and_default_config_has_no_key(tmp_path, monkeypatch):
+    monkeypatch.setenv("OV_API_KEY", "private")
+    monkeypatch.setenv("OPENVIKING_API_KEY", "private")
+    monkeypatch.setenv("VIKINGBOT_API_KEY", "private")
+    monkeypatch.setenv("OPENVIKING_URL", "https://private.example")
+    monkeypatch.setenv("VIKINGBOT_ENDPOINT", "https://private.example")
+    monkeypatch.setenv("OPENVIKING_TOKEN", "private")
+    path = tmp_path / "sam-ovcli.conf"
+    provider = OpenVikingMemoryProvider(runner=fake_runner_factory([]), cli_config_path=path)
+    env = provider._env()
+    assert env["OPENVIKING_CLI_CONFIG_FILE"] == str(path)
+    assert not any(key in env for key in (
+        "OV_API_KEY", "OPENVIKING_API_KEY", "VIKINGBOT_API_KEY", "OPENVIKING_URL",
+        "VIKINGBOT_ENDPOINT", "OPENVIKING_TOKEN",
+    ))
+    assert json.loads(path.read_text()) == {"url": "http://127.0.0.1:1933"}
+    assert "api_key" not in json.loads(path.read_text())
+
+
+def test_unavailable_local_server_fails_without_remote_fallback(monkeypatch):
+    def unavailable(*args, **kwargs):
+        raise OSError("connection refused")
+    class UnavailableOpener:
+        open = unavailable
+    monkeypatch.setattr("urllib.request.build_opener", lambda *handlers: UnavailableOpener())
+    provider = OpenVikingMemoryProvider(base_url="http://127.0.0.1:1933")
+    with pytest.raises(MemoryUnavailable, match="start it with openviking-server"):
+        provider.read("viking://x")
+
+
+def test_remote_endpoint_is_rejected_before_cli(monkeypatch):
+    provider = OpenVikingMemoryProvider(base_url="https://user-default.example")
+    with pytest.raises(MemoryUnavailable, match="remote fallback is disabled"):
+        provider._check_endpoint()
 
 
 def test_add_resource_passes_full_ov_parent_auto_create_uri(tmp_path):

@@ -60,4 +60,4 @@ def test_derivation_promotes_only_verified_source_backed_facts(tmp_path):
     assert len(facts) == 1
     written = service.promote(facts)
     assert len(written) == 1
-    assert memory.query(prefix="viking://user/default/memories/projects/10_startup_ai_manager/2b_facts/acme")
+    assert memory.query(prefix="viking://sam-test/product-root/2b_facts/acme")

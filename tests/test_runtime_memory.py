@@ -38,13 +38,13 @@ def test_ttl_expiry_uses_injected_clock_and_cleanup_preserves_2a_2b(tmp_path):
     runtime.append_event("s1", "t1", "state", {"state": "running"})
     current[0] = start + timedelta(seconds=11)
     assert runtime.close_or_expire("s1", "t1")["state"] == "expired"
-    memory.put("viking://user/default/memories/projects/10_startup_ai_manager/2a/a.md", "l2")
-    memory.put("viking://user/default/memories/projects/10_startup_ai_manager/2b_facts/acme/cash.json", "fact")
+    memory.put("viking://sam-test/product-root/2a/a.md", "l2")
+    memory.put("viking://sam-test/product-root/2b_facts/acme/cash.json", "fact")
     runtime.cleanup("s1", "t1")
-    assert memory.read("viking://user/default/memories/projects/10_startup_ai_manager/2a/a.md") == "l2"
-    assert memory.read("viking://user/default/memories/projects/10_startup_ai_manager/2b_facts/acme/cash.json") == "fact"
+    assert memory.read("viking://sam-test/product-root/2a/a.md") == "l2"
+    assert memory.read("viking://sam-test/product-root/2b_facts/acme/cash.json") == "fact"
     with pytest.raises(FileNotFoundError):
-        memory.read("viking://user/default/memories/projects/10_startup_ai_manager/2c_runtime/s1/t1/state.json")
+        memory.read("viking://sam-test/product-root/2c_runtime/s1/t1/state.json")
 
 
 def test_runtime_notes_never_verified_and_refs_are_uris(tmp_path):

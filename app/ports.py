@@ -13,6 +13,9 @@ import subprocess
 import tempfile
 import shutil
 import time
+import urllib.error
+import urllib.request
+from urllib.parse import urlparse
 from collections.abc import Callable, Sequence
 from typing import Any, Protocol
 from .memory_paths import MEMORY_ROOT
@@ -238,28 +241,55 @@ class OpenVikingMemoryProvider:
         ov_bin: str = "ov",
         runner: Callable[..., subprocess.CompletedProcess[str]] | None = None,
         memory_root: str = MEMORY_ROOT,
+        cli_config_path: str | Path | None = None,
     ):
         self.base_url = base_url
         self.api_key = api_key
         self.templates_dir = templates_dir
         self.ov_bin = ov_bin
         self._runner = runner or subprocess.run
+        self._injected_runner = runner is not None
+        self.cli_config_path = Path(cli_config_path or (Path(tempfile.gettempdir()) / "sam-openviking" / "sam-ovcli.conf"))
+        self._endpoint_checked = False
         self.memory_root = memory_root.rstrip("/")
         self._known_fact_keys: dict[str, set[str]] = {}
 
     def _env(self) -> dict[str, str]:
-        env = os.environ.copy()
-        if self.base_url:
-            # These are the names supported by current OV CLI releases.  The
-            # CLI config remains the fallback when no override is injected.
-            env["OPENVIKING_URL"] = self.base_url
-            env["VIKINGBOT_ENDPOINT"] = self.base_url
+        # Deliberately construct an allowlisted environment. In particular,
+        # neither developer OV credentials nor global CLI discovery survive.
+        env = {key: os.environ[key] for key in ("PATH", "HOME", "LANG", "LC_ALL", "TMPDIR") if os.environ.get(key)}
+        self.cli_config_path.parent.mkdir(parents=True, exist_ok=True)
+        config: dict[str, Any] = {"url": self.base_url or "http://127.0.0.1:1933"}
         if self.api_key:
-            env["OPENVIKING_API_KEY"] = self.api_key
-            env["VIKINGBOT_API_KEY"] = self.api_key
+            config["api_key"] = self.api_key
+        self.cli_config_path.write_text(json.dumps(config), encoding="utf-8")
+        try:
+            self.cli_config_path.chmod(0o600)
+        except OSError:
+            pass
+        env["OPENVIKING_CLI_CONFIG_FILE"] = str(self.cli_config_path)
         if self.templates_dir:
             env["SAM_OV_TEMPLATES_DIR"] = self.templates_dir
         return env
+
+    def _check_endpoint(self) -> None:
+        if self._endpoint_checked or self._injected_runner:
+            return
+        url = (self.base_url or "http://127.0.0.1:1933").rstrip("/")
+        if urlparse(url).hostname not in {"127.0.0.1", "localhost", "::1"}:
+            raise MemoryUnavailable("SAM OpenViking endpoint must be a local loopback address; remote fallback is disabled")
+        try:
+            # Loopback checks must not be redirected through the host's SOCKS/HTTP proxy.
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            with opener.open(url + "/health", timeout=2) as response:
+                if response.status >= 400:
+                    raise OSError(f"HTTP {response.status}")
+        except (OSError, urllib.error.URLError) as exc:
+            raise MemoryUnavailable(
+                f"Local OpenViking is unavailable at {url}; start it with openviking-server "
+                "(initialize with 'openviking-server init' and check with 'openviking-server doctor')."
+            ) from exc
+        self._endpoint_checked = True
 
     @staticmethod
     def _safe_error(text: str) -> str:
@@ -270,6 +300,7 @@ class OpenVikingMemoryProvider:
         return text[-1000:]
 
     def _run(self, args: Sequence[str]) -> Any:
+        self._check_endpoint()
         command = [self.ov_bin, *args, "-o", "json", "-c", "true"]
         try:
             completed = self._runner(
@@ -332,8 +363,10 @@ class OpenVikingMemoryProvider:
             # L1/L0 navigation is rebuilt idempotently by concurrent parse
             # workers.  Make the intended upsert explicit: relying on the
             # CLI default can turn a racing second write into ALREADY_EXISTS.
-            args = ["write", uri, "--from-file", handle.name, "--mode", "replace",
-                    "--wait", "--processing-mode", "semantic_and_vectors"]
+            # File persistence is deliberately model-free. Semantic/vector
+            # processing is an explicit, separate operation (e.g. reindex),
+            # so a plain memory write works on a local server with no model.
+            args = ["write", uri, "--from-file", handle.name, "--mode", "replace", "--wait"]
             if tags:
                 args.extend(["--tags", tags])
             self._run(args)

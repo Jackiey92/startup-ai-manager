@@ -23,11 +23,15 @@ def memory_provider(config: RuntimeConfig, *, env: dict[str, str] | None = None)
     values = env if env is not None else os.environ
     if config.memory_provider == "local":
         return LocalMemoryProvider(config.memory_root, memory_root=config.memory_root_uri)
+    base_url = values.get(config.memory_base_url_env) or config.memory_base_url
+    if not base_url:
+        raise RuntimeError("Missing SAM_OV_BASE_URL; explicitly configure the cloud OpenViking endpoint")
     return OpenVikingMemoryProvider(
-        base_url=values.get(config.memory_base_url_env) or config.memory_base_url,
+        base_url=base_url,
         api_key=values.get(config.memory_api_key_env),
         templates_dir=config.memory_templates_dir,
         memory_root=config.memory_root_uri,
+        cli_config_path=config.memory_ovcli_config,
     )
 
 

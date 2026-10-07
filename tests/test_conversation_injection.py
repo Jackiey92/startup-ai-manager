@@ -42,7 +42,7 @@ def test_thread_index_omits_empty_and_promotion_requires_evidence(tmp_path):
 
 def test_context_assembler_map_is_bounded_and_does_not_copy_fact_body(tmp_path):
     memory = LocalMemoryProvider(tmp_path)
-    memory.put("viking://user/default/memories/projects/10_startup_ai_manager/memory_maps/acme/map.json", '{"company_id":"acme","branches":[{"title":"财务","uri":"viking://user/default/memories/projects/10_startup_ai_manager/2a_extraction/acme/s1/L0/abstract.md","kind":"2a"}]}')
+    memory.put("viking://sam-test/product-root/memory_maps/acme/map.json", '{"company_id":"acme","branches":[{"title":"财务","uri":"viking://sam-test/product-root/2a_extraction/acme/s1/L0/abstract.md","kind":"2a"}]}')
     assembler = ContextAssembler(memory, company_id="acme", thread_id="t1", agent_config="fixed", budget=200)
     result = assembler.assemble("财务")
     assert result["stats"]["tokens"] <= 200
