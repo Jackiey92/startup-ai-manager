@@ -92,8 +92,12 @@ a real 512-element vector. It uses a unique acc-* user scope and deletes that
 scope on exit. The CLI configuration is a key-free, SAM-specific file and the
 provider's child environment is allowlisted (no OV_APIKEY*).
 
-### VLM prerequisite (not installed)
+### VLM for memory extraction: Token Plan qwen3.8-flash
 
-Memory extraction requiring a VLM remains out of scope. Its documented
-prerequisite is Ollama plus qwen2.5vl:3b (approximately 3.2 GB); RAM
-suitability is unmeasured. This batch did not install Ollama or any VLM.
+Per product decision, the 2a memory-extraction VLM is not a local model:
+use `qwen3.8-flash` through the existing Token Plan OpenAI-compatible route
+(`https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`,
+credential from `SAM_LEADER_MODEL_API_KEY` / `~/.bl_tokenplan_key`). Verified
+2026-10-08: the model accepts `image_url` multimodal input and correctly read
+a test image; usage includes image_tokens. Do not install Ollama or download
+local VLMs; the earlier qwen2.5vl:3b local plan is superseded.
