@@ -171,6 +171,12 @@ class RuntimeConfig:
     openclaw_mode: str
     gateway_port: int
 
+    def for_extraction(self, env: dict[str, str] | None = None) -> "RuntimeConfig":
+        """Extraction defaults to Flash without changing the leader model."""
+        from dataclasses import replace
+        env = env if env is not None else os.environ
+        return replace(self, model_default=env.get(self.model_name_env, "qwen3.8-flash"))
+
     @classmethod
     def from_env(cls, project_root: str | Path | None = None, env: dict[str, str] | None = None) -> "RuntimeConfig":
         env = env if env is not None else os.environ

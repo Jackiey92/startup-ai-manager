@@ -36,7 +36,8 @@ class RuntimeProvider(Protocol):
 
 
 class ModelProvider(Protocol):
-    def complete_json(self, *, system_prompt: str, payload: dict[str, Any]) -> dict[str, Any]:
+    def complete_json(self, *, system_prompt: str, payload: dict[str, Any],
+                      image_urls: list[str] | None = None) -> dict[str, Any]:
         """Return a JSON object from a configured model endpoint."""
 
 

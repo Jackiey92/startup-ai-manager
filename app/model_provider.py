@@ -16,18 +16,26 @@ class OpenAICompatibleProvider(ModelProvider):
         self.env = env if env is not None else os.environ
         self.config = config or RuntimeConfig.from_env(env=self.env)
 
-    def complete_json(self, *, system_prompt: str, payload: dict[str, Any]) -> dict[str, Any]:
+    def complete_json(self, *, system_prompt: str, payload: dict[str, Any],
+                      image_urls: list[str] | None = None) -> dict[str, Any]:
         base_url = self.env.get(self.config.model_base_url_env, self.config.model_base_url).rstrip("/")
         model = self.env.get(self.config.model_name_env, self.config.model_default)
         api_key = self.env.get(self.config.model_api_key_env)
         if not api_key:
             raise ModelUnavailable(f"AI model is not configured: set {self.config.model_api_key_env}")
+        content: Any = json.dumps(payload, ensure_ascii=False)
+        if image_urls:
+            if any(not url.startswith("data:image/") for url in image_urls):
+                raise ModelUnavailable("Image inputs must be inline image data URIs")
+            content = [{"type": "text", "text": content}] + [
+                {"type": "image_url", "image_url": {"url": url}} for url in image_urls
+            ]
         body = {
             "model": model,
             "response_format": {"type": "json_object"},
             "messages": [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+                {"role": "user", "content": content},
             ],
         }
         if model != "auto":
@@ -41,6 +49,9 @@ class OpenAICompatibleProvider(ModelProvider):
         try:
             with urllib.request.urlopen(request, timeout=30) as response:
                 data = json.loads(response.read().decode("utf-8"))
-            return json.loads(data["choices"][0]["message"]["content"])
-        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
-            raise ModelUnavailable("AI model request failed or returned invalid JSON") from exc
+            result = json.loads(data["choices"][0]["message"]["content"])
+            if not isinstance(result, dict):
+                raise TypeError("model output must be an object")
+            return result
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, KeyError, IndexError, TypeError, UnicodeError, json.JSONDecodeError):
+            raise ModelUnavailable("AI model request failed or returned invalid JSON") from None

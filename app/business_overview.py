@@ -445,7 +445,7 @@ class BusinessOverviewService:
             return None
 
     def navigation_documents(self, *, company_id: str) -> list[dict[str, Any]]:
-        """Read OV's generated sidecars; never generate or cache prose."""
+        """Read SAM navigation by manifest coordinates; never infer OV paths."""
         if self.memory is None:
             return []
         result = []
@@ -454,7 +454,7 @@ class BusinessOverviewService:
             resource_uri = self._resource_uri(manifest)
             if not resource_uri:
                 continue
-            sidecars = service.read_sidecars(resource_uri)
+            sidecars = service.read_sidecars(manifest)
             if sidecars is None:
                 continue
             result.append({
@@ -462,7 +462,7 @@ class BusinessOverviewService:
                 "file_hash": manifest.get("file_hash"),
                 "source_file": manifest.get("original_name") or manifest.get("filename"),
                 # Keep the response key during the migration window; its
-                # value is OV-owned navigation, not SAM-written narratives.
+                # value is SAM-owned navigation.
                 "uri": sidecars["overview_uri"],
                 "content": sidecars["overview"],
             })

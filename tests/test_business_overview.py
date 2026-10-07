@@ -111,13 +111,17 @@ def test_business_overview_reads_folder_navigation_from_ov(tmp_path: Path) -> No
     ClassificationService(db_path).classify_parsed(
         file_hash=stored.file_hash, company_id="acme", manifest=manifest,
     )
+    manifest["ov_sidecar_uris"] = {
+        "abstract_uri": "viking://sam-test/2a_extraction/acme/sample/L0/abstract.md",
+        "overview_uri": "viking://sam-test/2a_extraction/acme/sample/L1/overview.md",
+    }
     StagingStore(db_path).save_manifest(manifest)
     resource = manifest["ov_resource_uri"]
-    memory.put(resource + "/.abstract.md", "盖戳：OV 摘要", metadata={"generated_by": "SemanticProcessor"})
-    memory.put(resource + "/.overview.md", "# 技术资料\n\n技术证据", metadata={"generated_by": "SemanticProcessor"})
+    memory.put(manifest["ov_sidecar_uris"]["abstract_uri"], "盖戳：OV 摘要", metadata={"generated_by": "SemanticProcessor"})
+    memory.put(manifest["ov_sidecar_uris"]["overview_uri"], "# 技术资料\n\n技术证据", metadata={"generated_by": "SemanticProcessor"})
 
     result = BusinessOverviewService(db_path, memory).overview(company_id="acme")
-    assert result["navigation_documents"][0]["abstract_uri"].endswith("/.abstract.md")
+    assert result["navigation_documents"][0]["abstract_uri"].endswith("/L0/abstract.md")
     assert "技术证据" in result["navigation_documents"][0]["overview"]
     assert result["narrative_documents"] == result["navigation_documents"]
     assert result["positioning"]["value"] == "工业材料供应商"

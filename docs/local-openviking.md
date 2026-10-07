@@ -101,3 +101,41 @@ credential from `SAM_LEADER_MODEL_API_KEY` / `~/.bl_tokenplan_key`). Verified
 2026-10-08: the model accepts `image_url` multimodal input and correctly read
 a test image; usage includes image_tokens. Do not install Ollama or download
 local VLMs; the earlier qwen2.5vl:3b local plan is superseded.
+
+## 2a 图文 L0/L1 抽取
+
+SAM 保留现有 Markdown 导入；等待 OV 导入完成后，使用现有
+`OpenAICompatibleProvider` 做图文 JSON 抽取并通过 MemoryProvider 写入 SAM 自有路径：
+`<root>/2a_extraction/<company>/<source>/L0/abstract.md` 与
+`<root>/2a_extraction/<company>/<source>/L1/overview.md`。L2 manifest 的 `ov_sidecar_uris` 只存坐标，
+不复制摘要正文。OV 的 Markdown summary 接缝只传文本，不能携带 SAM 保留的
+PDF 页图，所以不能仅修改 OV 的 `vlm` 配置满足本流程的视觉要求。
+
+抽取默认 `qwen3.8-flash`，端点与 key 使用 RuntimeConfig 的
+`SAM_LEADER_MODEL_BASE_URL` / `SAM_LEADER_MODEL_API_KEY`，显式
+`SAM_LEADER_MODEL` 可覆盖。不会修改 leader 的默认模型，也不读取 OV 私人凭证。
+PDF/图片由现有 PyMuPDF 渲染为 PNG data URI，每批最多 4 页（长边最多 1600 像素），
+多批结果再文本归并；Word/文本不发图。超过 200 页或解析文本超过 200000 字符明确报错，
+不静默截断。图片与 base64 不落库。抽取失败沿用导入 deferred 状态并显示错误，不能算验收成功。
+
+先启动本地 OV、显式注入产品记忆根与 Token Plan key 后执行（不进入 pytest）：
+
+```bash
+SAM_MEMORY_ROOT_URI='viking://resources/sam-vlm-acceptance' \
+  .venv/bin/python scripts/connectivity_check_vlm.py
+# 可选：同样验证一页 PDF 图像输入
+SAM_MEMORY_ROOT_URI='viking://resources/sam-vlm-acceptance' \
+  .venv/bin/python scripts/connectivity_check_vlm.py --image
+```
+
+脚本不自动读 key 文件、不打印 key；使用唯一 `acc-vlm-*` scope，finally 删除本轮
+scope，并在临时目录清理无密钥 CLI 配置。输出模型/端点、真实 L0/L1 正文、可达 URI
+和清理结果。它验证模型到 sidecar 的通路，不代替上传解析/实体/财务全流程验收。
+OV 的保留 `.abstract.md` / `.overview.md` 属于 OV 自动产物；SAM 不写、不读、不依赖。
+OV reindex 与 SAM 产出互不干扰。读取方只消费 manifest 的准确坐标，不回落旧路径。
+
+读取链路审计：webapp 将 ExtractionRecord 坐标写入 staging；business_overview
+通过 ov_navigation 按 manifest 坐标读 SAM L0/L1，无 OV 保留路径回落。
+memory_map 仍导航到 L2/mapping.md，context_assembler 消费地图/通用 URI，
+两者没有 OV 保留 sidecar 路径假设。旧 manifest 若只有 OV 保留坐标，将不展示
+导航正文，需重新抽取；不自动迁移或读取 OV 的正文。

@@ -103,11 +103,8 @@ class MapBuilder:
         # IDs are read by deterministic URI and therefore win over its view.
         candidates = sorted(discovered | {_safe(value) for value in source_ids})
         for source_id in candidates:
-            # The parser-owned body is the L2 mapping.  OV owns the L0/L1
-            # sidecars at the resource URI, but SAM deliberately does not
-            # materialize those bodies in the 2A memory namespace.  Pointing
-            # the manager at the old L0 compatibility path made every source
-            # look dangling and left the agent with no readable正文.
+            # The parser-owned L2 mapping remains available even if SAM
+            # L0/L1 extraction is deferred. Navigate to this stable body.
             branch_uri = f"{self.root}/2a_extraction/{company}/{source_id}/L2/mapping.md"
             if branch_uri in known:
                 continue

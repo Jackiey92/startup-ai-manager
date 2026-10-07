@@ -1,9 +1,4 @@
-"""Read-only access to OpenViking's resource-generated navigation sidecars.
-
-OpenViking owns the semantic L0/L1 documents for imported resources. SAM must
-not create a second ``narratives`` namespace or write manager prose into those
-sidecars. This module is deliberately a thin route/read adapter.
-"""
+"""Read-only adapter for SAM L0/L1 coordinates retained in L2 manifests."""
 from __future__ import annotations
 
 import re
@@ -15,7 +10,7 @@ from .ports import LocalMemoryProvider, MemoryProvider, MemoryUnavailable
 
 
 class OVNavigationService:
-    """Resolve and read OV-generated sidecars without writing to OV."""
+    """Read SAM navigation documents without writing."""
 
     def __init__(self, db_path=None, memory: MemoryProvider | None = None, *,
                  resources_root: str = "viking://resources"):
@@ -37,49 +32,32 @@ class OVNavigationService:
         return (f"{self.resources_root}/{self._segment(folder)}/"
                 f"{self._segment(file_hash)}.md")
 
-    @staticmethod
-    def sidecar_uris(resource_uri: str) -> dict[str, str]:
-        uri = str(resource_uri or "").rstrip("/")
-        if not uri.startswith("viking://") or uri == "viking://":
-            raise ValueError("resource_uri must be a viking:// URI")
-        return {
-            "abstract_uri": f"{uri}/.abstract.md",
-            "overview_uri": f"{uri}/.overview.md",
-        }
-
-    def read_sidecars(self, resource_uri: str) -> dict[str, Any] | None:
-        """Read both OV sidecars, returning ``None`` while either is absent."""
-        routes = self.sidecar_uris(resource_uri)
+    def read_sidecars(self, manifest: dict[str, Any]) -> dict[str, Any] | None:
+        """Read exact SAM coordinates; never infer or read OV reserved paths."""
+        routes = manifest.get("ov_sidecar_uris")
+        if not isinstance(routes, dict):
+            return None
+        abstract_uri = routes.get("abstract_uri")
+        overview_uri = routes.get("overview_uri")
+        if not isinstance(abstract_uri, str) or not isinstance(overview_uri, str):
+            return None
+        if (not abstract_uri.startswith("viking://")
+                or not abstract_uri.endswith("/L0/abstract.md")
+                or overview_uri != abstract_uri.removesuffix("/L0/abstract.md") + "/L1/overview.md"):
+            return None
         try:
-            abstract = self.memory.read(routes["abstract_uri"])
-            overview = self.memory.read(routes["overview_uri"])
+            abstract = self.memory.read(abstract_uri)
+            overview = self.memory.read(overview_uri)
         except (FileNotFoundError, MemoryUnavailable, OSError):
             return None
         return {
-            "resource_uri": str(resource_uri).rstrip("/"),
-            **routes,
+            "resource_uri": manifest.get("ov_resource_uri"),
+            "abstract_uri": abstract_uri,
+            "overview_uri": overview_uri,
             "abstract": abstract,
             "overview": overview,
-            "provenance": "openviking.semantic_processor",
+            "provenance": "sam.visual_extraction",
         }
-
-    def list(self, *, prefix: str | None = None) -> list[dict[str, Any]]:
-        """List sidecar records already materialized by OV."""
-        query_prefix = prefix or self.resources_root
-        try:
-            items = self.memory.query(prefix=query_prefix)
-        except (FileNotFoundError, MemoryUnavailable, OSError):
-            return []
-        records: dict[str, dict[str, Any]] = {}
-        for item in items:
-            uri = str(item.get("uri") or "")
-            if uri.endswith("/.abstract.md"):
-                root = uri[:-len("/.abstract.md")]
-                records.setdefault(root, {"resource_uri": root})["abstract_uri"] = uri
-            elif uri.endswith("/.overview.md"):
-                root = uri[:-len("/.overview.md")]
-                records.setdefault(root, {"resource_uri": root})["overview_uri"] = uri
-        return sorted(records.values(), key=lambda item: str(item["resource_uri"]))
 
 
 def legacy_narratives_uri(*parts: str) -> str:

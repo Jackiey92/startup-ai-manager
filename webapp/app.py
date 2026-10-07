@@ -275,15 +275,15 @@ def _parse_job_worker(job: dict, progress, cancel_event) -> None:
                 skills_root=RUNTIME_CONFIG.skill_root,
             )
         )
-        extraction.ingest(job["company_id"], payload, resource_folder=resource_folder)
+        extraction_record = extraction.ingest(job["company_id"], payload, resource_folder=resource_folder)
         resource_uri = f"viking://resources/{resource_folder}/{job['file_hash']}.md"
         staging.update_payload(staging_id, {
             "resource_folder": resource_folder,
             "ov_resource_uri": resource_uri,
-            "ov_sidecar_uris": {
-                "abstract_uri": f"{resource_uri}/.abstract.md",
-                "overview_uri": f"{resource_uri}/.overview.md",
-            },
+            "ov_sidecar_uris": ({
+                "abstract_uri": extraction_record.abstract_uri,
+                "overview_uri": extraction_record.overview_uri,
+            } if extraction_record is not None else {}),
             "ov_import_status": "pending",
         })
         # Source bytes are imported into OV's semantic namespace exactly once;
@@ -307,8 +307,20 @@ def _parse_job_worker(job: dict, progress, cancel_event) -> None:
                     raise RuntimeError(
                         f"OV resource target mismatch: expected {resource_uri}, got {imported_uri}"
                     )
-                # Persist only the exact OV route; sidecar bodies remain owned
-                # by OV and are read after SemanticProcessor materializes them.
+                from app.ports import OpenVikingMemoryProvider
+                if isinstance(extraction.memory, OpenVikingMemoryProvider):
+                    from app.model_provider import OpenAICompatibleProvider
+                    from app.memory.visual_extraction import generate_sidecars
+                    stored = SourceFileStore(objects_path=OBJECTS_DIR, db_path=MAIN_DB).get(job["file_hash"])
+                    generate_sidecars(
+                        extraction.memory,
+                        OpenAICompatibleProvider(config=RUNTIME_CONFIG.for_extraction()),
+                        payload, abstract_uri=extraction_record.abstract_uri,
+                        overview_uri=extraction_record.overview_uri,
+                        l2_manifest_uri=extraction_record.l2_manifest_uri,
+                        source_path=OBJECTS_DIR / stored.storage_path,
+                    )
+                # Persist exact routes only; SAM L0/L1 bodies remain in 2a.
                 staging.update_payload(staging_id, {
                     "ov_resource_uri": resource_uri,
                     "ov_import_status": "submitted",
