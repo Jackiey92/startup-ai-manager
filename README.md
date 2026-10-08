@@ -85,9 +85,7 @@ Startup AI Manager 不是在传统 ERP 上加一个聊天框，也不是又一�
 ├── schemas/                    # 事实、对话与凭证 Schema
 ├── tests/                      # 18 个以上 Python 回归测试文件（非占位）
 ├── docs/                       # 产品、架构与调研文档
-├── prototype/                  # 唯一前端原型模板（startup-ai-manager.html），后续前端打磨以此为准
-├── src/                        # 早期架构占位/说明，未进入当前主运行链路
-└── examples/                   # 合成样本/黄金评测的预留目录
+└── prototype/                  # 唯一前端原型模板（startup-ai-manager.html），后续前端打磨以此为准
 ```
 
 ## 已验收的原型能力

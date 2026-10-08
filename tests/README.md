@@ -1,9 +1,9 @@
 # tests
 
-规划中。本目录将在后续迭代填充：
+本目录包含 SAM 的 Python 回归测试。
 
-- `src/harness/`：Harness 运行空间（规划、工具调用、护栏、审计）
-- `src/memory/`：结构化记忆系统（事实层、事务网关、校验闸门）
-- `src/connectors/`：外部工具连接器（薄接、可替换，写入默认进检疫区）
-- `examples/`：合成公司与黄金评测集
-- `tests/`：正确性回归（核心指标：错误事实数）
+在仓库根目录运行全量测试：
+
+```bash
+.venv/bin/python -m pytest -q
+```
