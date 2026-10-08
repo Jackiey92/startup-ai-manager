@@ -101,6 +101,20 @@ class ExtractionMemoryService:
         """Return parser output suitable for OV resource ingestion."""
         return self._markdown(manifest)
 
+    def read_source(self, company_id: str, source_id: str) -> dict[str, Any]:
+        """Read exact SAM-owned L2/L0/L1 paths, without ingest or generation."""
+        base = self._source_root(company_id, source_id)
+        result: dict[str, Any] = {"l2_manifest_uri": f"{base}/L2/manifest.json"}
+        for key, suffix in (("manifest", "L2/manifest.json"),
+                            ("abstract", "L0/abstract.md"), ("overview", "L1/overview.md")):
+            try:
+                content = self.memory.read(f"{base}/{suffix}")
+            except FileNotFoundError:
+                result[key] = None
+            else:
+                result[key] = json.loads(content) if key == "manifest" else content
+        return result
+
     def ingest(self, company_id: str, manifest: dict[str, Any], *,
                document_markdown: str | None = None,
                resource_folder: str | None = None,

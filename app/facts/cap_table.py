@@ -157,10 +157,14 @@ class CapTableStore:
         suffix = (as_of or "current").replace(":", "-")
         return f"{self.root}/{company_id}/cap_table/snapshot-{suffix}.json"
 
-    def read_events(self, company_id: str) -> list[CapTableEvent]:
+    def read_events(self, company_id: str, *, strict: bool = False) -> list[CapTableEvent]:
         try:
             content = self.memory.read(self._events_uri(company_id))
+        except FileNotFoundError:
+            return []
         except Exception:
+            if strict:
+                raise
             return []
         return [CapTableEvent.from_dict(json.loads(line)) for line in content.splitlines() if line.strip()]
 

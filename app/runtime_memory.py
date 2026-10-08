@@ -108,7 +108,7 @@ class RuntimeWorkingMemory:
             return self.append_event(session_id, task_id, "state", {"state": "expired"})
         return current
 
-    def get_runtime(self, session_id: str, task_id: str) -> dict[str, Any]:
+    def get_runtime(self, session_id: str, task_id: str, *, read_only: bool = False) -> dict[str, Any]:
         try:
             return json.loads(self.memory.read(self._state_uri(session_id, task_id)))
         except FileNotFoundError:
@@ -116,8 +116,13 @@ class RuntimeWorkingMemory:
             if not events:
                 raise KeyError((session_id, task_id))
             state = self.rebuild(events, now=self.clock())
-            self._write_state(state)
+            if not read_only:
+                self._write_state(state)
             return state
+
+    def read_events(self, session_id: str, task_id: str) -> list[dict[str, Any]]:
+        """Read the event timeline without materializing a runtime snapshot."""
+        return self._read_events(session_id, task_id)
 
     def rebuild(self, events: list[dict[str, Any]], *, now: datetime | None = None) -> dict[str, Any]:
         if not events or events[0].get("type") != "created":

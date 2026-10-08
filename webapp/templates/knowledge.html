@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% block title %}知识库 · SAM{% endblock %}
+{% block crumb %}知识库{% endblock %}
+{% macro provenance(ref) %}
+{% if ref.url %}<a class="knowledge-source" href="{{ ref.url }}">查看 L2 原文 · 页码 {{ ref.page if ref.page is not none else '未提供（整文件）' }}{% if ref.locator %} · {{ ref.locator }}{% endif %}</a>{% else %}<span class="muted">暂无可用 L2 原文链接</span>{% endif %}
+{% endmacro %}
+{% block content %}
+<div class="page-head"><div><h1>知识库</h1><p>只读查看已存知识和来源；不在此编辑、裁决或固化。</p></div></div>
+<nav class="knowledge-tabs" aria-label="知识分区"><a href="#evidence">📄 原始证据 · 2A</a><a href="#confirmed-facts">✅ 确认事实 · 2B</a><a href="#working-memory">⏱️ 工作记忆 · 2c</a></nav>
+<section id="evidence" class="knowledge-section">
+<h2>📄 原始证据（2A）</h2><p class="muted">摘要与概览是整文件级导航，并非事实确认；页码与单元格坐标以 L2 为准。缺失坐标不会补造。</p>
+{% for file in knowledge.evidence.files %}
+<article class="card section-gap" id="source-{{ file.file_hash }}">
+<div class="card-head"><h3>{{ file.original_name }}</h3><span class="badge muted">{{ file.status }}</span></div>
+{% for warning in file.warnings %}<p class="knowledge-warning" role="status">{{ warning }}</p>{% endfor %}
+<div class="grid split-grid">
+<div><h4>L0 摘要</h4>{% if file.l0.content %}<pre class="knowledge-prose">{{ file.l0.content }}</pre>{{ provenance(file.l0.source_ref) }}{% else %}<p class="muted">解析中/暂无摘要</p>{% endif %}</div>
+<div><h4>L1 概览</h4>{% if file.l1.content %}<pre class="knowledge-prose">{{ file.l1.content }}</pre>{{ provenance(file.l1.source_ref) }}{% else %}<p class="muted">解析中/暂无概览</p>{% endif %}</div>
+</div>
+<details class="knowledge-detail"><summary>展开 L2 原文片段与坐标</summary>
+{% if file.l2.mapping %}<pre class="knowledge-prose knowledge-l2">{{ file.l2.mapping }}</pre>{% else %}<div class="empty">尚无可读取的 L2 原文，文件可能仍在解析或解析未成功。</div>{% endif %}
+{{ provenance(file.source_ref) }}{% if file.l2.manifest_uri %}<p class="hash">L2 manifest：{{ file.l2.manifest_uri }}</p>{% endif %}
+</details></article>
+{% else %}<div class="empty">暂无原始证据。当前公司尚未存入来源文件。</div>{% endfor %}
+</section>
+<section id="confirmed-facts" class="knowledge-section">
+<h2>✅ 确认事实（2B）</h2><p class="muted">仅展示现有读取服务返回的当前有效 verified 事实；分组沿用来源文件的已存分类，不推断经营/财务类别。</p>
+{% for group in knowledge.facts.groups %}
+<article class="card section-gap"><div class="card-head"><h3>{{ group.label or group.category or '未存分类' }}</h3></div>
+<div class="table-wrap"><table class="data-table"><thead><tr><th>实体</th><th>属性</th><th>数值 / 内容</th><th>期间</th><th>L2 溯源</th></tr></thead><tbody>
+{% for fact in group.facts %}<tr><td>{{ fact.entity }}</td><td>{{ fact.attribute }}</td><td>{{ fact.value }}{% if fact.unit %} {{ fact.unit }}{% endif %}</td><td>{{ fact.period }}</td><td>{{ provenance(fact.source_ref) }}{% if not fact.source_ref.locator %}<small class="muted">原文定位字段未提供</small>{% endif %}</td></tr>{% endfor %}
+</tbody></table></div></article>
+{% else %}<div class="empty">暂无确认事实。未确认候选不会显示为 2B 事实。</div>{% endfor %}
+<article class="card section-gap"><div class="card-head"><h3>股权事件链回放</h3></div>
+{% set equity = knowledge.facts.cap_table %}
+{% for warning in equity.warnings %}<p class="knowledge-warning" role="status">{{ warning }}</p>{% endfor %}
+{% if equity.snapshot %}
+<p>已发行总股数：{{ equity.snapshot.total_issued }} · 完全稀释总股数：{{ equity.snapshot.total_fully_diluted }} · 期权池：{{ equity.snapshot.option_pool }}</p>
+<div class="table-wrap"><table class="data-table"><thead><tr><th>持有人</th><th>已发行</th><th>完全稀释</th><th>已发行持股比例</th><th>完全稀释持股比例</th></tr></thead><tbody>
+{% for holder, balance in equity.snapshot.holders.items() %}<tr><td>{{ holder }}</td><td>{{ balance.issued }}</td><td>{{ balance.fully_diluted }}</td><td>{{ balance.ownership_issued_pct }}%</td><td>{{ balance.ownership_fully_diluted_pct }}%</td></tr>{% endfor %}
+</tbody></table></div><p class="muted">由现有回放函数计算，不写入或更新股权快照。</p>
+{% elif not equity.warnings %}<div class="empty">暂无已存股权事件链，不展示占位持股数值。</div>{% endif %}
+{% if equity.events %}<details class="knowledge-detail"><summary>查看事件与来源（含历史修正；有效事件以回放 event_ids 为准）</summary>
+{% for event in equity.events %}<div class="knowledge-event"><b>{{ event.effective_at }} · {{ event.event_type }}</b><p>{{ event.holder_id }} · {{ event.instrument }} · {{ event.shares_delta }} · {{ event.ownership_basis }}</p><p class="hash">{{ event.event_id }}</p>
+{% for ref in event.provenance %}{{ provenance(ref.source_ref) }}<pre class="knowledge-prose hash">{{ ref.anchor|default({})|tojson(indent=2) }}</pre>{% endfor %}</div>{% endfor %}
+</details>{% endif %}</article>
+</section>
+<section id="working-memory" class="knowledge-section">
+<h2>⏱️ 工作记忆（2c）</h2><p class="muted">临时工作上下文，不是已确认事实；会过期，以 expires_at 为准。页面只读，不清理或续期。</p>
+{% for warning in knowledge.working_memory.warnings %}<p class="knowledge-warning" role="status">{{ warning }}</p>{% endfor %}
+{% for item in knowledge.working_memory['items'] %}{% set runtime = item.runtime %}
+<article class="card section-gap"><div class="card-head"><h3>{{ runtime.goal }}</h3><span class="badge muted">存储状态：{{ runtime.state }}</span></div>
+<p class="hash">session：{{ runtime.session_id }} · task：{{ runtime.task_id }}</p><p class="knowledge-warning">临时性 · 到期时间：{{ runtime.expires_at }}</p>
+<div class="grid split-grid"><div><h4>未闭环 loop</h4>{% for open_loop in runtime.open_loops %}<p>{{ open_loop.id }} · {{ open_loop.text }}</p>{% else %}<p class="muted">暂无未闭环 loop。</p>{% endfor %}</div>
+<div><h4>闭环记录</h4>{% for event in item.events if event.type == 'open_loop_remove' %}<p>{{ event.at }} · {{ event.payload.id }}{% for added in item.events if added.type == 'open_loop_add' and added.payload.id == event.payload.id %} · {{ added.payload.text }}{% endfor %}</p>{% else %}<p class="muted">暂无已存闭环事件。</p>{% endfor %}</div></div>
+<div class="knowledge-candidates"><h4>待固化候选 / 临时 note</h4><p class="muted">以下为 runtime 的工作笔记，尚未进入 2B，仅供后续核验。</p>
+{% for note in runtime.working_notes %}<div class="knowledge-note"><p>{{ note.text }}</p><small>置信度：{{ note.confidence if note.confidence is defined and note.confidence is not none else '未提供' }} · {{ note.status }}{% if note.inferred %} · 推断{% endif %} · 到期 {{ runtime.expires_at }}</small></div>{% else %}<p class="muted">暂无待固化候选或临时 note。</p>{% endfor %}</div>
+<details class="knowledge-detail"><summary>事件时间线</summary>{% for event in item.events %}<div class="knowledge-event"><b>{{ event.at }} · {{ event.type }}</b><pre class="knowledge-prose">{{ event.payload|tojson(indent=2) }}</pre></div>{% else %}<p class="muted">暂无已存事件。</p>{% endfor %}</details>
+</article>{% else %}{% if not knowledge.working_memory.warnings %}<div class="empty">暂无当前公司可读取的 runtime 工作记忆。</div>{% endif %}{% endfor %}
+</section>
+{% endblock %}

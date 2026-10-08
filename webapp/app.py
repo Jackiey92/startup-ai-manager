@@ -42,6 +42,7 @@ from app.upload_status import parse_result_status
 from app.parse_jobs import ParseJobCanceled, ParseJobManager
 from app.business_overview import BusinessOverviewService
 from app.dashboard import DashboardPreferenceStore, REGISTRY, assemble_dashboard
+from app.knowledge import KnowledgeService
 
 RUNTIME_CONFIG = RuntimeConfig.from_env(project_root=_PROJECT_ROOT)
 DATA_ROOT = RUNTIME_CONFIG.data_root
@@ -575,6 +576,42 @@ def todos_page():
 @app.route("/facts")
 def facts_page():
     return render_template("facts.html", **_page_context(company_id=_company_id()))
+
+
+def _knowledge_company_id() -> str:
+    """Knowledge reads use host scope only, never a caller's query/body."""
+    company_id = os.environ.get("SAM_COMPANY_ID", "").strip()
+    if not company_id:
+        abort(503, description="宿主尚未注入 SAM_COMPANY_ID，知识库不可读取。")
+    return company_id
+
+
+def knowledge_service() -> KnowledgeService:
+    return KnowledgeService(MAIN_DB, app.extensions["sam_memory_provider"], objects_path=OBJECTS_DIR)
+
+
+@app.route("/knowledge", methods=["GET"])
+def knowledge_page():
+    company_id = _knowledge_company_id()
+    return render_template("knowledge.html", company_id=company_id, read_only=True,
+                           knowledge=knowledge_service().read(company_id=company_id))
+
+
+@app.route("/api/knowledge", methods=["GET"])
+def api_knowledge():
+    return knowledge_service().read(company_id=_knowledge_company_id())
+
+
+@app.route("/knowledge/sources/<file_hash>", methods=["GET"])
+def knowledge_source_page(file_hash: str):
+    company_id = _knowledge_company_id()
+    try:
+        source = knowledge_service().source(company_id=company_id, file_hash=file_hash)
+    except KeyError:
+        abort(404)
+    return render_template("knowledge_source.html", company_id=company_id, read_only=True,
+                           source=source, source_page=request.args.get("page"),
+                           source_locator=request.args.get("locator"))
 
 
 @app.route("/files")

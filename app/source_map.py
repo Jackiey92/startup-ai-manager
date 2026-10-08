@@ -152,6 +152,10 @@ class SourceMapService:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def read_manifest(self, *, file_hash: str) -> dict[str, Any]:
+        """Read the latest parsed L2; callers must enforce their company catalog."""
+        return self._manifest(file_hash)
+
     def read_map(self, *, file_hash: str, company_id: str) -> str:
         return render_mapping(self._manifest(file_hash), edits=self.list_edits(file_hash=file_hash, company_id=company_id))
 

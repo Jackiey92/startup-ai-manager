@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% block title %}L2 原文 · {{ source.original_name }} · SAM{% endblock %}
+{% block crumb %}知识库 <span>/</span> L2 溯源{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ source.original_name }}</h1><p>已存 L2 原文与原始坐标；只读，不在此更正来源或确认事实。</p></div><div class="right"><a class="button" href="{{ url_for('knowledge_page') }}#source-{{ source.file_hash }}">返回知识库</a></div></div>
+{% if source_page or source_locator %}<p class="knowledge-warning">请求查看的坐标：页码 {{ source_page or '未提供' }} · {{ source_locator or '定位字段未提供' }}。以下保留已存原文坐标，不补造缺失值。</p>{% endif %}
+{% for warning in source.warnings %}<p class="knowledge-warning" role="status">{{ warning }}</p>{% endfor %}
+<p class="hash">file_hash：{{ source.file_hash }}{% if source.l2.manifest_uri %}<br>L2 manifest：{{ source.l2.manifest_uri }}{% endif %}</p>
+{% for page in source.l2.pages %}<details class="card knowledge-detail section-gap {% if source_page == page.page|string %}knowledge-selected{% endif %}" {% if not source_page or source_page == page.page|string %}open{% endif %}>
+<summary>原文页码：{{ page.page if page.page is not none else '未提供' }}</summary><pre class="knowledge-prose knowledge-l2">{{ page.mapping }}</pre></details>
+{% else %}{% if source.l2.mapping %}<pre class="card knowledge-prose knowledge-l2">{{ source.l2.mapping }}</pre>{% else %}<div class="empty">尚无可读取的 L2 原文；文件可能仍在解析或解析未成功。</div>{% endif %}{% endfor %}
+{% endblock %}
