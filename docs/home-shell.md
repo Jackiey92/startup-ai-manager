@@ -90,3 +90,7 @@ readonly 下其他 method 在 fetch 前被拦截，提示「这一步请在本�
 - 本轮临时服务/浏览器及 acc 测试数据库清理；证据与交付文件存于
   `/tmp/sam-foundation/`，不带入库。未写 `.git`、未提交、未 push；正式
   范范/饭团真机点头与提交仍由饭团负责。
+
+## 文件柜前端修复（2026-10-10）
+
+仅修改唯一视觉源 `prototype/startup-ai-manager.html`：桌面文件柜改为单栏，保留移动端间距并清理无 HTML/JS 引用的旧步骤栏 CSS；已登记时常驻显示当前公司主体和「修改」文字按钮，就地复用首次登记输入框及 `/api/entity-roster` 保存逻辑，成功后恢复主体展示并更新上传登记状态，未改后端规则。主页契约 33 passed（其中 JS 契约 19 passed），补充改名回归脚本和真实 Flask 登记/改名/旧主体替代/上传身份守卫检查通过；全量在显式注入测试根 `SAM_MEMORY_ROOT_URI=viking://sam-test/product-root` 和独立网关端口 `SAM_OPENCLAW_GATEWAY_PORT=19236` 后为 405 passed / 3 skipped，compileall 与 diff --check 通过。浏览器验收未完成、无截图：Windows Chromium 两次报 GPU 子进程不可用退出，替代 Edge 的调试连接报 socket Operation not permitted，未继续重试；宽屏/窄屏视觉及真实浏览器点击流程仍待饭团真机验收。测试使用隔离临时数据库且已清理，未上传文件，真实名册复核仍只有“谷斗科技（上海）有限公司”。 当前沙箱 `.git` 只读，`git add` 报 `index.lock: Read-only file system`，因此未生成 commit、未 push。

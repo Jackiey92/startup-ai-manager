@@ -285,24 +285,14 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
 .import-progress-txt span{font-size:11.5px;color:var(--t3);display:block;margin-top:3px;}
 .import-progress-bar{height:6px;flex:1;min-width:90px;background:#e9ecf5;border-radius:9px;overflow:hidden;}
 .import-progress-bar i{display:block;width:0;height:100%;border-radius:9px;background:var(--grad);transition:width .25s ease;}
-.import-body{display:grid;grid-template-columns:238px 1fr;min-height:0;flex:1;}
-.import-steps{padding:18px 13px 20px 18px;border-right:1px solid var(--border-2);overflow-y:auto;background:#fcfcfe;}
-.import-step{width:100%;display:flex;align-items:flex-start;gap:10px;border:0;background:transparent;border-radius:10px;padding:10px 9px;text-align:left;font-family:inherit;cursor:pointer;color:var(--t2);}
-.import-step:hover{background:#f1f3ff;}
-.import-step.current{background:#eef1ff;color:var(--primary);}
-.import-step.done{color:var(--green);}
-.import-step-num{width:24px;height:24px;border:1px solid #d8dce8;border-radius:50%;display:grid;place-items:center;flex:none;font-size:11px;font-weight:700;background:#fff;color:var(--t3);}
-.import-step.current .import-step-num{border-color:var(--primary);background:var(--primary);color:#fff;}
-.import-step.done .import-step-num{border-color:#b8e8c5;background:#e8f7eb;color:var(--green);}
-.import-step.done .import-step-num::before{content:"✓";}.import-step.done .import-step-num{font-size:0;}
-.import-step-copy{min-width:0;}.import-step-copy b{font-size:12.5px;display:block;line-height:1.3;}.import-step-copy span{font-size:10.5px;display:block;margin-top:3px;color:var(--t3);line-height:1.35;}.import-step.current .import-step-copy span{color:#7181d9;}
+.import-body{display:grid;grid-template-columns:1fr;min-height:0;flex:1;}
 .import-main{padding:24px 28px 20px;overflow-y:auto;min-width:0;}
 .import-main::-webkit-scrollbar{width:7px;}.import-main::-webkit-scrollbar-thumb{background:#d7d9de;border-radius:8px;}
-.import-step-kicker{font-size:11px;color:var(--t3);font-weight:600;}.import-main h3{font-size:21px;margin-top:4px;letter-spacing:-.3px;}.import-main .step-note{font-size:12px;color:var(--t3);margin-top:5px;}
+.import-main h3{font-size:21px;margin-top:4px;letter-spacing:-.3px;}.import-main .step-note{font-size:12px;color:var(--t3);margin-top:5px;}
 .import-reasons{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin:19px 0 16px;}.import-reason{border:1px solid var(--border);border-radius:11px;padding:13px 14px;background:#fff;}.import-reason .label{font-size:11px;font-weight:700;color:var(--primary);display:flex;align-items:center;gap:6px;}.import-reason .label::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;}.import-reason p{font-size:12.5px;line-height:1.55;color:var(--t2);margin-top:6px;}
 .import-drop{border:1px dashed #b9c4ff;border-radius:13px;background:#f8f9ff;padding:20px;text-align:center;transition:.15s;}.import-drop.drag{border-color:var(--primary);background:#eef1ff;}.import-drop strong{font-size:13px;display:block;}.import-drop p{font-size:11.5px;color:var(--t3);margin-top:5px;}.import-pick{margin-top:12px;border:1px solid var(--primary);background:#fff;color:var(--primary);border-radius:8px;padding:8px 15px;font:600 12px var(--fs);cursor:pointer;}.import-pick:hover{background:#eef1ff;}
 .import-files{display:flex;flex-direction:column;gap:7px;margin-top:12px;}.import-file{display:flex;align-items:center;gap:9px;border:1px solid var(--border-2);border-radius:8px;padding:8px 10px;font-size:12px;}.import-file .name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.import-file .status{margin-left:auto;color:var(--t3);font-size:11px;white-space:nowrap;}.import-file.ok .status{color:var(--green);}.import-file.err .status{color:var(--red);}
-.import-registration[hidden]{display:none;}.import-registration-fields{display:flex;gap:9px;margin-top:9px;}.import-registration input{min-width:0;flex:1;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font:12px var(--fs);color:var(--t1);background:var(--bg);}.import-file{flex-wrap:wrap;}.import-file .status{white-space:normal;overflow-wrap:anywhere;}.import-file .name{flex:1;}.import-file-actions{display:flex;flex-wrap:wrap;gap:7px;width:100%;}.import-file-actions a{text-decoration:none;display:inline-flex;align-items:center;}.import-file-message{width:100%;color:var(--t3);overflow-wrap:anywhere;}
+.import-registration[hidden]{display:none;}.import-company-current{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}.import-company-current p{flex:1;min-width:0;overflow-wrap:anywhere;}.import-nav.import-company-edit{border:0;padding:0;height:auto;color:var(--primary);background:transparent;}.import-registration-fields{display:flex;gap:9px;margin-top:9px;}.import-registration input{min-width:0;flex:1;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font:12px var(--fs);color:var(--t1);background:var(--bg);}.import-file{flex-wrap:wrap;}.import-file .status{white-space:normal;overflow-wrap:anywhere;}.import-file .name{flex:1;}.import-file-actions{display:flex;flex-wrap:wrap;gap:7px;width:100%;}.import-file-actions a{text-decoration:none;display:inline-flex;align-items:center;}.import-file-message{width:100%;color:var(--t3);overflow-wrap:anywhere;}
 .import-foot{display:flex;align-items:center;gap:9px;margin-top:19px;padding-top:15px;border-top:1px solid var(--border-2);}.import-foot .hint{font-size:11px;color:var(--t3);margin-right:auto;}.import-nav{height:34px;padding:0 14px;border-radius:8px;border:1px solid var(--border);background:#fff;color:var(--t2);font:600 12px var(--fs);cursor:pointer;}.import-nav:hover:not(:disabled){border-color:#c4cdff;color:var(--primary);}.import-nav.primary{border-color:var(--primary);background:var(--primary);color:#fff;}.import-nav:disabled{opacity:.45;cursor:not-allowed;}
 .import-resume{font-size:11px;color:var(--t3);margin-top:10px;}
 .import-chat-float{position:absolute;right:22px;bottom:22px;z-index:2;display:flex;align-items:center;gap:7px;border:1px solid #dbe2ff;background:#fff;color:var(--primary);border-radius:99px;padding:8px 12px;box-shadow:0 8px 24px rgba(77,107,254,.18);font:600 12px var(--fs);cursor:pointer;}.import-chat-float:hover{background:#eef1ff;}
@@ -366,8 +356,6 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
   .import-head h2{font-size:18px;}.import-head p{font-size:11px;}
   .import-progress{padding:11px 15px;gap:10px;}.import-ring{width:42px;height:42px;}.import-ring::after{inset:4px;}.import-progress-bar{min-width:56px;}
   .import-body{display:flex;flex-direction:column;}
-  .import-steps{display:flex;gap:5px;padding:10px 12px 9px;border-right:0;border-bottom:1px solid var(--border-2);overflow-x:auto;overflow-y:hidden;flex:none;}
-  .import-step{width:132px;min-width:132px;padding:7px 6px;gap:7px;}.import-step-copy b{font-size:11px;}.import-step-copy span{font-size:9.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.import-step-num{width:21px;height:21px;font-size:10px;}
   .import-main{padding:17px 14px calc(18px + env(safe-area-inset-bottom));}.import-main h3{font-size:19px;}.import-reasons{grid-template-columns:1fr;gap:8px;margin:14px 0 12px;}.import-reason{padding:11px 12px;}.import-reason p{font-size:12px;}.import-drop{padding:18px 12px;}.import-foot{margin-top:14px;}.import-foot .hint{font-size:10px;}.import-nav{padding:0 11px;}
   .import-chat-float{right:13px;bottom:calc(13px + env(safe-area-inset-bottom));}
 }
@@ -1559,8 +1547,12 @@ a.sys-item{text-decoration:none;}
         </div>
         <div class="import-body">
           <div class="import-main">
+            <div class="import-reason import-registration" id="importCompanyCurrent" hidden>
+              <div class="label">当前公司主体</div>
+              <div class="import-company-current"><p>当前主体：<b id="importCurrentCompanyName"></b></p><button class="import-nav import-company-edit" id="importCompanyEdit" type="button">修改</button></div>
+            </div>
             <form class="import-reason import-registration" id="importRegistration" hidden>
-              <label class="label" for="importCompanyName">首次使用：请登记本公司全称</label>
+              <label class="label" id="importCompanyLabel" for="importCompanyName">首次使用：请登记本公司全称</label>
               <div class="import-registration-fields"><input id="importCompanyName" type="text" placeholder="本公司全称" required autocomplete="organization"><button class="import-nav primary" id="importRegister" type="submit">确认登记</button></div>
               <p id="importRegistrationMessage" role="status"></p>
             </form>
@@ -2028,6 +2020,7 @@ a.sys-item{text-decoration:none;}
   // No demo fallback for registration/jobs: unknown state must not enable upload.
   var registration=document.getElementById('importRegistration'),
       registrationMessage=document.getElementById('importRegistrationMessage'),
+      companyCurrent=document.getElementById('importCompanyCurrent'), currentCompanyName='',
       registered=null, registrationLoad=null, registrationVersion=0, registering=false,
       wizardVersion=0;
   function escapeImport(value){
@@ -2040,7 +2033,14 @@ a.sys-item{text-decoration:none;}
     return body;
   }
   function showRegistration(message){
-    registration.hidden=false;registrationMessage.textContent=message||'登记后可直接上传，无需离开文件柜。';
+    companyCurrent.hidden=true;registration.hidden=false;
+    document.getElementById('importCompanyLabel').textContent=registered?'修改本公司全称':'首次使用：请登记本公司全称';
+    document.getElementById('importRegister').textContent=registered?'确认保存':'确认登记';
+    registrationMessage.textContent=message||(registered?'保存后将更新当前公司主体。':'登记后可直接上传，无需离开文件柜。');
+  }
+  function showCurrentCompany(name){
+    currentCompanyName=name;document.getElementById('importCurrentCompanyName').textContent=name;
+    registration.hidden=true;companyCurrent.hidden=false;registrationMessage.textContent='';
   }
   function checkRegistration(){
     if(registrationLoad)return registrationLoad;
@@ -2049,9 +2049,10 @@ a.sys-item{text-decoration:none;}
       if(!Array.isArray(body.entities))throw new Error('登记状态返回无效');
       if(version===registrationVersion){
         // Mirror the existing upload identity guard, not model name inference.
-        registered=body.entities.some(function(row){return row.origin==='declared'&&row.entity_type==='self'&&row.status==='active';});
-        registration.hidden=registered;
-        if(!registered)showRegistration();
+        var entity=body.entities.find(function(row){return row.origin==='declared'&&row.entity_type==='self'&&row.status==='active';});
+        registered=!!entity;
+        if(registered)showCurrentCompany(entity.entity_name||'');
+        else showRegistration();
       }
       return registered;
     }).catch(function(error){
@@ -2169,6 +2170,11 @@ a.sys-item{text-decoration:none;}
     if(registered===null){entries.forEach(function(entry){entry.status='awaiting_registration';});renderImportFiles();return;}
     await Promise.all(entries.map(uploadImportFile));
   }
+  document.getElementById('importCompanyEdit').addEventListener('click',function(){
+    if(!window.SAM.ui.allowWrite()||registering)return;
+    document.getElementById('importCompanyName').value=currentCompanyName;
+    showRegistration();document.getElementById('importCompanyName').focus();
+  });
   registration.addEventListener('submit',async function(event){
     event.preventDefault();
     if(!window.SAM.ui.allowWrite()||registering)return;
@@ -2176,8 +2182,8 @@ a.sys-item{text-decoration:none;}
     if(!name){showRegistration('请填写本公司全称');return;}
     registering=true;document.getElementById('importRegister').disabled=true;
     try{
-      await importRequest('/api/entity-roster',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({entity_name:name})});
-      ++registrationVersion;registered=true;registration.hidden=true;registrationMessage.textContent='';
+      var body=await importRequest('/api/entity-roster',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({entity_name:name})});
+      ++registrationVersion;registered=true;showCurrentCompany(body.entity&&body.entity.entity_name||name);
       await Promise.all(uploadedFiles.filter(function(entry){return entry.status==='awaiting_registration';}).map(uploadImportFile));
       refreshGuide();
     }catch(error){showRegistration(error.message);}
