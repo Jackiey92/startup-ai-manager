@@ -43,6 +43,7 @@ from app.parse_jobs import ParseJobCanceled, ParseJobManager
 from app.business_overview import BusinessOverviewService
 from app.dashboard import DashboardPreferenceStore, REGISTRY, assemble_dashboard
 from app.knowledge import KnowledgeService
+from app.home_shell import render_home_shell
 
 RUNTIME_CONFIG = RuntimeConfig.from_env(project_root=_PROJECT_ROOT)
 DATA_ROOT = RUNTIME_CONFIG.data_root
@@ -492,8 +493,8 @@ def _page_context(*, company_id: str) -> dict:
 
 @app.route("/")
 def home_page():
-    """Canonical landing redirects to the first real business screen."""
-    return redirect(url_for("business_overview_page"))
+    """The permanent home is the application-owned high-fidelity shell."""
+    return render_home_shell(RUNTIME_CONFIG.project_root, readonly=RUNTIME_CONFIG.cloud_readonly)
 
 
 @app.route("/overview")
@@ -508,8 +509,8 @@ def legacy_overview_page():
 
 @app.route("/prototype")
 def prototype_page():
-    """Keep the historic static prototype available for visual comparison only."""
-    return send_file(str(BASE_DIR.parent / "prototype" / "startup-ai-manager.html"))
+    """Keep the historic URL as an alias of the same owned shell."""
+    return home_page()
 
 
 @app.route("/bizov")

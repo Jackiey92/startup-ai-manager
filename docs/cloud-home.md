@@ -1,8 +1,10 @@
 # 主仓云端只读主页
 
-这是主仓 Flask 的只读装配，不是另一个知识库站点。导航、路由和样式
-沿用 `base.html`；云端各页用通用字段展示组件显示快照（不复制本地业务
-推导规则、不重新生成卡片、不调用模型）。这不是本地页面的逐像素镜像：
+这是主仓 Flask 的只读装配，不是另一个知识库站点。`/` 与 `/prototype`
+使用与本地一致的原型壳，经 Flask 注入 readonly 配置；接管与板块数据约定
+见 [home-shell.md](home-shell.md)，未接线板块仍保留演示数据。
+旧页面导航、路由和样式沿用 `base.html`；云端旧页面显示快照（不复制本地业务
+推导规则、不重新生成卡片、不调用模型）。旧页面不是本地的逐像素镜像：
 本地已装配的 overview/dashboard 和其他字段按原样展示，新增字段也可见。
 资料导入页仅显示本地任务快照；对话页仅显示已同步历史。
 
@@ -85,7 +87,8 @@ SQLite 单行事务整体替换，绝不合并旧字段；同实例最后提交�
 - `POST /ingest`：`Content-Type: application/json`，`X-Ingest-Key` 独立认证。
   成功 200 `{"ok":true}`；错误 JSON/版本/公司 400；错误钥匙 401；超限 413；
   缺收数配置或存储故障 503。异常请求不改变旧快照。
-- `/` → `/bizov`；`/bizov`、`/overview`、`/todos`、`/facts`、`/knowledge`、
+- `/`、`/prototype`：接管后的精致原型壳，默认 overview，写入口提示回本地。
+- `/bizov`、`/overview`、`/todos`、`/facts`、`/knowledge`、
   `/files`、`/chat`、`/inbox`：完整同站导航，只读字段展示，无写入表单。
 - `/knowledge/sources/<hash>`、`/files/<hash>`：仅从当前快照定位原文。
   未同步/未知哈希给 200 清晰空态，不查本地对象目录。

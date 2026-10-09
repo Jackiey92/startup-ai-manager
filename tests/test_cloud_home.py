@@ -144,7 +144,7 @@ def test_all_cloud_pages_and_read_apis(cloud_web, with_snapshot, monkeypatch):
     monkeypatch.setattr(web, 'classification_service', lambda: pytest.fail('no local ledger'))
     monkeypatch.setattr(web, 'business_overview_service', lambda: pytest.fail('no local ledger'))
     client = web.app.test_client()
-    # The high-fidelity prototype is served directly as the cloud landing page.
+    # The high-fidelity shell is rendered with host-owned cloud configuration.
     landing = client.get('/')
     assert landing.status_code == 200
     landing_html = landing.get_data(as_text=True)

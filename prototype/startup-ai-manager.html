@@ -1625,6 +1625,56 @@ a.sys-item{text-decoration:none;}
 </div>
 
 <script>
+/* ===== SAM foundation: opt-in data + capability contracts ===== */
+(function(){
+  var config=window.SAM_CONFIG||{mode:'full',company_id:'default'};
+  var demo=Object.create(null);
+  function allowWrite(){
+    if(config.mode!=='readonly')return true;
+    window.alert('这一步请在本地操作');
+    return false;
+  }
+  function request(url,options){
+    options=options||{};
+    if(typeof url!=='string'||url.indexOf('/api/')!==0){
+      return Promise.reject(new Error('SAM API requires a same-origin /api/ path'));
+    }
+    var method=(options.method||'GET').toUpperCase();
+    if(['GET','HEAD','OPTIONS'].indexOf(method)<0&&!allowWrite()){
+      var error=new Error('这一步请在本地操作');error.code='sam_readonly';
+      return Promise.reject(error);
+    }
+    return window.fetch(url,Object.assign({},options,{credentials:'same-origin'}));
+  }
+  function isEmpty(value){
+    return value==null||value===''||(Array.isArray(value)?value.length===0:
+      typeof value==='object'&&Object.keys(value).length===0);
+  }
+  async function load(section,options){
+    options=options||{};
+    if(!Object.prototype.hasOwnProperty.call(demo,section)){
+      throw new Error('Register SAM.demo['+section+'] before loading');
+    }
+    try{
+      var response=await request(options.url);
+      if(!response.ok)throw new Error('HTTP '+response.status);
+      var payload=await response.json();
+      var data=options.select?options.select(payload):payload;
+      if((options.isEmpty||isEmpty)(data))throw new Error('empty data');
+      return {data:data,source:'api',demo:false,label:'',error:null};
+    }catch(error){
+      return {data:demo[section],source:'demo',demo:true,label:'演示数据',error:error};
+    }
+  }
+  function mark(element,result){
+    // Caller supplies an existing label slot; no implicit DOM/layout changes.
+    element.textContent=result.label;
+    element.dataset.samSource=result.source;
+  }
+  window.SAM={config:config,demo:demo,api:{request:request},
+    data:{load:load,mark:mark},ui:{allowWrite:allowWrite}};
+})();
+/* ===== /SAM foundation ===== */
 /* ===== 移动端抽屉导航 ===== */
 (function(){
   var body=document.body, mt=document.getElementById('menuToggle'), ov=document.getElementById('navOverlay');
@@ -1767,14 +1817,17 @@ a.sys-item{text-decoration:none;}
       var d=botShell();fillBot(d,ANSWERS[gkey].t);return;
     }
     var shell=botShell();
-    fetch('http://127.0.0.1:5000/api/chat',{
+    window.SAM.api.request('/api/chat',{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({message:q})
     }).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
       .then(function(res){fillBot(shell,res.message);})
       .catch(function(){fillBot(shell,'AI 暂时无法响应，请确认后端服务已启动。');});
   }
-  function ask(q,gkey){go('chat');addUser(q);addBot(q,gkey);}
+  function ask(q,gkey){
+    if(!window.SAM.ui.allowWrite())return false;
+    go('chat');addUser(q);addBot(q,gkey);return true;
+  }
 
   document.querySelectorAll('.sugg-card').forEach(function(c){
     c.addEventListener('click',function(){ask(c.dataset.q);});
@@ -1795,7 +1848,8 @@ a.sys-item{text-decoration:none;}
   });
   function submit(){
     var q=input.value.trim();if(!q)return;
-    ask(q);input.value='';input.style.height='auto';sendBtn.disabled=true;input.focus();
+    if(!ask(q))return;
+    input.value='';input.style.height='auto';sendBtn.disabled=true;input.focus();
   }
   sendBtn.addEventListener('click',submit);
   input.addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submit();}});
@@ -1958,8 +2012,9 @@ a.sys-item{text-decoration:none;}
     document.getElementById('importFootHint').textContent='解析与 AI 引导已解耦，上传不会等待模型冷启动';
   }
   function refreshGuide(){
+    if(!window.SAM.ui.allowWrite())return Promise.resolve();
     document.getElementById('importGuideText').textContent='正在向 AI 获取资料状态…';
-    return fetch(GUIDE_API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event:'open'})})
+    return window.SAM.api.request(GUIDE_API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event:'open'})})
       .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
       .then(function(res){renderGuide(res.guide);})
       .catch(showGuideError);
@@ -1967,24 +2022,31 @@ a.sys-item{text-decoration:none;}
   function renderImportFiles(){
     importFiles.innerHTML=uploadedFiles.map(function(f){return '<div class="import-file '+(f.ok?'ok':'err')+'"><span>📄</span><span class="name">'+f.name+'</span><span class="status">'+(f.ok?'已上传':f.error)+'</span></div>';}).join('');
   }
-  function openImportWizard(){importMask.classList.add('open');importMask.setAttribute('aria-hidden','false');refreshGuide();}
+  function openImportWizard(){
+    if(!window.SAM.ui.allowWrite())return;
+    importMask.classList.add('open');importMask.setAttribute('aria-hidden','false');refreshGuide();
+  }
   function closeImportWizard(){importMask.classList.remove('open');importMask.setAttribute('aria-hidden','true');}
   function uploadImportFile(file){
+    if(!window.SAM.ui.allowWrite())return Promise.resolve();
     var fd=new FormData();fd.append('file',file);
     var entry={name:file.name,ok:false,error:'上传中…'};uploadedFiles.push(entry);renderImportFiles();
-    return fetch(HARNESS_API,{method:'POST',body:fd}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(res){
+    return window.SAM.api.request(HARNESS_API,{method:'POST',body:fd}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(res){
       entry.ok=true;entry.error='';prependFile({n:res.original_name,s:fmtSize(res.size),d:nowMMDD(),src:'本地上传',f:false});
       if(res.guide)renderGuide(res.guide);else if(res.guide_status==='queued')showGuidePending();else showGuideError();
     }).catch(function(err){entry.error=err.message||'上传失败';}).finally(renderImportFiles);
   }
-  function handleImportFiles(files){if(!files||!files.length)return;Promise.all(Array.prototype.slice.call(files).map(uploadImportFile));importInput.value='';}
+  function handleImportFiles(files){
+    if(!files||!files.length||!window.SAM.ui.allowWrite())return;
+    Promise.all(Array.prototype.slice.call(files).map(uploadImportFile));importInput.value='';
+  }
   document.getElementById('importWizardBtn').addEventListener('click',openImportWizard);
   document.getElementById('importNavBtn').addEventListener('click',openImportWizard);
   document.getElementById('driveUploadBtn').addEventListener('click',openImportWizard);
   document.getElementById('driveWizardBtn').addEventListener('click',openImportWizard);
   document.getElementById('importClose').addEventListener('click',closeImportWizard);
   document.getElementById('importChatFloat').addEventListener('click',function(){closeImportWizard();go('chat');});
-  document.getElementById('importPick').addEventListener('click',function(){importInput.click();});
+  document.getElementById('importPick').addEventListener('click',function(){if(window.SAM.ui.allowWrite())importInput.click();});
   importInput.addEventListener('change',function(){handleImportFiles(importInput.files);});
   ['dragenter','dragover'].forEach(function(evt){importDrop.addEventListener(evt,function(e){e.preventDefault();importDrop.classList.add('drag');});});
   ['dragleave','drop'].forEach(function(evt){importDrop.addEventListener(evt,function(e){e.preventDefault();importDrop.classList.remove('drag');if(evt==='drop')handleImportFiles(e.dataTransfer.files);});});

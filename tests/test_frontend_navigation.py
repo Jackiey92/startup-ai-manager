@@ -10,7 +10,7 @@ def _webapp_module():
     return load()
 
 
-def test_navigation_has_six_entries_and_bizov_landing(tmp_path: Path, monkeypatch) -> None:
+def test_navigation_keeps_legacy_pages_and_owned_home(tmp_path: Path, monkeypatch) -> None:
     db_path = tmp_path / "app.db"
     init_db(db_path)
     webapp = _webapp_module()
@@ -20,8 +20,9 @@ def test_navigation_has_six_entries_and_bizov_landing(tmp_path: Path, monkeypatc
     client = webapp.app.test_client()
 
     landing = client.get("/")
-    assert landing.status_code == 302
-    assert landing.headers["Location"].endswith("/bizov")
+    assert landing.status_code == 200
+    assert 'window.SAM_CONFIG = ' in landing.get_data(as_text=True)
+    assert '<div class="screen active" id="overview">' in landing.get_data(as_text=True)
     page = client.get("/bizov?company_id=empty")
     assert page.status_code == 200
     html = page.get_data(as_text=True)
