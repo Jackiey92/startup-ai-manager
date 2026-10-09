@@ -3,8 +3,8 @@ project_name = "Startup AI Manager"
 project_type = "web"
 requires = ["python-3.13"]
 project_id = "7689293963500486702"
-app_id = "7689335279399895049"
+app_id = "7694613181318119439"
 
 [deploy]
-build = ["bash", "scripts/setup.sh"]
-run = ["bash", "scripts/run.sh"]
+build = ["python3", "-m", "pip", "install", "-r", "requirements-cloud.txt"]
+run = ["bash", "scripts/cloud_run.sh"]
