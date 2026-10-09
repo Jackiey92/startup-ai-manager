@@ -545,6 +545,7 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
 /* ===== 系统导航项 ===== */
 .sys-item{display:flex;align-items:center;gap:10px;width:100%;padding:8px 11px;border-radius:9px;border:none;background:none;font-family:inherit;font-size:13px;font-weight:500;color:var(--t2);cursor:pointer;text-align:left;margin-bottom:2px;}
 .sys-item:hover{background:#f2f3f5;color:var(--t1);}
+a.sys-item{text-decoration:none;}
 .sys-item.active{background:#f0ecff;color:var(--purple);font-weight:600;}
 .sys-item .ah-ic{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;flex:none;}
 .sys-item .g-dot{width:6px;height:6px;border-radius:50%;margin-left:auto;}
@@ -849,8 +850,12 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
         </button>
       </div>
 
-      <!-- 系统入口：资料导入始终保留，其他系统工具暂隐 -->
+      <!-- 系统入口：知识库与资料导入始终保留，其他系统工具暂隐 -->
       <div class="nav-label">系统入口</div>
+      <a class="sys-item" href="/knowledge">
+        <span class="ah-ic" style="background:#f0ecff;color:var(--purple)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5C9 3 5 3 2 4v15c3-1 7-1 10 1 3-2 7-2 10-1V4c-3-1-7-1-10 1zM12 5v15"/></svg></span>
+        知识库
+      </a>
       <button class="sys-item import-entry" id="importNavBtn" type="button">
         <span class="ah-ic" style="background:#f0ecff;color:var(--purple)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span>
         资料导入<span class="g-dot" style="background:var(--primary)"></span>

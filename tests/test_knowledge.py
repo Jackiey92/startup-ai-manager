@@ -156,6 +156,7 @@ def test_knowledge_empty_page_api_and_read_only_methods(knowledge_env):
     }
     html = client.get("/knowledge").get_data(as_text=True)
     assert 'class="nav-primary active" href="/knowledge"' in html
+    assert 'href="/">返回主页</a>' in html
     for text in ("暂无原始证据", "暂无确认事实", "暂无已存股权事件链", "暂无当前公司", "只读"):
         assert text in html
     assert "data-upload-open" not in html and 'id="upload-modal"' not in html

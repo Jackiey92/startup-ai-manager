@@ -5,7 +5,7 @@
 {% if ref.url %}<a class="knowledge-source" href="{{ ref.url }}">查看 L2 原文 · 页码 {{ ref.page if ref.page is not none else '未提供（整文件）' }}{% if ref.locator %} · {{ ref.locator }}{% endif %}</a>{% else %}<span class="muted">暂无可用 L2 原文链接</span>{% endif %}
 {% endmacro %}
 {% block content %}
-<div class="page-head"><div><h1>知识库</h1><p>只读查看已存知识和来源；不在此编辑、裁决或固化。</p></div></div>
+<div class="page-head"><div><h1>知识库</h1><p>只读查看已存知识和来源；不在此编辑、裁决或固化。</p></div><a class="knowledge-source right" href="/">返回主页</a></div>
 <nav class="knowledge-tabs" aria-label="知识分区"><a href="#evidence">📄 原始证据 · 2A</a><a href="#confirmed-facts">✅ 确认事实 · 2B</a><a href="#working-memory">⏱️ 工作记忆 · 2c</a></nav>
 <section id="evidence" class="knowledge-section">
 <h2>📄 原始证据（2A）</h2><p class="muted">摘要与概览是整文件级导航，并非事实确认；页码与单元格坐标以 L2 为准。缺失坐标不会补造。</p>

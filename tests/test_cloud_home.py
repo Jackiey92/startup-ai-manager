@@ -147,7 +147,10 @@ def test_all_cloud_pages_and_read_apis(cloud_web, with_snapshot, monkeypatch):
     # The high-fidelity prototype is served directly as the cloud landing page.
     landing = client.get('/')
     assert landing.status_code == 200
-    assert '企业经营智能体原型' in landing.get_data(as_text=True)
+    landing_html = landing.get_data(as_text=True)
+    assert '企业经营智能体原型' in landing_html
+    assert '<a class="sys-item" href="/knowledge">' in landing_html
+    assert landing_html.index('href="/knowledge"') < landing_html.index('id="importNavBtn"')
     assert client.get('/prototype').status_code == 200
     for path in ['/bizov', '/overview', '/todos', '/facts', '/knowledge',
                  '/knowledge/sources/abc', '/files', '/files/abc', '/chat', '/inbox']:
@@ -158,6 +161,10 @@ def test_all_cloud_pages_and_read_apis(cloud_web, with_snapshot, monkeypatch):
         assert 'id="upload-modal"' not in html
         assert '只读' in html
         assert 'type="file"' not in html
+        if path == '/knowledge':
+            assert 'href="/">返回主页</a>' in html
+            for section in ('evidence', 'confirmed-facts', 'working-memory'):
+                assert f'href="#{section}"' in html
         if not with_snapshot:
             # The wired knowledge page has its own three-tab empty states rather
             # than the generic cloud_page "暂无同步数据" marker.
