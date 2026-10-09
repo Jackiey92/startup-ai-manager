@@ -149,9 +149,22 @@ def test_all_cloud_pages_and_read_apis(cloud_web, with_snapshot, monkeypatch):
     assert landing.status_code == 200
     landing_html = landing.get_data(as_text=True)
     assert '企业经营智能体原型' in landing_html
+    assert '<div class="screen active" id="overview">' in landing_html
+    assert landing_html.count('<div class="screen active"') == 1
+    assert '<div class="screen" id="bizov">' in landing_html
+    assert '<button class="ov-item active" data-go="overview">' in landing_html
+    for label in ('业务画像', '产品矩阵', '商业模式', '技术与知识产权'):
+        assert f'<button class="sub-item" data-go="bizov"><span class="dot"></span>{label}</button>' in landing_html
+    assert '<div class="crumb" id="crumb">企业综合</div>' in landing_html
+    assert 'overview:"企业综合"' in landing_html
+    for label in ('企业健康度', '营业收入（1–9月）', '净利润', '现金跑道',
+                  '在手订单', '员工激励待办', '研发项目进展', '订单进展'):
+        assert label in landing_html
     assert '<a class="sys-item" href="/knowledge">' in landing_html
     assert landing_html.index('href="/knowledge"') < landing_html.index('id="importNavBtn"')
-    assert client.get('/prototype').status_code == 200
+    prototype = client.get('/prototype')
+    assert prototype.status_code == 200
+    assert prototype.get_data(as_text=True) == landing_html
     for path in ['/bizov', '/overview', '/todos', '/facts', '/knowledge',
                  '/knowledge/sources/abc', '/files', '/files/abc', '/chat', '/inbox']:
         result = client.get(path)
