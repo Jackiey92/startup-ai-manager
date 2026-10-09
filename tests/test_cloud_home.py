@@ -144,7 +144,11 @@ def test_all_cloud_pages_and_read_apis(cloud_web, with_snapshot, monkeypatch):
     monkeypatch.setattr(web, 'classification_service', lambda: pytest.fail('no local ledger'))
     monkeypatch.setattr(web, 'business_overview_service', lambda: pytest.fail('no local ledger'))
     client = web.app.test_client()
-    assert client.get('/').status_code == 302
+    # The high-fidelity prototype is served directly as the cloud landing page.
+    landing = client.get('/')
+    assert landing.status_code == 200
+    assert '企业经营智能体原型' in landing.get_data(as_text=True)
+    assert client.get('/prototype').status_code == 200
     for path in ['/bizov', '/overview', '/todos', '/facts', '/knowledge',
                  '/knowledge/sources/abc', '/files', '/files/abc', '/chat', '/inbox']:
         result = client.get(path)

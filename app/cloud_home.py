@@ -10,8 +10,9 @@ import hmac
 import json
 import os
 import sqlite3
+from pathlib import Path
 
-from flask import abort, g, redirect, render_template, request, url_for
+from flask import abort, g, redirect, render_template, request, send_file, url_for
 
 from .cloud_snapshot import (MAX_BODY_BYTES, SnapshotKnowledgeService, SnapshotStore,
                              object_value, reject_constant)
@@ -106,7 +107,12 @@ def install_cloud_window(app, config, context_reader) -> None:
                 return 'Authentication required', 401, {'WWW-Authenticate': 'Basic realm="SAM cloud"'}
         if request.endpoint == 'static':
             return None
+        # The high-fidelity prototype is the cloud landing experience: serve
+        # the self-contained file directly for both '/' and '/prototype'.
         if request.endpoint in ('home_page', 'prototype_page'):
+            prototype_file = Path(config.project_root) / 'prototype' / 'startup-ai-manager.html'
+            if prototype_file.is_file():
+                return send_file(str(prototype_file))
             return redirect(url_for('business_overview_page'))
 
         snapshot = current_snapshot(app)
