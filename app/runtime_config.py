@@ -11,6 +11,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -170,6 +171,7 @@ class RuntimeConfig:
     agent_id: str
     openclaw_mode: str
     gateway_port: int
+    cloud_readonly: bool = False
 
     def for_extraction(self, env: dict[str, str] | None = None) -> "RuntimeConfig":
         """Extraction defaults to Flash without changing the leader model."""
@@ -182,7 +184,10 @@ class RuntimeConfig:
         env = env if env is not None else os.environ
         root = Path(project_root or env.get("SAM_PROJECT_ROOT", Path(__file__).resolve().parent.parent)).resolve()
         config = _read_config(root, env)
+        cloud_readonly = env.get("SAM_CLOUD_READONLY") == "1"
         memory_root_uri = str(env.get("SAM_MEMORY_ROOT_URI", "")).rstrip("/")
+        if cloud_readonly and not memory_root_uri:
+            memory_root_uri = "viking://sam-cloud-readonly/disabled"
         if not memory_root_uri:
             raise RuntimeError("Missing SAM_MEMORY_ROOT_URI; set the SAM product OV root explicitly")
         runtime = config.get("runtime", {})
@@ -192,7 +197,7 @@ class RuntimeConfig:
         model = config.get("model", {})
         memory = config.get("memory", {})
         harness = _path(configured_root, env.get("SAM_HARNESS_ROOT", paths.get("harness_root")), configured_root / "harness-openclaw")
-        node_bin = _select_node_bin(env, runtime)
+        node_bin = "" if cloud_readonly else _select_node_bin(env, runtime)
         entry = _path(configured_root, env.get("SAM_OPENCLAW_ENTRY", paths.get("openclaw_entry")), configured_root / ".oc-runtime/node_modules/openclaw/openclaw.mjs", follow_symlinks=False)
         venv_bin = _path(configured_root, env.get("SAM_VENV_BIN", paths.get("venv_bin")), configured_root / ".venv/bin", follow_symlinks=False)
         state = _path(configured_root, env.get("SAM_OPENCLAW_STATE_DIR", paths.get("state_dir")), harness / "state")
@@ -243,19 +248,27 @@ class RuntimeConfig:
             "SAM_OPENCLAW_GATEWAY_PORT",
             env.get("OPENCLAW_GATEWAY_PORT", runtime.get("gateway_port", 18790)),
         ))
+        # Cloud snapshots never touch the checkout's ledger or OV. Ignore
+        # profile data paths in this mode, but retain explicit path overrides.
+        cloud_data = _path(configured_root, env.get("SAM_DATA_ROOT"),
+                           Path(tempfile.gettempdir()) / "sam-cloud-home")
+        def data_path(name: str, key: str, local: Path, cloud: Path) -> Path:
+            return _path(configured_root, env.get(name) if cloud_readonly else env.get(name, paths.get(key)),
+                         cloud if cloud_readonly else local)
+
         return cls(
             configured_root, harness, node_bin, entry, venv_bin, state, config_path,
-            _path(configured_root, env.get("SAM_DATA_ROOT", paths.get("data_root")), configured_root / "data"),
-            _path(configured_root, env.get("SAM_OBJECTS_DIR", paths.get("objects_dir")), configured_root / "data" / "objects"),
-            _path(configured_root, env.get("SAM_MAIN_DB", paths.get("main_db")), configured_root / "data" / "app.db"),
-            _path(configured_root, env.get("SAM_APP_DB", paths.get("app_db")), configured_root / "data" / "sales_app" / "app.db"),
-            _path(configured_root, env.get("SAM_MEMORY_ROOT", paths.get("memory_root")), configured_root / ".sam-memory"),
+            data_path("SAM_DATA_ROOT", "data_root", configured_root / "data", cloud_data),
+            data_path("SAM_OBJECTS_DIR", "objects_dir", configured_root / "data" / "objects", cloud_data / "objects"),
+            data_path("SAM_MAIN_DB", "main_db", configured_root / "data" / "app.db", cloud_data / "app.db"),
+            data_path("SAM_APP_DB", "app_db", configured_root / "data" / "sales_app" / "app.db", cloud_data / "sales_app" / "app.db"),
+            data_path("SAM_MEMORY_ROOT", "memory_root", configured_root / ".sam-memory", cloud_data / "disabled-memory"),
             _path(configured_root, env.get("SAM_SKILL_ROOT", skills.get("root")), configured_root / "skills"),
             env.get("SAM_GIT_DIR"), mapping,
             str(model.get("api", "openai-completions")),
             str(env.get(base_url_env, model.get("base_url", ""))), base_url_env, name_env, key_env,
             str(env.get(name_env, model.get("default_model", "auto"))),
-            str(memory.get("provider", "local")),
+            "null" if cloud_readonly else str(memory.get("provider", "local")),
             memory_root_uri,
             str(env.get("SAM_OV_BASE_URL", memory.get("base_url", "http://127.0.0.1:1933"))),
             str(memory.get("base_url_env", "SAM_OV_BASE_URL")),
@@ -266,4 +279,5 @@ class RuntimeConfig:
             agent_id,
             gateway_mode,
             gateway_port,
+            cloud_readonly,
         )

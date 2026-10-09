@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }} · SAM{% endblock %}
+{% block crumb %}{{ title }}{% endblock %}
+{% macro display(value) %}
+{% if value is mapping %}
+  {% if value.get('file_hash') is string and value.get('file_hash') %}<p><a href="{{ url_for('knowledge_source_page', file_hash=value['file_hash']) }}">查看原文溯源</a> · <a href="{{ url_for('detail', file_hash=value['file_hash']) }}">文件详情</a></p>{% endif %}
+  {% for key, item in value.items() %}<div class="knowledge-event"><b>{{ key }}</b>{{ display(item) }}</div>{% else %}<p class="muted">暂无同步数据</p>{% endfor %}
+{% elif value is sequence and value is not string %}
+  {% for item in value %}<article class="card section-gap">{{ display(item) }}</article>{% else %}<p class="muted">暂无同步数据</p>{% endfor %}
+{% elif value is none %}<p class="muted">暂无同步数据</p>
+{% else %}<pre class="knowledge-prose" style="white-space:pre-wrap;overflow-wrap:anywhere">{{ value }}</pre>{% endif %}
+{% endmacro %}
+{% block content %}
+<div class="page-head"><div><h1>{{ title }}</h1><p>云端为只读演示窗口，请在本地操作。展示已同步字段，不作业务判断。</p></div></div>
+{% if snapshot %}<p class="muted">company_id：{{ snapshot.company_id }} · pushed_at：{{ snapshot.pushed_at }} · version：{{ snapshot.version }}</p>
+{% else %}<div class="empty" role="status">暂无同步数据，请从本地推送快照。</div>{% endif %}
+{% for label, value in sections %}<section class="card section-gap"><div class="card-head"><h2>{{ label }}</h2></div>{{ display(value) }}</section>{% else %}<div class="empty">暂无同步数据</div>{% endfor %}
+{% if snapshot %}<details class="card knowledge-detail section-gap"><summary>完整快照字段（含扩展字段）</summary>{{ display(snapshot) }}</details>{% endif %}
+{% endblock %}

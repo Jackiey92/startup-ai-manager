@@ -29,6 +29,11 @@ def knowledge_service():
     return KnowledgeService(config.main_db, memory_provider(config), objects_path=config.objects_dir)
 
 
+def home_snapshot(company_id: str) -> dict:
+    from app.cloud_export import build_home_snapshot
+    return build_home_snapshot(company_id=company_id)
+
+
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         # Never forward the ingest credential or snapshot to a redirected host.
@@ -37,16 +42,25 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--homepage", action="store_true", help="push the complete main-repo cloud window")
     parser.add_argument("--company-id", default=os.environ.get("SAM_COMPANY_ID"),
                         help="company scope (or set SAM_COMPANY_ID)")
     args = parser.parse_args(argv)
     if not args.company_id or not args.company_id.strip():
         parser.error("provide --company-id or set SAM_COMPANY_ID")
 
-    cloud_url = os.environ.get("SAM_KNOWLEDGE_CLOUD_URL", "").strip()
-    ingest_key = os.environ.get("SAM_KNOWLEDGE_INGEST_KEY", "")
+    # The complete homepage channel uses host scope only; retain the old
+    # knowledge-only CLI contract for existing deployments.
+    if args.homepage and args.company_id != os.environ.get("SAM_COMPANY_ID", "").strip():
+        print("Homepage push requires host SAM_COMPANY_ID; caller override is not allowed", file=sys.stderr)
+        return 1
+
+    url_env = "SAM_CLOUD_URL" if args.homepage else "SAM_KNOWLEDGE_CLOUD_URL"
+    key_env = "SAM_CLOUD_INGEST_KEY" if args.homepage else "SAM_KNOWLEDGE_INGEST_KEY"
+    cloud_url = os.environ.get(url_env, "").strip()
+    ingest_key = os.environ.get(key_env, "")
     missing = [name for name, value in (
-        ("SAM_KNOWLEDGE_CLOUD_URL", cloud_url), ("SAM_KNOWLEDGE_INGEST_KEY", ingest_key),
+        (url_env, cloud_url), (key_env, ingest_key),
     ) if not value.strip()]
     if missing:
         print("Set required environment variables: " + ", ".join(missing), file=sys.stderr)
@@ -60,7 +74,7 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError("invalid service root")
         target.port  # Validate malformed ports before reading a snapshot.
     except ValueError:
-        print("SAM_KNOWLEDGE_CLOUD_URL must be an HTTP(S) service root without credentials, "
+        print(f"{url_env} must be an HTTP(S) service root without credentials, "
               "query or fragment", file=sys.stderr)
         return 1
 
@@ -69,14 +83,18 @@ def main(argv: list[str] | None = None) -> int:
         print(message.replace(ingest_key, "[redacted]"), file=sys.stderr)
 
     try:
-        payload = knowledge_service().read(company_id=args.company_id)
+        snapshot = home_snapshot(args.company_id) if args.homepage else {
+            "company_id": args.company_id, "pushed_at": time.time(),
+            "payload": knowledge_service().read(company_id=args.company_id),
+        }
     except Exception as exc:
         error(f"Knowledge read failed: {exc}")
         return 1
 
     try:
-        body = json.dumps({"company_id": args.company_id, "pushed_at": time.time(),
-                           "payload": payload}, ensure_ascii=False).encode("utf-8")
+        body = json.dumps(snapshot, ensure_ascii=False, allow_nan=False).encode("utf-8")
+        if args.homepage and len(body) > 32 * 1024 * 1024:
+            raise ValueError("homepage snapshot exceeds 32 MiB; nothing sent")
         request = urllib.request.Request(
             cloud_url.rstrip("/") + "/ingest", data=body, method="POST",
             headers={"Content-Type": "application/json", "X-Ingest-Key": ingest_key},
@@ -110,6 +128,10 @@ def main(argv: list[str] | None = None) -> int:
         error(f"HTTP 200: ingest did not confirm ok=true: {response_body}")
         return 1
 
+    if args.homepage:
+        print(f"Homepage push succeeded: company_id={args.company_id} host={target.hostname}".replace(ingest_key, "[redacted]"))
+        return 0
+    payload = snapshot["payload"]
     files = len(payload["evidence"]["files"])
     facts = sum(len(group["facts"]) for group in payload["facts"]["groups"])
     working_memory = len(payload["working_memory"]["items"])

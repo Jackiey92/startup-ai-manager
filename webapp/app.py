@@ -50,8 +50,9 @@ DATA_DIR = RUNTIME_CONFIG.app_db.parent
 OBJECTS_DIR = RUNTIME_CONFIG.objects_dir
 MAIN_DB = RUNTIME_CONFIG.main_db
 
-OBJECTS_DIR.mkdir(parents=True, exist_ok=True)
-DATA_DIR.mkdir(parents=True, exist_ok=True)
+if not RUNTIME_CONFIG.cloud_readonly:
+    OBJECTS_DIR.mkdir(parents=True, exist_ok=True)
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 app = Flask(__name__)
 app.extensions["sam_runtime_config"] = RUNTIME_CONFIG
@@ -60,14 +61,16 @@ app.extensions["sam_memory_provider"] = memory_provider(RUNTIME_CONFIG)
 # Both parsing/consolidation and model guidance run outside the Flask request
 # thread.  The upload endpoint only stores the immutable original and creates
 # a durable parse-job row; clients observe actual parser stages via /inbox.
-_GUIDE_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="sam-leader")
-_GUIDE_COORDINATOR = GuideJobCoordinator(
+_GUIDE_EXECUTOR = None if RUNTIME_CONFIG.cloud_readonly else ThreadPoolExecutor(max_workers=2, thread_name_prefix="sam-leader")
+_GUIDE_COORDINATOR = None if RUNTIME_CONFIG.cloud_readonly else GuideJobCoordinator(
     _GUIDE_EXECUTOR, debounce_seconds=float(os.environ.get("SAM_GUIDE_DEBOUNCE", "3"))
 )
 
 
 @app.before_request
 def require_knowledge_auth():
+    if RUNTIME_CONFIG.cloud_readonly:
+        return None  # cloud_boundary applies this same auth to the entire window
     if request.url_rule is None or request.url_rule.rule not in {
         "/knowledge", "/api/knowledge", "/knowledge/sources/<file_hash>",
     }:
@@ -89,6 +92,11 @@ def require_knowledge_auth():
 
 @app.after_request
 def add_cors(resp):
+    if RUNTIME_CONFIG.cloud_readonly:
+        resp.headers["Cache-Control"] = "no-store"
+        resp.headers["Referrer-Policy"] = "no-referrer"
+        resp.headers["X-Content-Type-Options"] = "nosniff"
+        return resp  # cloud snapshots and credentials are same-origin only
     resp.headers["Access-Control-Allow-Origin"] = "*"
     resp.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
     resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
@@ -140,7 +148,8 @@ def _has_declared_self(company_id: str) -> bool:
 # Ensure the durable queue table exists for both the Flask entry point and the
 # test client.  This is schema initialization only; no upload is processed at
 # import time.
-init_db()
+if not RUNTIME_CONFIG.cloud_readonly:
+    init_db()
 
 
 def detect_format(filename: str) -> str:
@@ -427,8 +436,8 @@ def _parse_job_worker(job: dict, progress, cancel_event) -> None:
         raise
 
 
-_PARSE_ADAPTER = runtime_provider(RUNTIME_CONFIG, StagingStore(db_path=MAIN_DB))
-_PARSE_MANAGER = ParseJobManager(
+_PARSE_ADAPTER = None if RUNTIME_CONFIG.cloud_readonly else runtime_provider(RUNTIME_CONFIG, StagingStore(db_path=MAIN_DB))
+_PARSE_MANAGER = None if RUNTIME_CONFIG.cloud_readonly else ParseJobManager(
     MAIN_DB,
     _parse_job_worker,
     cancel_parser=_PARSE_ADAPTER.cancel_parse,
@@ -466,6 +475,9 @@ def _parse_failure_message(payload: object, status: str) -> str | None:
 
 
 def _page_context(*, company_id: str) -> dict:
+    if RUNTIME_CONFIG.cloud_readonly:
+        from app.cloud_home import page_context
+        return page_context(app)
     facts = consolidation_service().list_facts(company_id=company_id)
     todos = consolidation_service().list_todos(company_id=company_id, status="open")
     files = classification_service().list_current(company_id=company_id)
@@ -608,6 +620,10 @@ def _knowledge_company_id() -> str:
 
 
 def knowledge_service() -> KnowledgeService:
+    if RUNTIME_CONFIG.cloud_readonly:
+        from app.cloud_home import current_snapshot
+        from app.cloud_snapshot import SnapshotKnowledgeService
+        return SnapshotKnowledgeService(current_snapshot(app))
     return KnowledgeService(MAIN_DB, app.extensions["sam_memory_provider"], objects_path=OBJECTS_DIR)
 
 
@@ -1111,9 +1127,15 @@ def detail(file_hash: str):
     return render_template("detail.html", **context)
 
 
+if RUNTIME_CONFIG.cloud_readonly:
+    from app.cloud_home import install_cloud_window
+    install_cloud_window(app, RUNTIME_CONFIG, _page_context)
+
+
 if __name__ == "__main__":
     import os
-    init_db()
+    if not RUNTIME_CONFIG.cloud_readonly:
+        init_db()
     app.run(
         host=os.environ.get("HOST", "0.0.0.0"),
         port=int(os.environ.get("PORT", "5000")),

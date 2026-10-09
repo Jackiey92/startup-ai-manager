@@ -1,0 +1,2 @@
+# Read-only Flask shell and SQLite snapshots need no parser/model dependencies.
+flask>=3.1,<4
