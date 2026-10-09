@@ -66,6 +66,27 @@ _GUIDE_COORDINATOR = GuideJobCoordinator(
 )
 
 
+@app.before_request
+def require_knowledge_auth():
+    if request.url_rule is None or request.url_rule.rule not in {
+        "/knowledge", "/api/knowledge", "/knowledge/sources/<file_hash>",
+    }:
+        return None
+    username = os.environ.get("SAM_VIEW_USER")
+    password = os.environ.get("SAM_VIEW_PASS")
+    if username is None and password is None:
+        return None
+
+    # Incomplete/empty configuration fails closed; compare UTF-8 credentials.
+    auth = request.authorization
+    if username and password and auth is not None and auth.type == "basic":
+        user_matches = hmac.compare_digest((auth.username or "").encode("utf-8"), username.encode("utf-8"))
+        pass_matches = hmac.compare_digest((auth.password or "").encode("utf-8"), password.encode("utf-8"))
+        if user_matches and pass_matches:
+            return None
+    return "Authentication required", 401, {"WWW-Authenticate": 'Basic realm="SAM knowledge"'}
+
+
 @app.after_request
 def add_cors(resp):
     resp.headers["Access-Control-Allow-Origin"] = "*"

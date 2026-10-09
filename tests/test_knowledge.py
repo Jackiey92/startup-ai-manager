@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import base64
 import sqlite3
 from pathlib import Path
 from urllib.parse import urlsplit, parse_qs
@@ -25,6 +26,8 @@ OTHER = "acc-other"
 
 @pytest.fixture
 def knowledge_env(tmp_path, monkeypatch):
+    monkeypatch.delenv("SAM_VIEW_USER", raising=False)
+    monkeypatch.delenv("SAM_VIEW_PASS", raising=False)
     db = tmp_path / "app.db"
     objects = tmp_path / "objects"
     init_db(db)
@@ -35,6 +38,63 @@ def knowledge_env(tmp_path, monkeypatch):
     monkeypatch.setenv("SAM_COMPANY_ID", COMPANY)
     monkeypatch.setitem(webapp.app.extensions, "sam_memory_provider", memory)
     return webapp.app.test_client(), db, objects, memory
+
+
+def basic_auth(username, password):
+    token = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
+    return {"Authorization": f"Basic {token}"}
+
+
+def test_knowledge_auth_disabled_without_environment(knowledge_env):
+    response = knowledge_env[0].get("/knowledge")
+    assert response.status_code == 200
+    assert "WWW-Authenticate" not in response.headers
+
+
+@pytest.mark.parametrize("headers", [
+    {}, basic_auth("acc-viewer", "wrong"), basic_auth("wrong", "acc-password"),
+    {"Authorization": "Basic !!!"}, {"Authorization": "Bearer acc-token"},
+])
+def test_knowledge_auth_rejects_invalid_credentials(knowledge_env, monkeypatch, headers):
+    monkeypatch.setenv("SAM_VIEW_USER", "acc-viewer")
+    monkeypatch.setenv("SAM_VIEW_PASS", "acc-password")
+    for path in ("/knowledge", "/api/knowledge", "/knowledge/sources/unknown"):
+        response = knowledge_env[0].get(path, headers=headers)
+        assert response.status_code == 401
+        assert response.headers["WWW-Authenticate"].startswith("Basic ")
+    assert knowledge_env[0].head("/knowledge", headers=headers).status_code == 401
+
+
+@pytest.mark.parametrize("username,password", [
+    ("acc-viewer", "acc-password"), ("acc-读者", "acc-口令"),
+])
+def test_knowledge_auth_accepts_credentials(knowledge_env, monkeypatch, username, password):
+    stored, _ = seed_file(knowledge_env)
+    monkeypatch.setenv("SAM_VIEW_USER", username)
+    monkeypatch.setenv("SAM_VIEW_PASS", password)
+    for path in ("/knowledge", "/api/knowledge", f"/knowledge/sources/{stored.file_hash}"):
+        assert knowledge_env[0].get(path, headers=basic_auth(username, password)).status_code == 200
+
+
+@pytest.mark.parametrize("settings", [
+    {"SAM_VIEW_USER": "acc-viewer"}, {"SAM_VIEW_PASS": "acc-password"},
+    {"SAM_VIEW_USER": "", "SAM_VIEW_PASS": ""},
+    {"SAM_VIEW_USER": "acc-viewer", "SAM_VIEW_PASS": ""},
+])
+def test_knowledge_auth_incomplete_configuration_fails_closed(knowledge_env, monkeypatch, settings):
+    for key, value in settings.items():
+        monkeypatch.setenv(key, value)
+    response = knowledge_env[0].get("/knowledge", headers=basic_auth("acc-viewer", ""))
+    assert response.status_code == 401
+    assert response.headers["WWW-Authenticate"].startswith("Basic ")
+
+
+def test_knowledge_auth_does_not_protect_overview(knowledge_env, monkeypatch):
+    monkeypatch.setenv("SAM_VIEW_USER", "acc-viewer")
+    monkeypatch.setenv("SAM_VIEW_PASS", "acc-password")
+    response = knowledge_env[0].get("/overview")
+    assert response.status_code == 200
+    assert "WWW-Authenticate" not in response.headers
 
 
 def seed_file(env, *, company=COMPANY, module="finance", content=b"acc-source"):
