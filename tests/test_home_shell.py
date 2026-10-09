@@ -139,7 +139,10 @@ def test_full_routes_still_work_and_readonly_blocks_before_services(shell_web, m
     assert client.get("/bizov").status_code == 200
 
 
-@pytest.mark.parametrize("case", ["api", "empty", "failure", "label", "readonly", "full", "ui-readonly", "ui-full"])
+@pytest.mark.parametrize("case", ["api", "empty", "failure", "label", "readonly", "full", "ui-readonly", "ui-full",
+    "ui-cabinet-registration", "ui-cabinet-409", "ui-cabinet-lifecycle", "ui-cabinet-actions",
+    "ui-cabinet-errors", "ui-cabinet-readonly", "ui-cabinet-pause", "ui-cabinet-registration-error",
+    "ui-cabinet-upload-error", "ui-cabinet-races", "ui-cabinet-upload-race"])
 def test_javascript_foundation_contracts(case):
     node = shutil.which("node")
     if not node:
@@ -147,3 +150,91 @@ def test_javascript_foundation_contracts(case):
     result = subprocess.run([node, str(ROOT / "tests/js/home_shell.cjs"), case],
                             cwd=ROOT, capture_output=True, text=True, timeout=15)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_file_cabinet_stays_inside_the_owned_wizard():
+    source = (ROOT / 'prototype/startup-ai-manager.html').read_text(encoding='utf-8')
+    nav = source.split('id="importNavBtn"', 1)[1].split('</button>', 1)[0]
+    assert '文件柜' in nav and '资料导入' not in nav
+    assert 'id="importRegistration" hidden' in source
+    assert 'for="importCompanyName"' in source
+    assert 'id="importFiles" aria-live="polite"' in source
+    assert 'target="_blank" rel="noopener">查看结果' in source
+    assert 'href="/knowledge/sources/' in source
+
+
+def test_cabinet_registration_read_and_write_boundary(shell_web):
+    web = shell_web
+    client = web.app.test_client()
+    assert client.get('/api/entity-roster').get_json()['entities'] == []
+    if web.RUNTIME_CONFIG.cloud_readonly:
+        assert not web.MAIN_DB.exists()
+        for path in ('/api/entity-roster', '/api/parse-jobs/x/cancel', '/api/parse-jobs/x/retry'):
+            response = client.post(path, json={'entity_name': 'acc-cabinet'})
+            assert response.status_code == 403
+            assert response.get_json()['error'] == 'cloud_readonly'
+        assert not web.MAIN_DB.exists()
+        return
+    before = client.post('/api/upload', data={'file': (io.BytesIO(b'acc-content'), 'acc-file.pdf')})
+    assert before.status_code == 409
+    assert before.get_json()['error'] == 'company_not_registered'
+    invalid = client.post('/api/entity-roster', json={'entity_name': '  '})
+    assert invalid.status_code == 400
+    declared = client.post('/api/entity-roster', json={'entity_name': 'acc-cabinet'})
+    assert declared.status_code == 201
+    entities = client.get('/api/entity-roster').get_json()['entities']
+    assert len(entities) == 1
+    assert entities[0]['entity_name'] == 'acc-cabinet'
+    assert entities[0]['origin'] == 'declared' and entities[0]['entity_type'] == 'self'
+    assert entities[0]['status'] == 'active'
+
+
+def test_cabinet_job_transport_and_existing_result_routes(shell_web, monkeypatch):
+    from threading import Event
+    import time
+    from app.parse_jobs import ParseJobManager
+
+    web = shell_web
+    client = web.app.test_client()
+    if web.RUNTIME_CONFIG.cloud_readonly:
+        web.app.extensions['sam_snapshot_store'].replace({
+            'version': 1, 'company_id': 'acc-shell', 'pushed_at': 1,
+            'payload': {'entities': [{'origin': 'declared', 'entity_type': 'self', 'status': 'active'}],
+                        'jobs': [{'job_id': 'acc-job', 'file_hash': 'acc-hash', 'status': 'done'}]}})
+        assert client.get('/api/entity-roster').get_json()['entities'][0]['status'] == 'active'
+        assert client.get('/api/parse-jobs/acc-job').get_json()['job']['status'] == 'done'
+        assert client.get('/knowledge#source-acc-hash').status_code == 200
+        assert client.get('/knowledge/sources/acc-hash').status_code == 200
+        return
+
+    # A real durable queue with an isolated test worker, not an OV/model claim.
+    started, release = Event(), Event()
+
+    def worker(job, progress, event):
+        progress(stage='parsing', current=1, total=2, message='acc-page')
+        started.set()
+        assert release.wait(5)
+
+    web._PARSE_MANAGER.close()
+    manager = ParseJobManager(web.MAIN_DB, worker, workers=1)
+    monkeypatch.setattr(web, '_PARSE_MANAGER', manager)
+    try:
+        assert client.post('/api/entity-roster', json={'entity_name': 'acc-cabinet'}).status_code == 201
+        upload = client.post('/api/upload', data={'file': (io.BytesIO(b'acc-content'), 'acc-file.pdf')})
+        assert upload.status_code == 202
+        data = upload.get_json()
+        assert started.wait(2)
+        job = client.get('/api/parse-jobs/' + data['job_id']).get_json()['job']
+        assert (job['status'], job['stage'], job['progress_current'], job['progress_total']) == ('parsing', 'parsing', 1, 2)
+        release.set()
+        for _ in range(100):
+            job = client.get('/api/parse-jobs/' + data['job_id']).get_json()['job']
+            if job['status'] == 'done':
+                break
+            time.sleep(.01)
+        assert job['status'] == 'done'
+        assert client.get('/knowledge#source-' + data['file_hash']).status_code == 200
+        assert client.get('/knowledge/sources/' + data['file_hash']).status_code == 200
+    finally:
+        release.set()
+        manager.executor.shutdown(wait=True, cancel_futures=True)

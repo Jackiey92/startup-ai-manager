@@ -256,7 +256,7 @@ def install_cloud_window(app, config, context_reader) -> None:
             title = '企业对话'
             sections = [('conversations', payload.get('conversations', []))]
         elif request.endpoint == 'inbox_page':
-            title = '资料导入'
+            title = '文件柜'
             sections = [('jobs', payload.get('jobs', []))]
         else:
             # Never fall through to a future local GET handler: it might

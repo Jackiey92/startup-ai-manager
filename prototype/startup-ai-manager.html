@@ -302,6 +302,7 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
 .import-reasons{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin:19px 0 16px;}.import-reason{border:1px solid var(--border);border-radius:11px;padding:13px 14px;background:#fff;}.import-reason .label{font-size:11px;font-weight:700;color:var(--primary);display:flex;align-items:center;gap:6px;}.import-reason .label::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;}.import-reason p{font-size:12.5px;line-height:1.55;color:var(--t2);margin-top:6px;}
 .import-drop{border:1px dashed #b9c4ff;border-radius:13px;background:#f8f9ff;padding:20px;text-align:center;transition:.15s;}.import-drop.drag{border-color:var(--primary);background:#eef1ff;}.import-drop strong{font-size:13px;display:block;}.import-drop p{font-size:11.5px;color:var(--t3);margin-top:5px;}.import-pick{margin-top:12px;border:1px solid var(--primary);background:#fff;color:var(--primary);border-radius:8px;padding:8px 15px;font:600 12px var(--fs);cursor:pointer;}.import-pick:hover{background:#eef1ff;}
 .import-files{display:flex;flex-direction:column;gap:7px;margin-top:12px;}.import-file{display:flex;align-items:center;gap:9px;border:1px solid var(--border-2);border-radius:8px;padding:8px 10px;font-size:12px;}.import-file .name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.import-file .status{margin-left:auto;color:var(--t3);font-size:11px;white-space:nowrap;}.import-file.ok .status{color:var(--green);}.import-file.err .status{color:var(--red);}
+.import-registration[hidden]{display:none;}.import-registration-fields{display:flex;gap:9px;margin-top:9px;}.import-registration input{min-width:0;flex:1;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font:12px var(--fs);color:var(--t1);background:var(--bg);}.import-file{flex-wrap:wrap;}.import-file .status{white-space:normal;overflow-wrap:anywhere;}.import-file .name{flex:1;}.import-file-actions{display:flex;flex-wrap:wrap;gap:7px;width:100%;}.import-file-actions a{text-decoration:none;display:inline-flex;align-items:center;}.import-file-message{width:100%;color:var(--t3);overflow-wrap:anywhere;}
 .import-foot{display:flex;align-items:center;gap:9px;margin-top:19px;padding-top:15px;border-top:1px solid var(--border-2);}.import-foot .hint{font-size:11px;color:var(--t3);margin-right:auto;}.import-nav{height:34px;padding:0 14px;border-radius:8px;border:1px solid var(--border);background:#fff;color:var(--t2);font:600 12px var(--fs);cursor:pointer;}.import-nav:hover:not(:disabled){border-color:#c4cdff;color:var(--primary);}.import-nav.primary{border-color:var(--primary);background:var(--primary);color:#fff;}.import-nav:disabled{opacity:.45;cursor:not-allowed;}
 .import-resume{font-size:11px;color:var(--t3);margin-top:10px;}
 .import-chat-float{position:absolute;right:22px;bottom:22px;z-index:2;display:flex;align-items:center;gap:7px;border:1px solid #dbe2ff;background:#fff;color:var(--primary);border-radius:99px;padding:8px 12px;box-shadow:0 8px 24px rgba(77,107,254,.18);font:600 12px var(--fs);cursor:pointer;}.import-chat-float:hover{background:#eef1ff;}
@@ -850,7 +851,7 @@ a.sys-item{text-decoration:none;}
         </button>
       </div>
 
-      <!-- 系统入口：知识库与资料导入始终保留，其他系统工具暂隐 -->
+      <!-- 系统入口：知识库与文件柜始终保留，其他系统工具暂隐 -->
       <div class="nav-label">系统入口</div>
       <a class="sys-item" href="/knowledge">
         <span class="ah-ic" style="background:#f0ecff;color:var(--purple)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5C9 3 5 3 2 4v15c3-1 7-1 10 1 3-2 7-2 10-1V4c-3-1-7-1-10 1zM12 5v15"/></svg></span>
@@ -858,7 +859,7 @@ a.sys-item{text-decoration:none;}
       </a>
       <button class="sys-item import-entry" id="importNavBtn" type="button">
         <span class="ah-ic" style="background:#f0ecff;color:var(--purple)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span>
-        资料导入<span class="g-dot" style="background:var(--primary)"></span>
+        文件柜<span class="g-dot" style="background:var(--primary)"></span>
       </button>
       <button class="sys-item deferred-module" data-go="cal">
         <span class="ah-ic" style="background:#fff3e6;color:var(--orange)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
@@ -1548,7 +1549,7 @@ a.sys-item{text-decoration:none;}
     <div class="import-mask" id="importMask" aria-hidden="true">
       <section class="import-wizard" role="dialog" aria-modal="true" aria-labelledby="importTitle">
         <div class="import-head">
-          <div><div class="import-eyebrow">STARTUP AI MANAGER · IMPORT GUIDE</div><h2 id="importTitle">上传企业资料</h2><p>AI 会根据已获得的资料实时给出下一步建议。</p></div>
+          <div><div class="import-eyebrow">STARTUP AI MANAGER · IMPORT GUIDE</div><h2 id="importTitle">文件柜</h2><p>AI 会根据已获得的资料实时给出下一步建议。</p></div>
           <button class="import-close" id="importClose" type="button" aria-label="关闭导入向导">×</button>
         </div>
         <div class="import-progress">
@@ -1558,6 +1559,11 @@ a.sys-item{text-decoration:none;}
         </div>
         <div class="import-body">
           <div class="import-main">
+            <form class="import-reason import-registration" id="importRegistration" hidden>
+              <label class="label" for="importCompanyName">首次使用：请登记本公司全称</label>
+              <div class="import-registration-fields"><input id="importCompanyName" type="text" placeholder="本公司全称" required autocomplete="organization"><button class="import-nav primary" id="importRegister" type="submit">确认登记</button></div>
+              <p id="importRegistrationMessage" role="status"></p>
+            </form>
             <div class="import-reasons">
               <div class="import-reason"><div class="label">AI 导入建议</div><p id="importGuideText" aria-live="polite">正在生成个性化建议…</p></div>
               <div class="import-reason"><div class="label">建议上传</div><p id="importNextAction">正在分析已有资料…</p></div>
@@ -1567,7 +1573,7 @@ a.sys-item{text-decoration:none;}
               <button class="import-pick" id="importPick" type="button">选择文件</button>
               <input type="file" id="importFileInput" multiple accept=".pdf,.xls,.xlsx,.xlsm" hidden>
             </div>
-            <div class="import-files" id="importFiles"></div>
+            <div class="import-files" id="importFiles" aria-live="polite"></div>
             <div class="import-resume" id="importResume">资料状态以后台已存入的文件为准。</div>
             <div class="import-foot"><span class="hint" id="importFootHint">上传后将自动刷新 AI 建议</span><button class="import-nav primary" id="importRefresh" type="button">刷新建议</button></div>
           </div>
@@ -1963,7 +1969,7 @@ a.sys-item{text-decoration:none;}
   ];
   document.getElementById('driveFiles').innerHTML=FILES.map(function(x){
     var ic=x.f?'📁':'📄';
-    return '<tr><td class="b"><span class="file-ic">'+ic+'</span>'+x.n+'</td><td>'+x.s+'</td><td>'+x.d+'</td><td><span class="file-src">'+x.src+'</span></td><td class="b"><span class="file-act">预览</span><span class="file-act" data-go="chat">AI 分析</span></td></tr>';
+    return '<tr><td class="b"><span class="file-ic">'+ic+'</span>'+escapeImport(x.n)+'</td><td>'+x.s+'</td><td>'+x.d+'</td><td><span class="file-src">'+x.src+'</span></td><td class="b"><span class="file-act">预览</span><span class="file-act" data-go="chat">AI 分析</span></td></tr>';
   }).join('');
 
   /* ========== 真实上传：接入 OpenClaw harness ========== */
@@ -1982,7 +1988,7 @@ a.sys-item{text-decoration:none;}
   function prependFile(x){
     var ic=x.f?'📁':'📄';
     var tr=document.createElement('tr');
-    tr.innerHTML='<td class="b"><span class="file-ic">'+ic+'</span>'+x.n+'</td><td>'+x.s+'</td><td>'+x.d+'</td><td><span class="file-src">'+x.src+'</span></td><td class="b"><span class="file-act">预览</span><span class="file-act" data-go="chat">AI 分析</span></td>';
+    tr.innerHTML='<td class="b"><span class="file-ic">'+ic+'</span>'+escapeImport(x.n)+'</td><td>'+x.s+'</td><td>'+x.d+'</td><td><span class="file-src">'+x.src+'</span></td><td class="b"><span class="file-act">预览</span><span class="file-act" data-go="chat">AI 分析</span></td>';
     var tb=document.getElementById('driveFiles');
     tb.insertBefore(tr,tb.firstChild);
   }
@@ -2007,7 +2013,7 @@ a.sys-item{text-decoration:none;}
     document.getElementById('importFootHint').textContent='未使用浏览器内置步骤或模板替代 AI 引导';
   }
   function showGuidePending(){
-    document.getElementById('importGuideText').textContent='资料已解析，AI 正在根据真实内容生成引导…';
+    document.getElementById('importGuideText').textContent='文件已入队，解析完成后 AI 会根据真实内容更新引导…';
     document.getElementById('importNextAction').textContent='稍后点击刷新获取基于解析证据的建议。';
     document.getElementById('importFootHint').textContent='解析与 AI 引导已解耦，上传不会等待模型冷启动';
   }
@@ -2019,27 +2025,183 @@ a.sys-item{text-decoration:none;}
       .then(function(res){renderGuide(res.guide);})
       .catch(showGuideError);
   }
+  // No demo fallback for registration/jobs: unknown state must not enable upload.
+  var registration=document.getElementById('importRegistration'),
+      registrationMessage=document.getElementById('importRegistrationMessage'),
+      registered=null, registrationLoad=null, registrationVersion=0, registering=false,
+      wizardVersion=0;
+  function escapeImport(value){
+    return String(value==null?'':value).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});
+  }
+  async function importRequest(url,options){
+    var response=await window.SAM.api.request(url,options);
+    var body=await response.json();
+    if(!response.ok){var error=new Error(body.message||body.error||('HTTP '+response.status));error.status=response.status;error.code=body.error;throw error;}
+    return body;
+  }
+  function showRegistration(message){
+    registration.hidden=false;registrationMessage.textContent=message||'登记后可直接上传，无需离开文件柜。';
+  }
+  function checkRegistration(){
+    if(registrationLoad)return registrationLoad;
+    var version=registrationVersion;
+    registrationLoad=importRequest('/api/entity-roster').then(function(body){
+      if(!Array.isArray(body.entities))throw new Error('登记状态返回无效');
+      if(version===registrationVersion){
+        // Mirror the existing upload identity guard, not model name inference.
+        registered=body.entities.some(function(row){return row.origin==='declared'&&row.entity_type==='self'&&row.status==='active';});
+        registration.hidden=registered;
+        if(!registered)showRegistration();
+      }
+      return registered;
+    }).catch(function(error){
+      if(version===registrationVersion){registered=null;showRegistration('无法读取登记状态：'+error.message);}
+      return false;
+    }).finally(function(){registrationLoad=null;});
+    return registrationLoad;
+  }
+  function activeJob(entry){return entry.job&&(entry.job.status==='queued'||entry.job.status==='parsing');}
+  function stopPolling(entry){
+    entry.pollVersion=(entry.pollVersion||0)+1;
+    if(entry.timer){clearTimeout(entry.timer);entry.timer=null;}
+  }
+  function scheduleJob(entry){
+    if(!activeJob(entry)||entry.timer||entry.polling||!importMask.classList.contains('open')||document.hidden)return;
+    entry.timer=setTimeout(function(){entry.timer=null;pollJob(entry);},1800);
+  }
+  async function pollJob(entry){
+    if(!activeJob(entry)||entry.polling)return;
+    entry.polling=true;var version=entry.pollVersion||0;
+    try{
+      var body=await importRequest('/api/parse-jobs/'+encodeURIComponent(entry.job.job_id));
+      if(!body.job)throw new Error('解析任务返回无效');
+      if(version!==entry.pollVersion)return;
+      var wasDone=entry.job.status==='done';
+      entry.job=body.job;entry.error='';
+      if(!wasDone&&entry.job.status==='done'&&window.SAM.config.mode!=='readonly'&&importMask.classList.contains('open'))refreshGuide();
+    }catch(error){if(version===entry.pollVersion)entry.error='状态读取失败：'+error.message;}
+    finally{
+      entry.polling=false;renderImportFiles();
+      if(!entry.error)scheduleJob(entry);
+    }
+  }
   function renderImportFiles(){
-    importFiles.innerHTML=uploadedFiles.map(function(f){return '<div class="import-file '+(f.ok?'ok':'err')+'"><span>📄</span><span class="name">'+f.name+'</span><span class="status">'+(f.ok?'已上传':f.error)+'</span></div>';}).join('');
+    importFiles.innerHTML=uploadedFiles.map(function(entry,index){
+      var job=entry.job, status=job?job.status:entry.status, label='', actions='';
+      if(status==='queued')label='排队中';
+      else if(status==='parsing'){
+        var total=Number(job.progress_total),current=Number(job.progress_current)||0;
+        label='解析中 · '+(job.stage||'');
+        if(total>0)label+=' · '+Math.min(100,Math.max(0,Math.round(current/total*100)))+'% ('+current+'/'+total+')';
+      }else if(status==='done')label='完成';
+      else if(status==='failed')label='失败';
+      else if(status==='canceled')label='已取消';
+      else if(status==='awaiting_registration')label='等待登记公司';
+      else label=status==='uploading'?'上传中…':(status||'');
+      function button(action,text){return '<button class="import-nav" type="button" data-import-action="'+action+'" data-import-index="'+index+'"'+(entry.busy?' disabled':'')+'>'+text+'</button>';}
+      if(job&&status==='done'){
+        var hash=encodeURIComponent(job.file_hash);
+        actions='<a class="import-nav" href="/knowledge#source-'+hash+'" target="_blank" rel="noopener">查看结果</a><a class="import-nav" href="/knowledge/sources/'+hash+'" target="_blank" rel="noopener">溯源</a>';
+      }
+      if(job&&status==='queued')actions+=button('cancel','取消');
+      if(status==='failed'||status==='canceled')actions+=button('retry','重试');
+      if(job&&entry.error&&activeJob(entry))actions+=button('poll','刷新状态');
+      return '<div class="import-file '+(status==='done'?'ok':status==='failed'?'err':'')+'"><span>📄</span><span class="name">'+escapeImport(entry.name)+'</span><span class="status">'+escapeImport(label)+'</span>'+
+        (job&&job.message?'<div class="import-file-message">'+escapeImport(job.message)+'</div>':'')+
+        (entry.error?'<div class="import-file-message">'+escapeImport(entry.error)+'</div>':'')+
+        (actions?'<div class="import-file-actions">'+actions+'</div>':'')+'</div>';
+    }).join('');
+  }
+  async function loadImportJobs(version){
+    try{
+      var body=await importRequest('/api/parse-jobs');
+      if(!Array.isArray(body.jobs))throw new Error('解析任务列表返回无效');
+      if(version!==wizardVersion||!importMask.classList.contains('open'))return;
+      body.jobs.forEach(function(job){
+        var entry=uploadedFiles.find(function(f){return f.job&&f.job.job_id===job.job_id;});
+        if(!entry){entry={name:job.original_name,job:job,pollVersion:0};uploadedFiles.push(entry);}
+        // Do not overwrite a newer in-flight upload/action/poll response.
+        else return;
+        scheduleJob(entry);
+      });
+      document.getElementById('importResume').textContent='资料状态以后台已存入的文件为准。';
+      renderImportFiles();
+    }catch(error){if(version===wizardVersion)document.getElementById('importResume').textContent='任务读取失败：'+error.message;}
   }
   function openImportWizard(){
-    if(!window.SAM.ui.allowWrite())return;
-    importMask.classList.add('open');importMask.setAttribute('aria-hidden','false');refreshGuide();
+    importMask.classList.add('open');importMask.setAttribute('aria-hidden','false');
+    var version=++wizardVersion;
+    checkRegistration().then(function(ok){if(ok&&version===wizardVersion&&importMask.classList.contains('open')&&window.SAM.config.mode!=='readonly')refreshGuide();});
+    loadImportJobs(version);
+    uploadedFiles.forEach(function(entry){if(activeJob(entry)){entry.error='';scheduleJob(entry);}});
+    if(window.SAM.config.mode==='readonly')document.getElementById('importGuideText').textContent='这一步请在本地操作';
   }
-  function closeImportWizard(){importMask.classList.remove('open');importMask.setAttribute('aria-hidden','true');}
-  function uploadImportFile(file){
-    if(!window.SAM.ui.allowWrite())return Promise.resolve();
-    var fd=new FormData();fd.append('file',file);
-    var entry={name:file.name,ok:false,error:'上传中…'};uploadedFiles.push(entry);renderImportFiles();
-    return window.SAM.api.request(HARNESS_API,{method:'POST',body:fd}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(function(res){
-      entry.ok=true;entry.error='';prependFile({n:res.original_name,s:fmtSize(res.size),d:nowMMDD(),src:'本地上传',f:false});
-      if(res.guide)renderGuide(res.guide);else if(res.guide_status==='queued')showGuidePending();else showGuideError();
-    }).catch(function(err){entry.error=err.message||'上传失败';}).finally(renderImportFiles);
+  function closeImportWizard(){
+    ++wizardVersion;importMask.classList.remove('open');importMask.setAttribute('aria-hidden','true');uploadedFiles.forEach(stopPolling);
   }
-  function handleImportFiles(files){
+  async function uploadImportFile(entry){
+    if(!window.SAM.ui.allowWrite()||entry.busy)return;
+    if(!registered){entry.status='awaiting_registration';showRegistration();renderImportFiles();return;}
+    entry.busy=true;entry.status='uploading';entry.error='';renderImportFiles();
+    try{
+      var fd=new FormData();fd.append('file',entry.file);
+      var res=await importRequest(HARNESS_API,{method:'POST',body:fd});
+      if(!res.job_id)throw new Error('上传响应缺少解析任务编号');
+      // An opening history read may see this job before the upload reply arrives.
+      uploadedFiles=uploadedFiles.filter(function(other){
+        if(other!==entry&&other.job&&other.job.job_id===res.job_id){stopPolling(other);return false;}
+        return true;
+      });
+      entry.job=res;entry.status='';entry.file=null;entry.pollVersion=0;
+      prependFile({n:res.original_name,s:fmtSize(res.size),d:nowMMDD(),src:'本地上传',f:false});
+      showGuidePending();scheduleJob(entry);
+    }catch(error){
+      if(error.status===409&&error.code==='company_not_registered'){
+        ++registrationVersion;registered=false;entry.status='awaiting_registration';showRegistration(error.message);
+      }else{entry.status='failed';entry.error=error.message||'上传失败';}
+    }finally{entry.busy=false;renderImportFiles();}
+  }
+  async function handleImportFiles(files){
     if(!files||!files.length||!window.SAM.ui.allowWrite())return;
-    Promise.all(Array.prototype.slice.call(files).map(uploadImportFile));importInput.value='';
+    var entries=Array.prototype.slice.call(files).map(function(file){return {name:file.name,file:file,status:'等待登记状态'};});
+    uploadedFiles=uploadedFiles.concat(entries);importInput.value='';renderImportFiles();
+    if(registered===null)await checkRegistration();
+    if(registered===null){entries.forEach(function(entry){entry.status='awaiting_registration';});renderImportFiles();return;}
+    await Promise.all(entries.map(uploadImportFile));
   }
+  registration.addEventListener('submit',async function(event){
+    event.preventDefault();
+    if(!window.SAM.ui.allowWrite()||registering)return;
+    var name=document.getElementById('importCompanyName').value.trim();
+    if(!name){showRegistration('请填写本公司全称');return;}
+    registering=true;document.getElementById('importRegister').disabled=true;
+    try{
+      await importRequest('/api/entity-roster',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({entity_name:name})});
+      ++registrationVersion;registered=true;registration.hidden=true;registrationMessage.textContent='';
+      await Promise.all(uploadedFiles.filter(function(entry){return entry.status==='awaiting_registration';}).map(uploadImportFile));
+      refreshGuide();
+    }catch(error){showRegistration(error.message);}
+    finally{registering=false;document.getElementById('importRegister').disabled=false;}
+  });
+  importFiles.addEventListener('click',async function(event){
+    var button=event.target.closest('[data-import-action]');
+    if(!button||!importFiles.contains(button))return;
+    var entry=uploadedFiles[Number(button.dataset.importIndex)],action=button.dataset.importAction;
+    if(!entry||entry.busy)return;
+    if(action==='poll'){entry.error='';await pollJob(entry);return;}
+    if(!window.SAM.ui.allowWrite())return;
+    if(!entry.job){await uploadImportFile(entry);return;}
+    entry.busy=true;stopPolling(entry);renderImportFiles();
+    try{
+      var body=await importRequest('/api/parse-jobs/'+encodeURIComponent(entry.job.job_id)+'/'+action,{method:'POST'});
+      if(!body.job)throw new Error('解析任务返回无效');
+      entry.job=body.job;entry.error='';scheduleJob(entry);
+    }catch(error){entry.error=error.message;scheduleJob(entry);}
+    finally{entry.busy=false;renderImportFiles();}
+  });
+  document.addEventListener('visibilitychange',function(){
+    uploadedFiles.forEach(function(entry){if(document.hidden)stopPolling(entry);else scheduleJob(entry);});
+  });
   document.getElementById('importWizardBtn').addEventListener('click',openImportWizard);
   document.getElementById('importNavBtn').addEventListener('click',openImportWizard);
   document.getElementById('driveUploadBtn').addEventListener('click',openImportWizard);

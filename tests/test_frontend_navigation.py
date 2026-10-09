@@ -28,7 +28,7 @@ def test_navigation_keeps_legacy_pages_and_owned_home(tmp_path: Path, monkeypatc
     html = page.get_data(as_text=True)
     assert 'class="nav-groups"' in html
     assert html.count("nav-primary") == 6
-    assert "业务概览" in html and "上传中转区" in html
+    assert "业务概览" in html and "文件柜" in html
     assert 'href="/chat"' in html
     assert 'href="/knowledge"' in html
     assert 'class="nav-primary nav-disabled"' in html
