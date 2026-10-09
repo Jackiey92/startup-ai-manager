@@ -159,7 +159,15 @@ def test_all_cloud_pages_and_read_apis(cloud_web, with_snapshot, monkeypatch):
         assert '只读' in html
         assert 'type="file"' not in html
         if not with_snapshot:
-            assert '暂无同步数据' in html
+            # The wired knowledge page has its own three-tab empty states rather
+            # than the generic cloud_page "暂无同步数据" marker.
+            if path == '/knowledge':
+                assert '暂无原始证据' in html
+                assert '暂无确认事实' in html
+            elif path == '/knowledge/sources/abc':
+                assert '尚无可读取的 L2 原文' in html
+            else:
+                assert '暂无同步数据' in html
     for path in ['/api/bizov', '/api/business-overview', '/api/dashboard',
                  '/api/dashboard/preferences', '/api/knowledge', '/api/facts', '/api/todos',
                  '/api/files/classifications', '/api/entity-roster', '/api/parse-jobs', '/api/chat/history']:

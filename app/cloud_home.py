@@ -49,6 +49,78 @@ def _matches(candidate, expected) -> bool:
                 hmac.compare_digest(candidate.encode("utf-8"), expected.encode("utf-8")))
 
 
+def _as_list(value) -> list:
+    return value if isinstance(value, list) else []
+
+
+def normalize_knowledge(raw) -> dict:
+    """Fill missing nested levels so the three-tab UI renders any old/partial snapshot.
+
+    Defensive presentation defaulting only; it neither classifies fact values nor
+    invents business data. Missing fields render as the template's empty states.
+    """
+    knowledge = object_value(raw)
+    files = []
+    for item in _as_list(object_value(knowledge.get("evidence")).get("files")):
+        file = object_value(item)
+        for level in ("l0", "l1", "l2"):
+            layer = object_value(file.get(level))
+            layer.setdefault("content", None)
+            layer["source_ref"] = object_value(layer.get("source_ref"))
+            file[level] = layer
+        file["source_ref"] = object_value(file.get("source_ref"))
+        file["warnings"] = _as_list(file.get("warnings"))
+        files.append(file)
+
+    facts = object_value(knowledge.get("facts"))
+    groups = []
+    for group in _as_list(facts.get("groups")):
+        gdata = object_value(group)
+        normalized_facts = []
+        for fact in _as_list(gdata.get("facts")):
+            fdata = object_value(fact)
+            fdata["source_ref"] = object_value(fdata.get("source_ref"))
+            normalized_facts.append(fdata)
+        gdata["facts"] = normalized_facts
+        groups.append(gdata)
+    cap = object_value(facts.get("cap_table"))
+    cap["warnings"] = _as_list(cap.get("warnings"))
+    cap["events"] = _as_list(cap.get("events"))
+    if cap.get("snapshot") is not None:
+        snapshot = object_value(cap.get("snapshot"))
+        snapshot["holders"] = object_value(snapshot.get("holders"))
+        cap["snapshot"] = snapshot
+
+    working = object_value(knowledge.get("working_memory"))
+    working["warnings"] = _as_list(working.get("warnings"))
+    items = []
+    for item in _as_list(working.get("items")):
+        idata = object_value(item)
+        runtime = object_value(idata.get("runtime"))
+        runtime["open_loops"] = _as_list(runtime.get("open_loops"))
+        notes = [object_value(note) for note in _as_list(runtime.get("working_notes"))]
+        runtime["working_notes"] = notes
+        idata["runtime"] = runtime
+        idata["events"] = _as_list(idata.get("events"))
+        items.append(idata)
+
+    return {"evidence": {"files": files},
+            "facts": {"groups": groups, "cap_table": cap},
+            "working_memory": {"items": items, "warnings": working["warnings"]}}
+
+
+def normalize_source(raw) -> dict:
+    """Ensure l2/pages exist for the L2 trace page on old/partial snapshots."""
+    source = object_value(raw)
+    l2 = object_value(source.get("l2"))
+    l2["pages"] = _as_list(l2.get("pages"))
+    l2.setdefault("mapping", None)
+    l2.setdefault("manifest_uri", None)
+    source["l2"] = l2
+    source["warnings"] = _as_list(source.get("warnings"))
+    return source
+
+
 def install_cloud_window(app, config, context_reader) -> None:
     app.config["MAX_CONTENT_LENGTH"] = MAX_BODY_BYTES
     app.extensions["sam_snapshot_store"] = SnapshotStore(config.data_root / "cloud-snapshot.db")
@@ -168,14 +240,19 @@ def install_cloud_window(app, config, context_reader) -> None:
             title = '事实库'
             sections = [('facts', context['facts'])]
         elif request.endpoint == 'knowledge_page':
-            title = '知识库'
-            sections = list(data.items())
+            # Wire the snapshot's 2A/2B/2C knowledge object to the designed
+            # three-tab frontend instead of the generic field renderer.
+            return render_template('knowledge.html', company_id=company_id,
+                                   knowledge=normalize_knowledge(data))
         elif request.endpoint in ('knowledge_source_page', 'detail'):
-            title = '原文溯源' if request.endpoint == 'knowledge_source_page' else '文件详情'
             try:
                 source = knowledge.source(company_id=company_id, file_hash=request.view_args['file_hash'])
             except KeyError:
                 source = None
+            if request.endpoint == 'knowledge_source_page':
+                return render_template('knowledge_source.html', company_id=company_id,
+                                       source=normalize_source(source))
+            title = '文件详情'
             sections = [('source', source)]
         elif request.endpoint == 'files_page':
             title = '文件柜'
