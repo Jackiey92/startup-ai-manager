@@ -15,11 +15,11 @@ import tempfile
 from pathlib import Path
 from typing import Any, Iterable
 
-from ..ports import MemoryProvider
-from ..source_map import render_mapping
-from ..memory_paths import MEMORY_ROOT
-from ..classifier.semantic_folders import classify as classify_folder
-from ..employees import SemanticEmployee
+from ...ports import MemoryProvider
+from ...storage.mapping_store import render_mapping
+from ...memory_paths import MEMORY_ROOT
+from ...classifier.semantic_folders import classify as classify_folder
+from ...employees import SemanticEmployee
 
 
 def parsed_resource_uri(parent: str, resource_name: str) -> str:

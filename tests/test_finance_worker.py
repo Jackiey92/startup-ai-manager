@@ -9,18 +9,18 @@ import pytest
 from app.db import connect, init_db
 from app.entities import EntityBridgeService, EntityRosterService
 from app.employees import EmployeeRunner, WorkerUnavailable
-from app.facts import FactExtractionService
-from app.facts.l1 import normalize_finance_text
-from app.facts.verifier import verify_candidate
+from app.memory.company_facts import L2CompleteFactService
+from app.memory.company_facts.l2_complete_facts import normalize_finance_text
+from app.memory.company_facts.l2_fact_verifier import verify_candidate
 from app.harness.staging import StagingStore
-from app.storage import SourceFileStore
+from app.storage import ArchiveFileStore
 from tests.entity_employee import FixtureEntityEmployee
 
 
 def _setup(tmp_path: Path):
     db = tmp_path / "app.db"
     init_db(db)
-    store = SourceFileStore(tmp_path / "objects", db)
+    store = ArchiveFileStore(tmp_path / "objects", db)
     stored = store.put_bytes(b"worker", original_name="年报.xlsx")
     StagingStore(db).save_manifest({
         "file_hash": stored.file_hash, "filename": "年报.xlsx", "format": "xlsx",
@@ -48,7 +48,7 @@ class _FakeEmployee:
 def test_finance_worker_receives_upstream_entity_attribution(tmp_path: Path):
     db, stored, bridge = _setup(tmp_path)
     fake = _FakeEmployee([_candidate()])
-    FactExtractionService(db).extract(
+    L2CompleteFactService(db).extract(
         company_id="acme", file_hash=stored.file_hash, bridge_run_id=bridge["id"],
         use_worker=True, worker=fake,
     )
@@ -69,9 +69,9 @@ def _candidate(metric="营业收入", value="3.26", unit="亿元", entity="主�
 def test_worker_candidate_passes_only_after_exact_provenance_verification(tmp_path: Path):
     db, stored, bridge = _setup(tmp_path)
     fake = _FakeEmployee([_candidate(), _candidate(metric="净利润", value="0.58")])
-    run = FactExtractionService(db).extract(company_id="acme", file_hash=stored.file_hash,
+    run = L2CompleteFactService(db).extract(company_id="acme", file_hash=stored.file_hash,
                                             bridge_run_id=bridge["id"], use_worker=True, worker=fake)
-    facts = FactExtractionService(db).list_facts(company_id="acme")
+    facts = L2CompleteFactService(db).list_facts(company_id="acme")
     assert run["fact_count"] == 2
     assert {(fact["attribute"], fact["value"], fact["period"]) for fact in facts} == {
         ("营业收入", "3.26", "2024"), ("净利润", "0.58", "2024")
@@ -93,7 +93,7 @@ def test_spaced_mineru_digits_are_normalized_before_worker_verification(tmp_path
         _candidate(metric="净利润", value="0.58", unit="亿元", quote="主公司有限公司2024年度营业收入3.26亿元，净利润0.58亿元，毛利率31.50%"),
         _candidate(metric="毛利率", value="31.50", unit="%", quote="主公司有限公司2024年度营业收入3.26亿元，净利润0.58亿元，毛利率31.50%"),
     ]
-    run = FactExtractionService(db).extract(
+    run = L2CompleteFactService(db).extract(
         company_id="acme", file_hash=stored.file_hash, bridge_run_id=bridge["id"],
         use_worker=True, worker=_FakeEmployee(candidates),
     )
@@ -108,11 +108,11 @@ def test_worker_human_quote_without_machine_coordinates_is_backfilled(tmp_path: 
     )
     candidate["source_page"] = 999
     candidate["source_span"] = "employee-invented-coordinate"
-    run = FactExtractionService(db).extract(
+    run = L2CompleteFactService(db).extract(
         company_id="acme", file_hash=stored.file_hash, bridge_run_id=bridge["id"],
         use_worker=True, worker=_FakeEmployee([candidate]),
     )
-    fact = FactExtractionService(db).list_facts(company_id="acme")[0]
+    fact = L2CompleteFactService(db).list_facts(company_id="acme")[0]
     assert run["fact_count"] == 1
     assert (fact["period"], fact["source_page"], fact["source_span"]) == (
         "2024年度", 1, "page=1; locator=text/0",
@@ -143,20 +143,20 @@ def test_verifier_does_not_rejudge_employee_metadata_when_quote_is_in_block():
 
 def test_verifier_rejects_quote_tampering_and_emits_unresolved(tmp_path: Path):
     db, stored, bridge = _setup(tmp_path)
-    run = FactExtractionService(db).extract(
+    run = L2CompleteFactService(db).extract(
         company_id="acme", file_hash=stored.file_hash, bridge_run_id=bridge["id"],
         use_worker=True, worker=_FakeEmployee([_candidate(quote="完全不在原文中的片段")]),
     )
     assert run["fact_count"] == 0
     assert run["unresolved"] and run["unresolved_handoff"]["count"] == 1
     assert run["unresolved"][0]["source"]["span"] == "page=1; locator=text/0"
-    assert FactExtractionService(db).list_facts(company_id="acme") == []
+    assert L2CompleteFactService(db).list_facts(company_id="acme") == []
 
 
 def test_docx_emits_unresolved_when_employee_candidates_fail_verification(tmp_path: Path):
     db = tmp_path / "app.db"
     init_db(db)
-    store = SourceFileStore(tmp_path / "objects", db)
+    store = ArchiveFileStore(tmp_path / "objects", db)
     stored = store.put_bytes(b"docx-worker", original_name="年报.docx")
     text = "主公司有限公司2024年度营业收入3.26亿元"
     StagingStore(db).save_manifest({
@@ -169,7 +169,7 @@ def test_docx_emits_unresolved_when_employee_candidates_fail_verification(tmp_pa
     EntityRosterService(db).declare(company_id="acme", entity_name="主公司有限公司")
     bridge = EntityBridgeService(db, employee=FixtureEntityEmployee()).run(company_id="acme", file_hash=stored.file_hash)
     invalid = _candidate(quote="模型臆造的引用")
-    run = FactExtractionService(db).extract(
+    run = L2CompleteFactService(db).extract(
         company_id="acme", file_hash=stored.file_hash, bridge_run_id=bridge["id"],
         use_worker=True, worker=_FakeEmployee([invalid]),
     )
@@ -190,7 +190,7 @@ def test_docx_emits_unresolved_when_employee_candidates_fail_verification(tmp_pa
 def test_worker_keeps_parent_and_subsidiary_entities_separate(tmp_path: Path):
     db, parent, parent_bridge = _setup(tmp_path)
     child_text = "主公司有限公司全资子公司常州未蓝新能源有限公司收入0.92亿元"
-    store = SourceFileStore(tmp_path / "objects", db)
+    store = ArchiveFileStore(tmp_path / "objects", db)
     child = store.put_bytes(b"child-worker", original_name="子公司.xlsx")
     StagingStore(db).save_manifest({
         "file_hash": child.file_hash, "filename": "子公司.xlsx", "format": "xlsx",
@@ -207,7 +207,7 @@ def test_worker_keeps_parent_and_subsidiary_entities_separate(tmp_path: Path):
                 return [_candidate(value="0.92", entity="常州未蓝新能源有限公司", period="unspecified", quote=child_text)]
             return [_candidate()]
 
-    service = FactExtractionService(db)
+    service = L2CompleteFactService(db)
     parent_run = service.extract(company_id="acme", file_hash=parent.file_hash,
                                  bridge_run_id=parent_bridge["id"], use_worker=True,
                                  worker=_RoutedEmployee())
@@ -374,7 +374,7 @@ def test_flask_internal_manager_entry_runs_in_process_and_rejects_external_scope
             seen.update(kwargs)
             return {"status": "completed", "fact_count": 1}
 
-    monkeypatch.setattr(webapp, "FactExtractionService", _Service)
+    monkeypatch.setattr(webapp, "L2CompleteFactService", _Service)
     client = webapp.app.test_client()
     missing = client.post(
         "/api/internal/facts/extract", json={"file_hash": "hash"},
@@ -423,7 +423,7 @@ def test_upload_worker_automatically_runs_bridge_worker_verify_and_commit(tmp_pa
             (stored.file_hash,),
         ).fetchone()["id"])
     fake = _FakeEmployee([_candidate(), _candidate(metric="净利润", value="0.58")])
-    real_service = FactExtractionService
+    real_service = L2CompleteFactService
 
     class _InProcessFactService(real_service):
         def prepare(self, **kwargs):
@@ -462,7 +462,7 @@ def test_upload_worker_automatically_runs_bridge_worker_verify_and_commit(tmp_pa
     monkeypatch.setattr(webapp, "MAIN_DB", db)
     monkeypatch.setattr(webapp, "OBJECTS_DIR", tmp_path / "objects")
     monkeypatch.setattr(webapp, "_PARSE_ADAPTER", _Adapter())
-    monkeypatch.setattr(webapp, "FactExtractionService", _InProcessFactService)
+    monkeypatch.setattr(webapp, "L2CompleteFactService", _InProcessFactService)
     monkeypatch.setattr(webapp, "classification_service", lambda: _Classification())
     monkeypatch.setattr(webapp, "semantic_employee", lambda: _EntityEmployee())
     monkeypatch.setattr(webapp, "ExtractionMemoryService", _Memory)

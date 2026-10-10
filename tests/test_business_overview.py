@@ -6,7 +6,7 @@ from app.business_overview import BusinessOverviewService, TRL_STAGE_MAP, extrac
 from app.db.database import init_db
 from app.classifier import ClassificationService
 from app.harness.staging import StagingStore
-from app.storage import SourceFileStore
+from app.storage import ArchiveFileStore
 
 
 def _manifest(*, name: str = "业务资料.xlsx", text: list[str] | None = None,
@@ -82,7 +82,7 @@ def test_business_overview_all_missing_has_no_prototype_defaults() -> None:
 def test_business_overview_service_reads_only_parsed_staging(tmp_path: Path) -> None:
     db_path = tmp_path / "app.db"
     init_db(db_path)
-    store = SourceFileStore(tmp_path / "objects", db_path)
+    store = ArchiveFileStore(tmp_path / "objects", db_path)
     stored = store.put_bytes(b"source", original_name="真实业务资料.xlsx")
     manifest = _manifest(rows=[["产品丙", "工程化", 6, "企业客户", "量产准备"]])
     manifest["file_hash"] = stored.file_hash
@@ -100,7 +100,7 @@ def test_business_overview_reads_folder_navigation_from_ov(tmp_path: Path) -> No
     memory = LocalMemoryProvider(tmp_path / "memory")
     db_path = tmp_path / "app.db"
     init_db(db_path)
-    store = SourceFileStore(tmp_path / "objects", db_path)
+    store = ArchiveFileStore(tmp_path / "objects", db_path)
     stored = store.put_bytes(b"source", original_name="技术资料.md")
     manifest = _manifest(name="技术资料.md", text=["公司定位为工业材料供应商"])
     manifest["file_hash"] = stored.file_hash

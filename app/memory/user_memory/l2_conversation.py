@@ -6,8 +6,8 @@ import json
 from typing import Any, Iterable
 import uuid
 
-from .ports import MemoryProvider, MemoryUnavailable
-from .memory_paths import MEMORY_ROOT
+from ...ports import MemoryProvider, MemoryUnavailable
+from ...memory_paths import MEMORY_ROOT
 
 CONVERSATION_ROOT = f"{MEMORY_ROOT}/conversations"
 KEEP_FIRST = 2

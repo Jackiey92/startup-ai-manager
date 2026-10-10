@@ -12,14 +12,14 @@ from urllib.parse import urlsplit, parse_qs
 import pytest
 
 from app.db.database import connect, init_db
-from app.facts import ConsolidationService
-from app.facts.cap_table import CapTableEvent, CapTableStore
-from app.facts.extractor import ExtractedFact
+from app.memory.company_facts import ConsolidationService
+from app.memory.company_facts.l2_cap_table import CapTableEvent, CapTableStore
+from app.memory.company_facts.l2_fact_extractor import ExtractedFact
 from app.harness.staging import StagingStore
-from app.memory.extraction import ExtractionMemoryService
+from app.memory.archive.archive_service import ExtractionMemoryService
 from app.ports import LocalMemoryProvider, MemoryUnavailable
-from app.runtime_memory import RuntimeWorkingMemory
-from app.storage import SourceFileStore
+from app.memory.user_memory.l1_memory_brief import RuntimeWorkingMemory
+from app.storage import ArchiveFileStore
 from tests.test_frontend_pages import _webapp_module
 
 COMPANY = "acc-knowledge"
@@ -101,7 +101,7 @@ def test_knowledge_auth_does_not_protect_overview(knowledge_env, monkeypatch):
 
 def seed_file(env, *, company=COMPANY, module="finance", content=b"acc-source"):
     _, db, objects, memory = env
-    stored = SourceFileStore(objects, db).put_bytes(content, original_name="acc-report.xlsx")
+    stored = ArchiveFileStore(objects, db).put_bytes(content, original_name="acc-report.xlsx")
     loc = {"file_hash": stored.file_hash, "page_no": 2, "locator": "Sheet1!B3"}
     manifest = {"source_id": stored.file_hash, "file_hash": stored.file_hash,
                 "filename": stored.original_name, "format": "excel",
@@ -283,7 +283,7 @@ def test_knowledge_missing_summaries_and_unclassified_facts_are_explicit(knowled
 
 def test_knowledge_catalog_includes_unparsed_jobs_without_classification(knowledge_env):
     client, db, objects, _ = knowledge_env
-    stored = SourceFileStore(objects, db).put_bytes(b"acc-pending", original_name="acc-pending.pdf")
+    stored = ArchiveFileStore(objects, db).put_bytes(b"acc-pending", original_name="acc-pending.pdf")
     with connect(db) as conn:
         conn.execute("""INSERT INTO parse_jobs
             (job_id,company_id,file_hash,original_name,file_format,harness_format,size_bytes,created_at,updated_at)
@@ -355,7 +355,7 @@ def test_knowledge_requires_host_company_scope(knowledge_env, monkeypatch):
 
 
 def test_knowledge_preserves_source_map_corrections_and_missing_coordinates(knowledge_env):
-    from app.source_map import SourceMapService
+    from app.storage.mapping_store import SourceMapService
 
     client, db, objects, _ = knowledge_env
     stored, _ = seed_file(knowledge_env)
@@ -375,7 +375,7 @@ def test_knowledge_preserves_source_map_corrections_and_missing_coordinates(know
 
 
 def test_knowledge_json_unchanged_with_persisted_mapping(knowledge_env):
-    from app.source_map import SourceMapService
+    from app.storage.mapping_store import SourceMapService
     client, db, objects, _ = knowledge_env
     stored, _ = seed_file(knowledge_env)
     service = SourceMapService(db, objects)
@@ -431,6 +431,6 @@ def test_original_download_is_scoped_authenticated_and_read_only(knowledge_env, 
     assert client.get(url, headers=basic_auth('acc-viewer', 'acc-password')).status_code == 200
     monkeypatch.delenv('SAM_VIEW_USER')
     monkeypatch.delenv('SAM_VIEW_PASS')
-    SourceFileStore(objects, db).path_for(stored.file_hash).unlink()
+    ArchiveFileStore(objects, db).path_for(stored.file_hash).unlink()
     assert client.get(url).status_code == 404
     assert snapshot(db, memory) == before

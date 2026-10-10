@@ -11,7 +11,7 @@ from typing import Optional
 
 from ..db.database import connect
 
-from .evidence_paths import DEFAULT_OBJECTS_PATH, evidence_root, hash_relpath
+from .archive_paths import DEFAULT_OBJECTS_PATH, evidence_root, hash_relpath
 
 
 def _now() -> str:
@@ -31,7 +31,7 @@ class StoredFile:
     uploaded_at: str
 
 
-class SourceFileStore:
+class ArchiveFileStore:
     def __init__(self, objects_path: Path | str | None = None, db_path=None):
         self.objects_path = Path(objects_path) if objects_path is not None else evidence_root() / "bin"
         self.objects_path.mkdir(parents=True, exist_ok=True)

@@ -6,7 +6,7 @@ import json
 import re
 from typing import Any
 
-from .conversation_store import CONVERSATION_ROOT, ConversationStore
+from .memory.user_memory.l2_conversation import CONVERSATION_ROOT, ConversationStore
 from .ports import MemoryProvider
 
 

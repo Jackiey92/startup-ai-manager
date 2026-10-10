@@ -1,6 +1,6 @@
 import pytest
 
-from app.facts import extract_facts
+from app.memory.company_facts import extract_facts
 
 
 def _manifest(*, text=None, row=None):

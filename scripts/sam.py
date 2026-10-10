@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Small 2A-only ``sam`` CLI backed by :mod:`app.source_map`.
+"""Small 2A-only ``sam`` CLI backed by :mod:`app.storage.mapping_store`.
 
 The host supplies company scope explicitly.  This CLI is intentionally a
 thin shell: it does not implement another storage path and never touches 2B.
@@ -16,9 +16,9 @@ sys.path.insert(0, str(ROOT))
 
 from app.db import init_db
 from app.entities import EntityBridgeService, EntityRosterService
-from app.facts import FactExtractionService
+from app.memory.company_facts import L2CompleteFactService
 from app.runtime_config import RuntimeConfig
-from app.source_map import SourceMapService
+from app.storage.mapping_store import SourceMapService
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -94,7 +94,7 @@ def main(argv: list[str] | None = None) -> int:
             company_id = getattr(args, "facts_company_id", None) or args.company_id
             if not company_id:
                 raise ValueError("company_id must be injected by the host")
-            facts_service = FactExtractionService(config.main_db)
+            facts_service = L2CompleteFactService(config.main_db)
             if args.facts_command == "extract":
                 if args.use_worker:
                     raise ValueError(

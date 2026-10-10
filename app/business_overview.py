@@ -15,7 +15,7 @@ from typing import Any, Iterable
 from .db.database import connect
 from .ports import MemoryProvider
 from .ov_navigation import OVNavigationService
-from .source_map import render_mapping
+from .storage.mapping_store import render_mapping
 from .classifier.semantic_folders import classify as classify_folder
 
 

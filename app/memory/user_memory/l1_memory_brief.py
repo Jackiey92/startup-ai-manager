@@ -7,8 +7,8 @@ import json
 from typing import Any, Callable, Iterable
 import uuid
 
-from .ports import MemoryProvider
-from .memory_paths import MEMORY_ROOT
+from ...ports import MemoryProvider
+from ...memory_paths import MEMORY_ROOT
 
 
 RUNTIME_ROOT = f"{MEMORY_ROOT}/2c_runtime"

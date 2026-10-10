@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from .extractor import ExtractedFact
+from .l2_fact_extractor import ExtractedFact
 
 
 def _without_whitespace(value: Any) -> str:

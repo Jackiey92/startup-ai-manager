@@ -1,7 +1,7 @@
 import json
 import pytest
 
-from app.memory.extraction import ConflictScanner, ExtractionMemoryService
+from app.memory.archive.archive_service import ConflictScanner, ExtractionMemoryService
 from app.ports import LocalMemoryProvider
 
 

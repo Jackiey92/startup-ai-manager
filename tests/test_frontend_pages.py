@@ -4,9 +4,9 @@ from pathlib import Path
 import sys
 
 from app.db.database import init_db as init_core_db
-from app.facts import ConsolidationService
+from app.memory.company_facts import ConsolidationService
 from app.ports import LocalMemoryProvider
-from app.storage import SourceFileStore
+from app.storage import ArchiveFileStore
 
 
 def _manifest(file_hash: str, *rows: tuple[str, object]) -> dict:
@@ -39,7 +39,7 @@ def test_todo_status_filters_and_file_detail_use_actual_local_columns(tmp_path: 
     """Status pages must render their selected ledger state and file detail must not 500."""
     db_path = tmp_path / "app.db"
     init_core_db(db_path)
-    store = SourceFileStore(tmp_path / "objects", db_path)
+    store = ArchiveFileStore(tmp_path / "objects", db_path)
     service = ConsolidationService(db_path)
     first = store.put_bytes(b"a", original_name="annual-a.xlsx")
     second = store.put_bytes(b"b", original_name="annual-b.xlsx")

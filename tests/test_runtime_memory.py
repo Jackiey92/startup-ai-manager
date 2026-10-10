@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from app.ports import LocalMemoryProvider
-from app.runtime_memory import RuntimeWorkingMemory
+from app.memory.user_memory.l1_memory_brief import RuntimeWorkingMemory
 
 
 def clock(value):

@@ -254,7 +254,7 @@ def test_local_snapshot_assembly_uses_scoped_existing_services(tmp_path, monkeyp
     from app.db.database import init_db
     from app.ports import LocalMemoryProvider
     from app.runtime_config import RuntimeConfig
-    from app.conversation_store import ConversationStore
+    from app.memory.user_memory.l2_conversation import ConversationStore
     from app.thread_manager import ThreadManager
     from types import SimpleNamespace
 

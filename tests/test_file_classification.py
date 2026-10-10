@@ -8,7 +8,7 @@ import pytest
 
 from app.classifier import ClassificationService, classify_content
 from app.db.database import init_db
-from app.storage import SourceFileStore
+from app.storage import ArchiveFileStore
 from app.classifier.semantic_folders import classify as classify_folder
 
 
@@ -74,7 +74,7 @@ def test_functional_dictionary_has_company_overview_first_and_parented_doc_types
 def test_company_overview_is_an_employee_choice_not_a_backend_content_rule(tmp_path: Path) -> None:
     db_path = tmp_path / "overview.db"
     init_db(db_path)
-    store = SourceFileStore(tmp_path / "objects", db_path)
+    store = ArchiveFileStore(tmp_path / "objects", db_path)
     stored = store.put_bytes(b"overview", original_name="overview.md")
 
     class _OverviewEmployee:
@@ -150,7 +150,7 @@ class _ReviewEmployee:
 def test_other_bucket_is_explicit_employee_review_signal_not_backend_fallback(tmp_path: Path) -> None:
     db_path = tmp_path / "review.db"
     init_db(db_path)
-    store = SourceFileStore(tmp_path / "objects", db_path)
+    store = ArchiveFileStore(tmp_path / "objects", db_path)
     stored = store.put_bytes(b"unclear", original_name="unknown.bin")
     service = ClassificationService(db_path, employee=_ReviewEmployee())
     row = service.classify_parsed(
@@ -174,7 +174,7 @@ def _manifest(*texts: str) -> dict:
 def ledger(tmp_path: Path):
     db_path = tmp_path / "app.db"
     init_db(db_path)
-    store = SourceFileStore(tmp_path / "objects", db_path)
+    store = ArchiveFileStore(tmp_path / "objects", db_path)
     service = ClassificationService(db_path, employee=_ClassificationEmployee())
     return store, service
 

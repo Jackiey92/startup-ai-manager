@@ -5,7 +5,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.db import init_db, connect
-from app.storage import SourceFileStore
+from app.storage import ArchiveFileStore
 from app.classifier import FileClassifier
 from app.harness import TransactionGateway, FactInput
 
@@ -20,7 +20,7 @@ def main() -> None:
     f2 = sample / "扫描件001.bin"
     f2.write_bytes(b"\x00\x01binary")
 
-    store = SourceFileStore()
+    store = ArchiveFileStore()
     stored1 = store.put_path(f1, mime_type="text/csv", uploaded_by="founder")
     stored2 = store.put_path(f2, mime_type="application/octet-stream", uploaded_by="founder")
     again = store.put_path(f1, mime_type="text/csv", uploaded_by="founder")

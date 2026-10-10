@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from ..storage.evidence_paths import evidence_root
+from ..storage.archive_paths import evidence_root
 
 from ..db.database import connect
 from .contracts import ParseResult
@@ -29,8 +29,8 @@ class StagingStore:
         self.maps_path = Path(maps_path) if maps_path is not None else root / "map"
 
     def _rebuild_map(self, conn, file_hash: str) -> None:
-        from ..source_map import persist_latest_mapping
-        from ..storage.evidence_paths import hash_relpath
+        from ..storage.mapping_store import persist_latest_mapping
+        from ..storage.archive_paths import hash_relpath
         persist_latest_mapping(conn, file_hash, self.maps_path / hash_relpath(file_hash, mapping=True))
 
     def _conn(self):

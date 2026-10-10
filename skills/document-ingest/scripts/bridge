@@ -60,7 +60,7 @@ _FORMAT_SUFFIXES = {
 def _engine_source(source: Path, fmt: str, filename: str):
     """Yield a path whose suffix agrees with the declared document format.
 
-    SourceFileStore is content-addressed and deliberately stores objects
+    ArchiveFileStore is content-addressed and deliberately stores objects
     without an extension.  Several third-party parsers use the suffix before
     inspecting the bytes, so only the engine-facing temporary copy gets a
     suffix; the original object remains untouched.

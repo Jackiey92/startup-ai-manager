@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from app.conversation_store import ConversationStore, partition_turns
+from app.memory.user_memory.l2_conversation import ConversationStore, partition_turns
 from app.context_assembler import ContextAssembler
 from app.ports import LocalMemoryProvider
 from app.thread_manager import ThreadManager

@@ -17,9 +17,9 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from .db.database import connect
-from .storage.source_store import SourceFileStore
-from .storage.evidence_paths import evidence_root, hash_relpath
+from ..db.database import connect
+from .archive_store import ArchiveFileStore
+from .archive_paths import evidence_root, hash_relpath
 
 
 def _now() -> str:
@@ -230,8 +230,8 @@ class SourceMapService:
             return render_mapping(selected, edits=edits)
 
     def read_original(self, *, file_hash: str) -> dict[str, Any]:
-        stored = SourceFileStore(objects_path=self.objects_path, db_path=self.db_path).get(file_hash)
-        data = SourceFileStore(objects_path=self.objects_path, db_path=self.db_path).get_bytes(file_hash)
+        stored = ArchiveFileStore(objects_path=self.objects_path, db_path=self.db_path).get(file_hash)
+        data = ArchiveFileStore(objects_path=self.objects_path, db_path=self.db_path).get_bytes(file_hash)
         result: dict[str, Any] = {
             "file_hash": stored.file_hash, "original_name": stored.original_name,
             "mime_type": stored.mime_type, "size_bytes": stored.size_bytes,

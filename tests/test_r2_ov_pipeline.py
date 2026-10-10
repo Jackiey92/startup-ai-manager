@@ -3,11 +3,11 @@ from pathlib import Path
 from app.classifier.semantic_folders import classify
 from app.db import connect, init_db
 from app.entities import EntityBridgeService, EntityRosterService
-from app.facts import FactExtractionService
+from app.memory.company_facts import L2CompleteFactService
 from app.harness.staging import StagingStore
-from app.memory import add_parsed_resource
+from app.memory.archive.archive_service import add_parsed_resource
 from app.ports import LocalMemoryProvider
-from app.storage import SourceFileStore
+from app.storage import ArchiveFileStore
 from tests.entity_employee import FixtureEntityEmployee
 
 
@@ -66,7 +66,7 @@ def test_r2_pipeline_imports_resource_and_verifies_finance_facts(tmp_path: Path)
     db = tmp_path / "app.db"
     init_db(db)
     objects = tmp_path / "objects"
-    stored = SourceFileStore(objects, db).put_bytes(b"%PDF-raw-finance", original_name="report.pdf")
+    stored = ArchiveFileStore(objects, db).put_bytes(b"%PDF-raw-finance", original_name="report.pdf")
     text = "主公司有限公司2024年度营业收入3.26亿元，净利润0.58亿元，研发投入0.28亿元"
     StagingStore(db).save_manifest({
         "file_hash": stored.file_hash, "filename": stored.original_name,
@@ -80,7 +80,7 @@ def test_r2_pipeline_imports_resource_and_verifies_finance_facts(tmp_path: Path)
     class EmptyEmployee:
         def run(self, **_):
             return []
-    run = FactExtractionService(db).extract(
+    run = L2CompleteFactService(db).extract(
         company_id="acme", file_hash=stored.file_hash, bridge_run_id=bridge["id"],
         use_worker=True, worker=EmptyEmployee(),
     )
@@ -97,7 +97,7 @@ def test_r2_pipeline_imports_resource_and_verifies_finance_facts(tmp_path: Path)
     parsed = tmp_path / "parsed.md"
     parsed.write_text("第1页\n\n" + text, encoding="utf-8")
     memory.add_resource(str(parsed), parent=f"viking://resources/{folder}", wait=True)
-    facts = FactExtractionService(db).list_facts(company_id="acme")
+    facts = L2CompleteFactService(db).list_facts(company_id="acme")
     with connect(db) as conn:
         critical = conn.execute("SELECT id FROM todos WHERE reason='critical_review' AND status='open'").fetchall()
     assert memory.query(prefix=f"viking://resources/{folder}")

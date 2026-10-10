@@ -10,8 +10,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable
 
-from ..db.database import connect
-from .extractor import ExtractedFact, extract_facts
+from ...db.database import connect
+from .l2_fact_extractor import ExtractedFact, extract_facts
 
 
 def _now() -> str:

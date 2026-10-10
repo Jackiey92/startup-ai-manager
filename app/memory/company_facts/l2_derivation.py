@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
-from ..ports import MemoryProvider
-from ..memory_paths import MEMORY_ROOT
-from .schema import FactRecord
+from ...ports import MemoryProvider
+from ...memory_paths import MEMORY_ROOT
+from .l2_fact_schema import FactRecord
 
 
 class FactDerivation:

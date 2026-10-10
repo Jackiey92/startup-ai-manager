@@ -9,9 +9,9 @@ import pytest
 from app.db import connect, init_db
 from app.harness.staging import StagingStore
 from app.runtime_config import RuntimeConfig
-from app.source_map import SourceMapService, render_mapping
-from app.storage import SourceFileStore
-from app.storage.evidence_paths import hash_relpath
+from app.storage.mapping_store import SourceMapService, render_mapping
+from app.storage import ArchiveFileStore
+from app.storage.archive_paths import hash_relpath
 from scripts.migrate_2a_storage import main, migrate
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,7 +29,7 @@ def evidence(tmp_path):
     db = tmp_path / "app.db"
     init_db(db)
     root = tmp_path / "2a"
-    store = SourceFileStore(root / "bin", db)
+    store = ArchiveFileStore(root / "bin", db)
     stored = store.put_bytes(b"acc-original", original_name="acc-source.pdf")
     staging = StagingStore(db, maps_path=root / "map")
     service = SourceMapService(db, root / "bin")
@@ -51,7 +51,7 @@ def test_configured_root_centrally_routes_bin_and_map(tmp_path, monkeypatch):
     monkeypatch.setenv("SAM_2A_ROOT", str(root))
     db = tmp_path / "app.db"
     init_db(db)
-    assert SourceFileStore(db_path=db).objects_path == root / "bin"
+    assert ArchiveFileStore(db_path=db).objects_path == root / "bin"
     assert SourceMapService(db).maps_path == root / "map"
     assert StagingStore(db).maps_path == root / "map"
     config = RuntimeConfig.from_env(ROOT, env={"SAM_MEMORY_ROOT_URI": "viking://acc-test/root",
@@ -83,7 +83,7 @@ def test_parse_persists_exact_markdown_and_read_prefers_disk(evidence, monkeypat
     staging.save_manifest(payload)
     path = root / "map" / stored.file_hash[:2] / f"{stored.file_hash}.md"
     assert path.read_text() == render_mapping(payload)
-    monkeypatch.setattr("app.source_map.render_mapping", lambda *_args, **_kwargs: pytest.fail("must use disk"))
+    monkeypatch.setattr("app.storage.mapping_store.render_mapping", lambda *_args, **_kwargs: pytest.fail("must use disk"))
     assert service.read_map(file_hash=stored.file_hash, company_id="acc-a") == path.read_text()
 
 
@@ -156,7 +156,7 @@ def test_map_atomic_replace_failure_keeps_previous_file_and_cleans_tmp(evidence,
     before = service.map_path(stored.file_hash).read_bytes()
     def fail(*_args):
         raise OSError("acc-replace-failure")
-    monkeypatch.setattr("app.source_map.os.replace", fail)
+    monkeypatch.setattr("app.storage.mapping_store.os.replace", fail)
     with pytest.raises(OSError, match="acc-replace-failure"):
         staging.save_manifest(manifest(stored.file_hash, "更新"))
     assert service.map_path(stored.file_hash).read_bytes() == before
@@ -178,7 +178,7 @@ def test_concurrent_uploads_are_immutable_and_deduplicated(evidence):
     db, root, _, _, _, _ = evidence
     data = b"acc-concurrent-original"
     with ThreadPoolExecutor(max_workers=4) as executor:
-        stored = list(executor.map(lambda _: SourceFileStore(root / "bin", db).put_bytes(data, original_name="acc.bin"), range(8)))
+        stored = list(executor.map(lambda _: ArchiveFileStore(root / "bin", db).put_bytes(data, original_name="acc.bin"), range(8)))
     file_hash = hashlib.sha256(data).hexdigest()
     assert all(item.file_hash == file_hash for item in stored)
     assert (root / "bin" / hash_relpath(file_hash)).read_bytes() == data
@@ -218,7 +218,7 @@ def test_migration_dry_run_apply_repeat_and_legacy_read(tmp_path, full_hash_name
     db, legacy, source, file_hash, data = legacy_fixture(tmp_path, full_hash_name=full_hash_name)
     root = tmp_path / "2a"
     before = db.read_bytes()
-    assert SourceFileStore(legacy, db).get_bytes(file_hash) == data
+    assert ArchiveFileStore(legacy, db).get_bytes(file_hash) == data
     dry = migrate(db_path=db, legacy_objects=legacy, two_a_root=root, dry_run=True)
     assert dry["originals_to_copy"] == dry["maps_to_write"] == 1
     assert not root.exists()
@@ -228,7 +228,7 @@ def test_migration_dry_run_apply_repeat_and_legacy_read(tmp_path, full_hash_name
     copied = root / "bin" / hash_relpath(file_hash)
     assert copied.read_bytes() == source.read_bytes() == data
     assert hashlib.sha256(copied.read_bytes()).hexdigest() == file_hash
-    assert SourceFileStore(root / "bin", db).get_bytes(file_hash) == data
+    assert ArchiveFileStore(root / "bin", db).get_bytes(file_hash) == data
     assert (root / "map" / hash_relpath(file_hash, mapping=True)).read_text() == render_mapping(manifest(file_hash, "新解析"))
     mtime = copied.stat().st_mtime_ns
     repeated = migrate(db_path=db, legacy_objects=legacy, two_a_root=root)
@@ -290,7 +290,7 @@ def test_correction_mapping_write_failure_does_not_apply_edit(evidence, monkeypa
     staging.save_manifest(manifest(stored.file_hash))
     def fail(*_args):
         raise OSError("acc-correction-map-failure")
-    monkeypatch.setattr("app.source_map.os.replace", fail)
+    monkeypatch.setattr("app.storage.mapping_store.os.replace", fail)
     with pytest.raises(OSError, match="acc-correction-map-failure"):
         service.replace(file_hash=stored.file_hash, company_id="acc-a",
                         target_locator="page=1; locator=p1:0-4", replacement_text="不可生效", confirm=True)

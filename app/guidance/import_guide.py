@@ -16,7 +16,7 @@ import time
 from typing import Any
 
 from app.ports import ModelUnavailable, RuntimeProvider
-from app.storage import SourceFileStore
+from app.storage import ArchiveFileStore
 from app.memory_paths import MEMORY_ROOT
 
 
@@ -51,7 +51,7 @@ class ImportGuideService:
     def __init__(
         self,
         *,
-        store: SourceFileStore,
+        store: ArchiveFileStore,
         db_path: str | os.PathLike[str] | None = None,
         env: dict[str, str] | None = None,
         runtime_provider: RuntimeProvider,

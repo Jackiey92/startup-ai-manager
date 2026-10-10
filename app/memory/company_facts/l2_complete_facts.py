@@ -12,11 +12,11 @@ import tempfile
 from pathlib import Path
 import json
 
-from ..db.database import connect
-from .consolidation import ConsolidationResult, ConsolidationService
-from .extractor import ExtractedFact, extract_block_facts, _period, period_from_text
-from .verifier import verify_candidates
-from ..employees import EmployeeRunner, WorkerUnavailable
+from ...db.database import connect
+from .l2_consolidation import ConsolidationResult, ConsolidationService
+from .l2_fact_extractor import ExtractedFact, extract_block_facts, _period, period_from_text
+from .l2_fact_verifier import verify_candidates
+from ...employees import EmployeeRunner, WorkerUnavailable
 
 
 LOGGER = logging.getLogger(__name__)
@@ -44,7 +44,7 @@ class PreparedFactExtraction:
     unresolved: tuple[dict, ...] = ()
 
 
-class FactExtractionService:
+class L2CompleteFactService:
     def __init__(self, db_path, *, authorizer=None, handoff_root=None):
         self.db_path = db_path
         self.consolidation = ConsolidationService(db_path, authorizer=authorizer)

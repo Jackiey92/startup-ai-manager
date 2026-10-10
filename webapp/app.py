@@ -19,17 +19,17 @@ BASE_DIR = Path(__file__).resolve().parent
 _PROJECT_ROOT = BASE_DIR.parent
 _sys.path.insert(0, str(_PROJECT_ROOT))
 
-from app.storage import SourceFileStore
+from app.storage import ArchiveFileStore
 from app.db.database import init_db as init_core_db
 from app.classifier import ClassificationService
 from app.classifier.semantic_folders import classify as classify_resource_folder
-from app.facts import ConsolidationService, FactExtractionService
+from app.memory.company_facts import ConsolidationService, L2CompleteFactService
 from app.entities import EntityBridgeService, EntityRosterService
 from app.guidance import GuideJobCoordinator, ImportGuideService, ModelUnavailable
 from app.harness.staging import StagingStore
-from app.memory import ExtractionMemoryService, add_parsed_resource
+from app.memory.archive.archive_service import ExtractionMemoryService, add_parsed_resource
 from app.memory_map import MapBuilder, MemoryMapTools
-from app.conversation_store import ConversationStore, deterministic_summary
+from app.memory.user_memory.l2_conversation import ConversationStore, deterministic_summary
 from app.context_assembler import ContextAssembler
 from app.thread_manager import ConversationTools
 from app.config_sync import sync_agent_config, CONFIG_FILES
@@ -37,7 +37,7 @@ from app.ports import MemoryUnavailable
 from app.providers import memory_provider, runtime_provider
 from app.runtime_config import RuntimeConfig
 from app.employees import EmployeeRunner, SemanticEmployee
-from app.runtime_memory import RuntimeWorkingMemory
+from app.memory.user_memory.l1_memory_brief import RuntimeWorkingMemory
 from app.upload_status import parse_result_status
 from app.parse_jobs import ParseJobCanceled, ParseJobManager
 from app.business_overview import BusinessOverviewService
@@ -172,7 +172,7 @@ def import_guide(*, event: str, uploaded_file_hash: str | None = None,
     """Ask the configured OpenClaw main Agent for an import guide."""
     staging = StagingStore(db_path=MAIN_DB, maps_path=OBJECTS_DIR.parent / "map")
     service = ImportGuideService(
-        store=SourceFileStore(objects_path=OBJECTS_DIR, db_path=MAIN_DB),
+        store=ArchiveFileStore(objects_path=OBJECTS_DIR, db_path=MAIN_DB),
         db_path=MAIN_DB,
         runtime_provider=runtime_provider(RUNTIME_CONFIG, staging),
         company_id=company_id or os.environ.get("SAM_COMPANY_ID", "default"),
@@ -255,7 +255,7 @@ def _parse_job_worker(job: dict, progress, cancel_event) -> None:
     staging = StagingStore(db_path=MAIN_DB, maps_path=OBJECTS_DIR.parent / "map")
     classification_id: int | None = None
     critical_started = False
-    fact_service: FactExtractionService | None = None
+    fact_service: L2CompleteFactService | None = None
     prepared_facts = None
     try:
         if not _has_declared_self(job["company_id"]):
@@ -344,14 +344,14 @@ def _parse_job_worker(job: dict, progress, cancel_event) -> None:
                 if isinstance(extraction.memory, OpenVikingMemoryProvider):
                     from app.model_provider import OpenAICompatibleProvider
                     from app.memory.visual_extraction import generate_sidecars
-                    stored = SourceFileStore(objects_path=OBJECTS_DIR, db_path=MAIN_DB).get(job["file_hash"])
+                    stored = ArchiveFileStore(objects_path=OBJECTS_DIR, db_path=MAIN_DB).get(job["file_hash"])
                     generate_sidecars(
                         extraction.memory,
                         OpenAICompatibleProvider(config=RUNTIME_CONFIG.for_extraction()),
                         payload, abstract_uri=extraction_record.abstract_uri,
                         overview_uri=extraction_record.overview_uri,
                         l2_manifest_uri=extraction_record.l2_manifest_uri,
-                        source_path=SourceFileStore(objects_path=OBJECTS_DIR, db_path=MAIN_DB).path_for(job["file_hash"]),
+                        source_path=ArchiveFileStore(objects_path=OBJECTS_DIR, db_path=MAIN_DB).path_for(job["file_hash"]),
                     )
                 # Persist exact routes only; SAM L0/L1 bodies remain in 2a.
                 staging.update_payload(staging_id, {
@@ -382,7 +382,7 @@ def _parse_job_worker(job: dict, progress, cancel_event) -> None:
             company_id=job["company_id"], file_hash=job["file_hash"],
             thread_id=f"parse-job:{job['job_id']}",
         )
-        fact_service = FactExtractionService(MAIN_DB)
+        fact_service = L2CompleteFactService(MAIN_DB)
         budget(600)
         prepared_facts = fact_service.prepare(
             company_id=job["company_id"], file_hash=job["file_hash"],
@@ -655,7 +655,7 @@ def knowledge_original(file_hash: str):
                    if row["file_hash"] == file_hash), None)
     if stored is None:
         abort(404)
-    store = SourceFileStore(OBJECTS_DIR, MAIN_DB)
+    store = ArchiveFileStore(OBJECTS_DIR, MAIN_DB)
     path = store.path_for(file_hash)
     if not path.is_file():
         abort(404)
@@ -749,7 +749,7 @@ def api_chat():
     session_id = str(payload.get("session_id") or ("session-" + uuid.uuid4().hex))
     company_id = str(payload.get("company_id") or os.environ.get("SAM_COMPANY_ID", "default"))
     memory = app.extensions["sam_memory_provider"]
-    source_store = SourceFileStore(objects_path=OBJECTS_DIR, db_path=MAIN_DB)
+    source_store = ArchiveFileStore(objects_path=OBJECTS_DIR, db_path=MAIN_DB)
     thread_id = str(payload.get("thread_id") or session_id)
     map_result = MapBuilder(memory).load_or_rebuild(company_id)
     map_data = map_result.map
@@ -847,7 +847,7 @@ def api_upload():
             "message": "暂不支持该文件格式；请上传 PDF、Excel、PPT 或 Word 文件。",
         }, 400
     blob = upload.read()
-    store = SourceFileStore(objects_path=OBJECTS_DIR, db_path=MAIN_DB)
+    store = ArchiveFileStore(objects_path=OBJECTS_DIR, db_path=MAIN_DB)
     stored = store.put_bytes(
         blob,
         original_name=upload.filename,
@@ -971,7 +971,7 @@ def api_internal_facts_extract():
                 thread_id=thread_id,
             )
             bridge_run_id = int(bridge_run["id"])
-        result = FactExtractionService(MAIN_DB).extract(
+        result = L2CompleteFactService(MAIN_DB).extract(
             company_id=_company_id(), file_hash=file_hash, bridge_run_id=bridge_run_id,
             use_worker=True, thread_id=thread_id,
         )
@@ -1119,7 +1119,7 @@ def api_import_guide_status():
 @app.route("/files/<file_hash>")
 def detail(file_hash: str):
     """Render canonical source-file metadata plus its current 2A/2B references."""
-    store = SourceFileStore(objects_path=OBJECTS_DIR, db_path=MAIN_DB)
+    store = ArchiveFileStore(objects_path=OBJECTS_DIR, db_path=MAIN_DB)
     try:
         stored = store.get(file_hash)
     except KeyError:

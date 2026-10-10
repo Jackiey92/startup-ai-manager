@@ -8,7 +8,7 @@ import pytest
 from app.db import connect, init_db
 from app.entities.roster import EntityRosterService
 from app.harness.staging import StagingStore
-from app.storage import SourceFileStore
+from app.storage import ArchiveFileStore
 
 
 def _manifest(file_hash: str, *, prose: bool = False) -> dict:
@@ -30,7 +30,7 @@ def _manifest(file_hash: str, *, prose: bool = False) -> dict:
 def _service(tmp_path: Path):
     db, objects = tmp_path / "app.db", tmp_path / "objects"
     init_db(db)
-    store = SourceFileStore(objects, db)
+    store = ArchiveFileStore(objects, db)
     stored = store.put_bytes(b"registration", original_name="注册信息.xlsx")
     StagingStore(db).save_manifest(_manifest(stored.file_hash))
     return EntityRosterService(db), stored, db

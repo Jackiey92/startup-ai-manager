@@ -2,12 +2,12 @@ from pathlib import Path
 
 from app.db import connect, init_db
 from app.entities import EntityBridgeService, EntityRosterService
-from app.facts import FactExtractionService
+from app.memory.company_facts import L2CompleteFactService
 from app.harness.staging import StagingStore
-from app.memory import add_parsed_resource
+from app.memory.archive.archive_service import add_parsed_resource
 from app.classifier.semantic_folders import classify
 from app.ports import LocalMemoryProvider
-from app.storage import SourceFileStore
+from app.storage import ArchiveFileStore
 from tests.entity_employee import FixtureEntityEmployee
 
 
@@ -50,13 +50,13 @@ def test_declared_company_api_and_narrative_parent_child_facts(tmp_path: Path, m
     assert response.get_json()["entity"]["origin"] == "declared"
     assert response.get_json()["entity"]["entity_type"] == "self"
 
-    stored = SourceFileStore(tmp_path / "objects", db).put_bytes(b"pdf", original_name="财务.pdf")
+    stored = ArchiveFileStore(tmp_path / "objects", db).put_bytes(b"pdf", original_name="财务.pdf")
     StagingStore(db).save_manifest(_narrative_manifest(stored.file_hash))
     bridge = EntityBridgeService(db, employee=FixtureEntityEmployee()).run(company_id="acme", file_hash=stored.file_hash)
-    result = FactExtractionService(db).extract(
+    result = L2CompleteFactService(db).extract(
         company_id="acme", file_hash=stored.file_hash, bridge_run_id=bridge["id"],
     )
-    facts = FactExtractionService(db).list_facts(company_id="acme")
+    facts = L2CompleteFactService(db).list_facts(company_id="acme")
     by_entity_metric = {(row["entity"], row["attribute"]): row["value"] for row in facts}
     assert result["fact_count"] >= 6
     assert by_entity_metric[("主公司有限公司", "营业收入")] == "3.26"
@@ -65,7 +65,7 @@ def test_declared_company_api_and_narrative_parent_child_facts(tmp_path: Path, m
     assert by_entity_metric[("常州未蓝新能源有限公司", "营业收入")] == "0.92"
     assert by_entity_metric[("常州未蓝新能源有限公司", "净利润")] == "0.07"
     assert by_entity_metric[("常州未蓝新能源有限公司", "总资产")] == "1.35"
-    assert FactExtractionService(db).list_todos(company_id="acme") == []
+    assert L2CompleteFactService(db).list_todos(company_id="acme") == []
 
 
 def test_upload_rejects_unregistered_company_with_actionable_message(tmp_path: Path, monkeypatch):

@@ -5,7 +5,7 @@ import json
 import os
 from typing import Any
 
-from .conversation_store import ConversationStore, partition_turns
+from .memory.user_memory.l2_conversation import ConversationStore, partition_turns
 from .memory_map import MapBuilder
 from .thread_manager import ThreadManager
 

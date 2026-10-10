@@ -17,7 +17,7 @@ from .memory_map import MapBuilder, MemoryMapTools
 from .ports import MemoryUnavailable
 from .providers import memory_provider
 from .runtime_config import RuntimeConfig
-from .storage.source_store import SourceFileStore
+from .storage.archive_store import ArchiveFileStore
 from .thread_manager import ConversationTools
 
 
@@ -170,7 +170,7 @@ def serve(bridge: ToolBridge, stdin: TextIO = sys.stdin, stdout: TextIO = sys.st
 def from_environment() -> ToolBridge:
     config = RuntimeConfig.from_env()
     memory = memory_provider(config)
-    files = SourceFileStore(objects_path=config.objects_dir, db_path=config.main_db)
+    files = ArchiveFileStore(objects_path=config.objects_dir, db_path=config.main_db)
     company = os.environ.get("SAM_COMPANY_ID", "default")
     thread = os.environ.get("SAM_THREAD_ID")
     if not thread:

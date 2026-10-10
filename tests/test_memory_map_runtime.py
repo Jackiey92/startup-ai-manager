@@ -6,7 +6,7 @@ from pathlib import Path
 from app.harness.runtime.openclaw_adapter import OpenClawAdapter
 from app.harness.staging import StagingStore
 from app.db.database import init_db
-from app.storage import SourceFileStore
+from app.storage import ArchiveFileStore
 from app.runtime_config import RuntimeConfig
 
 
@@ -322,7 +322,7 @@ def test_document_ingest_is_delegated_to_skill_agent(tmp_path: Path):
     db_path = tmp_path / "app.db"
     objects = tmp_path / "objects"
     init_db(db_path)
-    stored = SourceFileStore(objects_path=objects, db_path=db_path).put_bytes(
+    stored = ArchiveFileStore(objects_path=objects, db_path=db_path).put_bytes(
         b"xlsx", original_name="report.xlsx"
     )
     payload = {

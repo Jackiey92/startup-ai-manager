@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from app.facts import CapTableEvent, CapTableStore, FactDerivation, replay_cap_table
+from app.memory.company_facts import CapTableEvent, CapTableStore, FactDerivation, replay_cap_table
 from app.ports import LocalMemoryProvider
 
 

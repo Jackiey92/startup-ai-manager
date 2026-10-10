@@ -182,8 +182,8 @@ class OpenClawAdapter(RuntimeProvider):
         inbox = self.root / "inbox"
         inbox.mkdir(parents=True, exist_ok=True)
         task_path = inbox / f"{file_hash}.json"
-        from app.storage import SourceFileStore
-        store = SourceFileStore(objects_path=self.objects_dir, db_path=self.db_path)
+        from app.storage import ArchiveFileStore
+        store = ArchiveFileStore(objects_path=self.objects_dir, db_path=self.db_path)
         stored = store.get(file_hash)
         task_path.write_text(
             json.dumps(

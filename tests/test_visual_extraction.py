@@ -7,7 +7,7 @@ import pytest
 from app.model_provider import OpenAICompatibleProvider
 from app.runtime_config import RuntimeConfig
 from app.ports import LocalMemoryProvider, ModelUnavailable
-from app.memory.extraction import ExtractionMemoryService
+from app.memory.archive.archive_service import ExtractionMemoryService
 from app.memory.visual_extraction import generate_sidecars, page_images
 
 

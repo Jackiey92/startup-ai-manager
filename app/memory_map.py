@@ -15,7 +15,7 @@ from typing import Any, Callable
 
 from .ports import MemoryProvider, MemoryUnavailable
 from .memory_paths import MEMORY_ROOT
-from .storage.source_store import SourceFileStore
+from .storage.archive_store import ArchiveFileStore
 
 ROOT = MEMORY_ROOT
 MAP_ROOT = ROOT + "/memory_maps"
@@ -299,7 +299,7 @@ class MapBuilder:
 class MemoryMapTools:
     """Tool-shaped facade with strict company or trusted global-read boundaries."""
 
-    def __init__(self, memory: MemoryProvider, files: SourceFileStore, company_id: str, *, source_ids: tuple[str, ...] = (), global_read_only: bool = False, source_catalog: tuple[tuple[str, str], ...] = ()):
+    def __init__(self, memory: MemoryProvider, files: ArchiveFileStore, company_id: str, *, source_ids: tuple[str, ...] = (), global_read_only: bool = False, source_catalog: tuple[tuple[str, str], ...] = ()):
         self.memory, self.files, self.company_id = memory, files, _safe(company_id)
         self.global_read_only = bool(global_read_only)
         self.source_catalog = tuple(source_catalog)

@@ -4,8 +4,8 @@ from pathlib import Path
 import pytest
 
 from app.db.database import init_db
-from app.facts import ConsolidationService, extract_facts
-from app.storage import SourceFileStore
+from app.memory.company_facts import ConsolidationService, extract_facts
+from app.storage import ArchiveFileStore
 
 
 def _manifest(file_hash: str, *rows: tuple[str, object]) -> dict:
@@ -28,11 +28,11 @@ def _manifest(file_hash: str, *rows: tuple[str, object]) -> dict:
 def pipeline(tmp_path: Path):
     db_path = tmp_path / "app.db"
     init_db(db_path)
-    store = SourceFileStore(tmp_path / "objects", db_path)
+    store = ArchiveFileStore(tmp_path / "objects", db_path)
     return store, ConsolidationService(db_path), db_path
 
 
-def _stored_manifest(store: SourceFileStore, name: str, payload: bytes, *rows: tuple[str, object]):
+def _stored_manifest(store: ArchiveFileStore, name: str, payload: bytes, *rows: tuple[str, object]):
     stored = store.put_bytes(payload, original_name=name)
     return stored, _manifest(stored.file_hash, *rows)
 

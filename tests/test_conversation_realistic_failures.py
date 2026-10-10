@@ -1,6 +1,6 @@
 import json
 
-from app.conversation_store import ConversationStore
+from app.memory.user_memory.l2_conversation import ConversationStore
 from app.ports import LocalMemoryProvider, MemoryUnavailable, OpenVikingMemoryProvider
 
 

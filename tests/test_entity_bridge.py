@@ -9,8 +9,8 @@ from app.db import connect, init_db
 from app.entities.bridge import EntityBridgeService
 from app.entities.roster import EntityRosterService
 from app.harness.staging import StagingStore
-from app.storage import SourceFileStore
-from app.facts import FactExtractionService
+from app.storage import ArchiveFileStore
+from app.memory.company_facts import L2CompleteFactService
 from tests.entity_employee import FixtureEntityEmployee
 
 
@@ -44,7 +44,7 @@ def _manifest(file_hash: str) -> dict:
 def _setup(tmp_path: Path):
     db = tmp_path / "app.db"
     init_db(db)
-    stored = SourceFileStore(tmp_path / "objects", db).put_bytes(
+    stored = ArchiveFileStore(tmp_path / "objects", db).put_bytes(
         b"bridge", original_name="材料.xlsx"
     )
     StagingStore(db).save_manifest(_manifest(stored.file_hash))
@@ -122,7 +122,7 @@ def test_concurrent_attribution_and_fact_writes_commit_parent_before_children(tm
             }
 
     def process(index: int):
-        stored = SourceFileStore(tmp_path / "objects", db).put_bytes(
+        stored = ArchiveFileStore(tmp_path / "objects", db).put_bytes(
             f"concurrent-{index}".encode(), original_name=f"{index}.pdf"
         )
         StagingStore(db).save_manifest({
@@ -135,7 +135,7 @@ def test_concurrent_attribution_and_fact_writes_commit_parent_before_children(tm
         bridge = EntityBridgeService(db, employee=Employee()).run(
             company_id="host", file_hash=stored.file_hash,
         )
-        result = FactExtractionService(db).extract(
+        result = L2CompleteFactService(db).extract(
             company_id="host", file_hash=stored.file_hash,
             bridge_run_id=int(bridge["id"]),
         )
@@ -166,7 +166,7 @@ def test_concurrent_attribution_and_fact_writes_commit_parent_before_children(tm
 def test_bullet_subject_inheritance_preserves_parent_child_and_stops_at_heading(tmp_path: Path):
     db = tmp_path / "context.db"
     init_db(db)
-    stored = SourceFileStore(tmp_path / "objects", db).put_bytes(b"narrative", original_name="财务.pdf")
+    stored = ArchiveFileStore(tmp_path / "objects", db).put_bytes(b"narrative", original_name="财务.pdf")
     items = [
         {"text": "主公司有限公司2024年合并口径：", "source_loc": {"file_hash": stored.file_hash, "page_no": 1, "bbox": [0.091, 0.1, 0.8, 0.12], "locator": "mineru:page/1/block/0"}},
         {"text": "• 2024年营业收入3.26亿元", "source_loc": {"file_hash": stored.file_hash, "page_no": 1, "bbox": [0.126, 0.13, 0.8, 0.15], "locator": "mineru:page/1/block/1"}},
@@ -204,17 +204,17 @@ def test_bullet_subject_inheritance_preserves_parent_child_and_stops_at_heading(
     )
     assert stopped["classification"] == "ambiguous"
 
-    result = FactExtractionService(db).extract(
+    result = L2CompleteFactService(db).extract(
         company_id="acme", file_hash=stored.file_hash, bridge_run_id=bridge["id"],
     )
-    facts = FactExtractionService(db).list_facts(company_id="acme")
+    facts = L2CompleteFactService(db).list_facts(company_id="acme")
     values = {(row["entity"], row["attribute"]): row["value"] for row in facts}
     assert result["fact_count"] == 9
     assert values[("主公司有限公司", "营业收入")] == "3.26"
     assert values[("主公司有限公司", "毛利率")] == "31.50"
     assert values[("常州未蓝新能源有限公司", "营业收入")] == "0.92"
     assert values[("常州未蓝新能源有限公司", "总资产")] == "1.35"
-    assert FactExtractionService(db).list_todos(company_id="acme") == []
+    assert L2CompleteFactService(db).list_todos(company_id="acme") == []
 
 
 class _FakeModel:
@@ -288,7 +288,7 @@ def test_real_manifest_body_items_are_preserved_and_sent_to_employee(tmp_path: P
     """The bridge transports every MinerU text item, not just a heading."""
     db = tmp_path / "body.db"
     init_db(db)
-    stored = SourceFileStore(tmp_path / "objects", db).put_bytes(b"body", original_name="报表A.pdf")
+    stored = ArchiveFileStore(tmp_path / "objects", db).put_bytes(b"body", original_name="报表A.pdf")
     StagingStore(db).save_manifest({
         "file_hash": stored.file_hash,
         "filename": stored.original_name,

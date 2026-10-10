@@ -1,3 +1,3 @@
-from .source_store import SourceFileStore, StoredFile
+from .archive_store import ArchiveFileStore, StoredFile
 
-__all__ = ["SourceFileStore", "StoredFile"]
+__all__ = ["ArchiveFileStore", "StoredFile"]

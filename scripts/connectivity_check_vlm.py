@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.runtime_config import RuntimeConfig
 from app.model_provider import OpenAICompatibleProvider
 from app.ports import OpenVikingMemoryProvider
-from app.memory.extraction import ExtractionMemoryService
+from app.memory.archive.archive_service import ExtractionMemoryService
 from app.memory.visual_extraction import generate_sidecars
 from connectivity_check_local import _delete_with_retry
 

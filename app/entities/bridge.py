@@ -18,7 +18,7 @@ from typing import Any
 from uuid import uuid4
 
 from ..db.database import connect
-from ..source_map import _coord
+from ..storage.mapping_store import _coord
 from ..employees import SemanticDecisionUnavailable, SemanticEmployee
 from .model_client import EntityAttributionModelClient
 

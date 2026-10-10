@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .storage.evidence_paths import DEFAULT_2A_ROOT
+from .storage.archive_paths import DEFAULT_2A_ROOT
 
 
 def _scalar(value: str) -> Any:

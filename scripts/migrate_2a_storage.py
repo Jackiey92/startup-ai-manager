@@ -19,8 +19,8 @@ import tempfile
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from app.source_map import render_mapping, write_mapping
-from app.storage.evidence_paths import evidence_root, hash_relpath
+from app.storage.mapping_store import render_mapping, write_mapping
+from app.storage.archive_paths import evidence_root, hash_relpath
 
 
 def sha256(path: Path) -> str:

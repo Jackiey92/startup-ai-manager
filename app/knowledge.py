@@ -9,12 +9,12 @@ from urllib.parse import urlencode, quote
 
 from .classifier import ClassificationService
 from .db.database import connect
-from .facts import ConsolidationService
-from .facts.cap_table import CapTableStore, replay_cap_table
-from .memory.extraction import ExtractionMemoryService
+from .memory.company_facts import ConsolidationService
+from .memory.company_facts.l2_cap_table import CapTableStore, replay_cap_table
+from .memory.archive.archive_service import ExtractionMemoryService
 from .ports import MemoryUnavailable
-from .runtime_memory import RuntimeWorkingMemory
-from .source_map import SourceMapService, render_mapping
+from .memory.user_memory.l1_memory_brief import RuntimeWorkingMemory
+from .storage.mapping_store import SourceMapService, render_mapping
 
 
 class KnowledgeService:

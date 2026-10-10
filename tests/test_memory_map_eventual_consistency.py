@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from app.memory.extraction import ExtractionMemoryService
+from app.memory.archive.archive_service import ExtractionMemoryService
 from app.memory_map import MapBuilder
 from app.ports import LocalMemoryProvider
 

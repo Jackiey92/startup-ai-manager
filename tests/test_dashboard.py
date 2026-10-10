@@ -4,9 +4,9 @@ from pathlib import Path
 
 from app.classifier import ClassificationService
 from app.db.database import init_db
-from app.facts import ConsolidationService
+from app.memory.company_facts import ConsolidationService
 from app.harness.staging import StagingStore
-from app.storage import SourceFileStore
+from app.storage import ArchiveFileStore
 
 
 def _manifest(file_hash: str) -> dict:
@@ -34,7 +34,7 @@ def _webapp_module():
 def test_dashboard_cards_are_data_driven_and_company_scoped(tmp_path: Path, monkeypatch) -> None:
     db_path = tmp_path / "app.db"
     init_db(db_path)
-    source = SourceFileStore(tmp_path / "objects", db_path)
+    source = ArchiveFileStore(tmp_path / "objects", db_path)
     stored = source.put_bytes(b"business", original_name="业务介绍.xlsx")
     manifest = _manifest(stored.file_hash)
     ClassificationService(db_path).classify_parsed(

@@ -7,8 +7,8 @@ import json
 from typing import Any, Iterable
 import uuid
 
-from ..ports import MemoryProvider
-from ..memory_paths import MEMORY_ROOT
+from ...ports import MemoryProvider
+from ...memory_paths import MEMORY_ROOT
 
 
 EVENT_TYPES = {

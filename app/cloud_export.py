@@ -6,11 +6,11 @@ import time
 from .business_overview import BusinessOverviewService
 from .classifier import ClassificationService
 from .cloud_snapshot import SNAPSHOT_VERSION
-from .conversation_store import ConversationStore
+from .memory.user_memory.l2_conversation import ConversationStore
 from .dashboard import DashboardPreferenceStore, assemble_dashboard
 from .db.database import connect
 from .entities import EntityRosterService
-from .facts import ConsolidationService
+from .memory.company_facts import ConsolidationService
 from .knowledge import KnowledgeService
 from .providers import memory_provider
 from .runtime_config import RuntimeConfig

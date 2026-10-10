@@ -7,8 +7,8 @@ import pytest
 
 from app.db import connect, init_db
 from app.harness.staging import StagingStore
-from app.source_map import SourceMapService
-from app.storage import SourceFileStore
+from app.storage.mapping_store import SourceMapService
+from app.storage import ArchiveFileStore
 
 
 def _manifest(file_hash: str) -> dict:
@@ -27,7 +27,7 @@ def _service(tmp_path: Path):
     db = tmp_path / "app.db"
     objects = tmp_path / "objects"
     init_db(db)
-    store = SourceFileStore(objects, db)
+    store = ArchiveFileStore(objects, db)
     data = b"immutable original"
     stored = store.put_bytes(data, original_name="报告.pdf", mime_type="application/pdf")
     StagingStore(db).save_manifest(_manifest(stored.file_hash))
@@ -53,7 +53,7 @@ def test_replace_requires_confirm_and_is_append_only(tmp_path: Path):
                          target_locator="page=2; locator=p2:0-4", replacement_text="修订", confirm=True)
     assert row["status"] == "active"
     assert "修订" in service.read_map(file_hash=stored.file_hash, company_id="acme")
-    assert SourceFileStore(service.objects_path, db).get_bytes(stored.file_hash) == original
+    assert ArchiveFileStore(service.objects_path, db).get_bytes(stored.file_hash) == original
     with connect(db) as conn:
         assert conn.execute("SELECT COUNT(*) FROM source_edits").fetchone()[0] == 1
 
