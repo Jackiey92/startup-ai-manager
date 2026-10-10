@@ -1,0 +1,1 @@
+import{t as e}from"./browser-panel-C79pVRyV.js";e();

@@ -372,3 +372,21 @@ def test_knowledge_preserves_source_map_corrections_and_missing_coordinates(know
     assert ref["page"] is None and ref["locator"] is None
     assert "原文定位字段未提供" in client.get("/knowledge").get_data(as_text=True)
     assert client.get(ref["url"]).status_code == 200
+
+
+def test_knowledge_json_unchanged_with_persisted_mapping(knowledge_env):
+    from app.source_map import SourceMapService
+    client, db, objects, _ = knowledge_env
+    stored, _ = seed_file(knowledge_env)
+    service = SourceMapService(db, objects)
+    path = service.map_path(stored.file_hash)
+    assert not path.exists()
+    before = client.get("/api/knowledge").get_json()
+    service.rebuild_map(file_hash=stored.file_hash)
+    assert client.get("/api/knowledge").get_json() == before
+    assert set(before["evidence"]["files"][0]) >= {"l0", "l1", "l2"}
+    service.replace(file_hash=stored.file_hash, company_id=COMPANY,
+                    target_locator="page=2; locator=Sheet1!B3", replacement_text="acc 修订", confirm=True)
+    corrected = client.get("/api/knowledge").get_json()
+    path.unlink()
+    assert client.get("/api/knowledge").get_json() == corrected

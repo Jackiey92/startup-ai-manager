@@ -48,7 +48,7 @@ def test_local_profile_injects_paths_skills_and_local_sam_ov() -> None:
     config = RuntimeConfig.from_env(project_root=ROOT, env={"SAM_MEMORY_ROOT_URI": "viking://sam-test/product-root", "SAM_PROFILE": "local"})
     assert config.project_root == ROOT
     assert config.harness_root == ROOT / "harness-openclaw"
-    assert config.objects_dir == ROOT / "data" / "objects"
+    assert config.objects_dir == ROOT / "data" / "2a" / "bin"
     assert config.main_db == ROOT / "data" / "app.db"
     assert config.skill_for_format["pdf"] == "document-ingest"
     # Local development now exercises the local SAM OpenViking endpoint; the

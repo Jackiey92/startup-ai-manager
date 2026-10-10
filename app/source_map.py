@@ -12,11 +12,14 @@ from datetime import datetime, timezone
 import base64
 import hashlib
 import json
+import os
+import tempfile
 from pathlib import Path
 from typing import Any
 
 from .db.database import connect
 from .storage.source_store import SourceFileStore
+from .storage.evidence_paths import evidence_root, hash_relpath
 
 
 def _now() -> str:
@@ -127,12 +130,44 @@ def render_mapping(manifest: dict[str, Any], *, edits: list[dict[str, Any]] | No
     return "\n".join(lines) + "\n"
 
 
+def write_mapping(path: Path, mapping: str) -> None:
+    """Atomically replace a rebuildable projection using a unique sibling tmp."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", newline="",
+                                         dir=path.parent, prefix=".mapping-", suffix=".tmp",
+                                         delete=False) as stream:
+            tmp_path = Path(stream.name)
+            stream.write(mapping)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(tmp_path, path)
+    finally:
+        if tmp_path is not None:
+            tmp_path.unlink(missing_ok=True)
+
+
+def persist_latest_mapping(conn, file_hash: str, path: Path) -> str:
+    """Caller holds the SQLite writer lock while replacing its projection."""
+    row = conn.execute(
+        "SELECT payload FROM parse_staging WHERE file_hash=? AND status='parsed' ORDER BY id DESC LIMIT 1",
+        (file_hash,),
+    ).fetchone()
+    if row is None:
+        raise KeyError(f"parsed mapping not found: {file_hash}")
+    mapping = render_mapping(json.loads(row["payload"]))
+    write_mapping(path, mapping)
+    return mapping
+
+
 class SourceMapService:
     """Read mappings and append controlled replace/remove corrections."""
 
-    def __init__(self, db_path, objects_path: Path | str = Path("data/objects")):
+    def __init__(self, db_path, objects_path: Path | str | None = None, *, maps_path=None):
         self.db_path = db_path
-        self.objects_path = Path(objects_path)
+        self.objects_path = Path(objects_path) if objects_path is not None else evidence_root() / "bin"
+        self.maps_path = Path(maps_path) if maps_path is not None else self.objects_path.parent / "map"
 
     def _manifest(self, file_hash: str) -> dict[str, Any]:
         with connect(self.db_path) as conn:
@@ -156,8 +191,43 @@ class SourceMapService:
         """Read the latest parsed L2; callers must enforce their company catalog."""
         return self._manifest(file_hash)
 
-    def read_map(self, *, file_hash: str, company_id: str) -> str:
-        return render_mapping(self._manifest(file_hash), edits=self.list_edits(file_hash=file_hash, company_id=company_id))
+    def map_path(self, file_hash: str) -> Path:
+        return self.maps_path / hash_relpath(file_hash, mapping=True)
+
+    def rebuild_map(self, *, file_hash: str) -> str:
+        """Persist the shared source projection, never company-private edits.
+
+        Serialize with staging writers so concurrent parses cannot replace the
+        newest projection with an older manifest. Reads never rebuild files.
+        """
+        with connect(self.db_path) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            return persist_latest_mapping(conn, file_hash, self.map_path(file_hash))
+
+    def read_map(self, *, file_hash: str, company_id: str, manifest=None) -> str:
+        # Synchronize the DB snapshot and file read with staging writers. This
+        # transaction changes no rows; it only guards a projection replacement.
+        with connect(self.db_path) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT payload FROM parse_staging WHERE file_hash=? AND status='parsed' ORDER BY id DESC LIMIT 1",
+                (file_hash,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"parsed mapping not found: {file_hash}")
+            local = json.loads(row["payload"])
+            edits = [dict(edit) for edit in conn.execute(
+                "SELECT * FROM source_edits WHERE file_hash=? AND company_id=? ORDER BY id ASC",
+                (file_hash, company_id),
+            )]
+            selected = local if manifest is None else manifest
+            # Preserve remote-manifest preference and company correction scope.
+            if selected == local and not any(edit["status"] == "active" for edit in edits):
+                try:
+                    return self.map_path(file_hash).read_text(encoding="utf-8")
+                except (FileNotFoundError, UnicodeDecodeError):
+                    pass
+            return render_mapping(selected, edits=edits)
 
     def read_original(self, *, file_hash: str) -> dict[str, Any]:
         stored = SourceFileStore(objects_path=self.objects_path, db_path=self.db_path).get(file_hash)
@@ -183,6 +253,7 @@ class SourceMapService:
             raise ValueError("unsupported correction operation")
         self._manifest(file_hash)  # verify a parsed mapping exists before writing
         with connect(self.db_path) as conn:
+            conn.execute("BEGIN IMMEDIATE")
             current = conn.execute(
                 "SELECT * FROM source_edits WHERE file_hash=? AND company_id=? AND target_locator=? AND status='active' ORDER BY id DESC LIMIT 1",
                 (file_hash, company_id, target_locator),
@@ -194,6 +265,7 @@ class SourceMapService:
                 (file_hash, company_id, operation, target_locator, replacement_text,
                  current["id"] if current is not None else None, _now()),
             )
+            persist_latest_mapping(conn, file_hash, self.map_path(file_hash))
             conn.commit()
             row = conn.execute("SELECT * FROM source_edits WHERE id=?", (cur.lastrowid,)).fetchone()
         return dict(row)

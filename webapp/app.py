@@ -169,7 +169,7 @@ def detect_format(filename: str) -> str:
 def import_guide(*, event: str, uploaded_file_hash: str | None = None,
                  company_id: str | None = None) -> dict:
     """Ask the configured OpenClaw main Agent for an import guide."""
-    staging = StagingStore(db_path=MAIN_DB)
+    staging = StagingStore(db_path=MAIN_DB, maps_path=OBJECTS_DIR.parent / "map")
     service = ImportGuideService(
         store=SourceFileStore(objects_path=OBJECTS_DIR, db_path=MAIN_DB),
         db_path=MAIN_DB,
@@ -251,7 +251,7 @@ def _parse_job_worker(job: dict, progress, cancel_event) -> None:
 
     progress(stage="starting_engine", message="正在准备本地解析引擎")
     check_cancel()
-    staging = StagingStore(db_path=MAIN_DB)
+    staging = StagingStore(db_path=MAIN_DB, maps_path=OBJECTS_DIR.parent / "map")
     classification_id: int | None = None
     critical_started = False
     fact_service: FactExtractionService | None = None
@@ -350,7 +350,7 @@ def _parse_job_worker(job: dict, progress, cancel_event) -> None:
                         payload, abstract_uri=extraction_record.abstract_uri,
                         overview_uri=extraction_record.overview_uri,
                         l2_manifest_uri=extraction_record.l2_manifest_uri,
-                        source_path=OBJECTS_DIR / stored.storage_path,
+                        source_path=SourceFileStore(objects_path=OBJECTS_DIR, db_path=MAIN_DB).path_for(job["file_hash"]),
                     )
                 # Persist exact routes only; SAM L0/L1 bodies remain in 2a.
                 staging.update_payload(staging_id, {
@@ -437,7 +437,7 @@ def _parse_job_worker(job: dict, progress, cancel_event) -> None:
         raise
 
 
-_PARSE_ADAPTER = None if RUNTIME_CONFIG.cloud_readonly else runtime_provider(RUNTIME_CONFIG, StagingStore(db_path=MAIN_DB))
+_PARSE_ADAPTER = None if RUNTIME_CONFIG.cloud_readonly else runtime_provider(RUNTIME_CONFIG, StagingStore(db_path=MAIN_DB, maps_path=OBJECTS_DIR.parent / "map"))
 _PARSE_MANAGER = None if RUNTIME_CONFIG.cloud_readonly else ParseJobManager(
     MAIN_DB,
     _parse_job_worker,
@@ -773,7 +773,7 @@ def api_chat():
     except Exception:
         # Runtime memory is useful but must not turn a chat into a 500.
         map_data["degraded"] = True
-    adapter = runtime_provider(RUNTIME_CONFIG, StagingStore(db_path=MAIN_DB))
+    adapter = runtime_provider(RUNTIME_CONFIG, StagingStore(db_path=MAIN_DB, maps_path=OBJECTS_DIR.parent / "map"))
     try:
         raw = adapter.run_agent_message(
             question, context_text=context_text, company_id=company_id,

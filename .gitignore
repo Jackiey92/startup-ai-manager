@@ -29,6 +29,7 @@ AGENTS.md
 data/app.db
 data/app.db-*
 data/objects/
+data/2a/
 data/sales_app/
 *.sqlite
 *.sqlite-*

@@ -1,0 +1,2 @@
+import{n as e}from"./rolldown-runtime-8BhlS34s.js";import{S as t,Y as n,Z as r,_ as i}from"./lit-runtime-CIjzngcy.js";var a,o;function s(){return(s=e((()=>{i(),r(),a=class extends t{render(e,t){e!==this.source&&(this.failedSource=void 0,this.source=e);let n=()=>{this.isConnected&&this.source===e&&(this.failedSource=e,this.setValue(t(null,n)))};return t(e&&e!==this.failedSource?e:null,n)}},o=n(a)})))()}export{s as n,o as t};
+//# sourceMappingURL=image-with-fallback-DE6ZLOFG.js.map

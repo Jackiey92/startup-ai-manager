@@ -103,6 +103,7 @@ class OpenClawAdapter(RuntimeProvider):
         self.root = self.config.harness_root
         self.objects_dir = Path(objects_dir) if objects_dir else self.config.objects_dir
         self.db_path = Path(db_path) if db_path else self.config.main_db
+        self.staging.maps_path = self.objects_dir.parent / "map"
         self._runner = runner or subprocess.run
         self._session_ids: dict[tuple[str, str], str] = {}
         self._session_lock = Lock()
@@ -190,7 +191,7 @@ class OpenClawAdapter(RuntimeProvider):
                     "file_hash": file_hash,
                     "format": format,
                     "original_name": stored.original_name,
-                    "source_path": str(self.objects_dir / stored.storage_path),
+                    "source_path": str(store.path_for(file_hash)),
                 },
                 ensure_ascii=False,
                 indent=2,
@@ -256,6 +257,7 @@ class OpenClawAdapter(RuntimeProvider):
         env["SAM_TOOL_PLUGIN_DIR"] = str(self.config.tool_plugin_dir)
         env["SAM_TOOL_BRIDGE_PYTHON"] = str(self.config.tool_bridge_python)
         env["SAM_OBJECTS_DIR"] = str(self.objects_dir)
+        env["SAM_2A_ROOT"] = str(self.objects_dir.parent)
         # RuntimeConfig already resolves environment wins.  The API key is
         # intentionally never synthesized or logged here.
         if self.config.model_base_url:

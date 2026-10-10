@@ -6,8 +6,12 @@ reviewed, then promoted through the transaction gateway.
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
+
+from ..storage.evidence_paths import evidence_root
 
 from ..db.database import connect
 from .contracts import ParseResult
@@ -18,8 +22,16 @@ def _now() -> str:
 
 
 class StagingStore:
-    def __init__(self, db_path=None):
+    def __init__(self, db_path=None, *, maps_path=None):
         self._db_path = db_path
+        # Explicit DBs keep test/scoped output away from the product store.
+        root = evidence_root() if db_path is None or os.environ.get("SAM_2A_ROOT") else Path(db_path).parent / "2a"
+        self.maps_path = Path(maps_path) if maps_path is not None else root / "map"
+
+    def _rebuild_map(self, conn, file_hash: str) -> None:
+        from ..source_map import persist_latest_mapping
+        from ..storage.evidence_paths import hash_relpath
+        persist_latest_mapping(conn, file_hash, self.maps_path / hash_relpath(file_hash, mapping=True))
 
     def _conn(self):
         from ..db.database import connect as c
@@ -53,6 +65,8 @@ class StagingStore:
                     _now(),
                 ),
             )
+            if parse_status == "parsed":
+                self._rebuild_map(conn, manifest["file_hash"])
             conn.commit()
             return cur.lastrowid
 
@@ -72,8 +86,9 @@ class StagingStore:
         if not isinstance(updates, dict):
             raise TypeError("staging updates must be a mapping")
         with self._conn() as conn:
+            conn.execute("BEGIN IMMEDIATE")
             row = conn.execute(
-                "SELECT payload FROM parse_staging WHERE id=?", (staging_id,)
+                "SELECT payload,status,file_hash FROM parse_staging WHERE id=?", (staging_id,)
             ).fetchone()
             if row is None:
                 raise KeyError(staging_id)
@@ -85,6 +100,8 @@ class StagingStore:
                 "UPDATE parse_staging SET payload=? WHERE id=?",
                 (json.dumps(payload, ensure_ascii=False), staging_id),
             )
+            if row["status"] == "parsed":
+                self._rebuild_map(conn, row["file_hash"])
             conn.commit()
 
     def list_pending(self) -> list[dict]:

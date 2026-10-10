@@ -80,7 +80,7 @@ class KnowledgeService:
                 except (MemoryUnavailable, ValueError, TypeError):
                     warnings.append("记忆后端暂不可读或摘要格式损坏；以下为已存本地 L2。")
         edits = self.maps.list_edits(file_hash=file_hash, company_id=company_id)
-        mapping = render_mapping(manifest, edits=edits) if manifest else None
+        mapping = self.maps.read_map(file_hash=file_hash, company_id=company_id, manifest=manifest) if manifest else None
         ref = self.source_ref(file_hash, l2_manifest_uri=l2_uri)
         # Summaries are whole-document navigation, not invented per-sentence evidence.
         pages = []

@@ -1,0 +1,1 @@
+import{Ta as e,wa as t}from"./control-ui-boot-shared-DpHhsTHW.js";e();export{t as connectControlUiFavicon};

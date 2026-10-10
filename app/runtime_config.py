@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .storage.evidence_paths import DEFAULT_2A_ROOT
+
 
 def _scalar(value: str) -> Any:
     value = value.strip()
@@ -179,6 +181,14 @@ class RuntimeConfig:
         env = env if env is not None else os.environ
         return replace(self, model_default=env.get(self.model_name_env, "qwen3.8-flash"))
 
+    @property
+    def two_a_root(self) -> Path:
+        return self.objects_dir.parent
+
+    @property
+    def maps_dir(self) -> Path:
+        return self.two_a_root / "map"
+
     @classmethod
     def from_env(cls, project_root: str | Path | None = None, env: dict[str, str] | None = None) -> "RuntimeConfig":
         env = env if env is not None else os.environ
@@ -256,10 +266,19 @@ class RuntimeConfig:
             return _path(configured_root, env.get(name) if cloud_readonly else env.get(name, paths.get(key)),
                          cloud if cloud_readonly else local)
 
+        two_a_root = data_path("SAM_2A_ROOT", "two_a_root",
+                                configured_root / DEFAULT_2A_ROOT, cloud_data / "2a")
+
+        objects_value = env.get("SAM_OBJECTS_DIR")
+        if objects_value is None and not cloud_readonly and "SAM_2A_ROOT" not in env:
+            objects_value = paths.get("objects_dir")  # legacy explicit override
+        objects_dir = _path(configured_root, objects_value,
+                            cloud_data / "objects" if cloud_readonly else two_a_root / "bin")
+
         return cls(
             configured_root, harness, node_bin, entry, venv_bin, state, config_path,
             data_path("SAM_DATA_ROOT", "data_root", configured_root / "data", cloud_data),
-            data_path("SAM_OBJECTS_DIR", "objects_dir", configured_root / "data" / "objects", cloud_data / "objects"),
+            objects_dir,
             data_path("SAM_MAIN_DB", "main_db", configured_root / "data" / "app.db", cloud_data / "app.db"),
             data_path("SAM_APP_DB", "app_db", configured_root / "data" / "sales_app" / "app.db", cloud_data / "sales_app" / "app.db"),
             data_path("SAM_MEMORY_ROOT", "memory_root", configured_root / ".sam-memory", cloud_data / "disabled-memory"),

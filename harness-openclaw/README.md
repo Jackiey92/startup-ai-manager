@@ -30,7 +30,8 @@ OpenClaw 插件执行器内校验 hash、只读对象目录，运行 Skill 携�
 - `SAM_OPENCLAW_ENTRY`：`openclaw.mjs` 路径
 - `SAM_OPENCLAW_STATE_DIR` / `SAM_OPENCLAW_CONFIG`：状态与配置路径
 - `SAM_SKILL_MAP`：格式到 Skill 名称的 JSON 映射，默认由 `document-ingest` 接管。
-- `SAM_DATA_ROOT` / `SAM_OBJECTS_DIR` / `SAM_MAIN_DB` / `SAM_APP_DB`：数据、对象和 SQLite 路径
+- `SAM_2A_ROOT`：2A 根路径（默认 `data/2a`），原件 `bin/ab/<sha256>`、映射 `map/ab/<sha256>.md`。
+- `SAM_DATA_ROOT` / `SAM_OBJECTS_DIR` / `SAM_MAIN_DB` / `SAM_APP_DB`：数据、旧式对象目录显式覆盖和 SQLite 路径；只读云端快照的隔离路径保持不变。
 - `SAM_MEMORY_ROOT`：local MemoryProvider 的持久化根目录
 - `SAM_TOOL_PLUGIN_DIR`：OpenClaw 插件目录（指向 `harness-openclaw/plugins/sam-memory`）
 - `SAM_TOOL_BRIDGE_PYTHON`：bridge 使用的 Python 可执行文件；未设置时使用 `SAM_VENV_PYTHON` 或 `python3`
@@ -72,3 +73,21 @@ the scoped memory tools plus `sam_document_ingest`. This removes the need for a 
 in a fresh state. Gateway mode is the default; the Flask-owned adapter starts
 one loopback Gateway on the first Agent call and reuses it for later calls.
 Set `SAM_OPENCLAW_MODE=local` only for a one-shot diagnostic run.
+
+### 2A 存储迁移（阶段一）
+
+先停止解析写入并备份，仓库根执行：
+
+```bash
+.venv/bin/python scripts/migrate_2a_storage.py --dry-run
+.venv/bin/python scripts/migrate_2a_storage.py
+```
+
+自定义部署使用 `--db`、`--legacy-objects`、`--two-a-root`（根路径也可用
+`SAM_2A_ROOT` 注入）。脚本支持旧短哈希文件名及完整哈希名，先校验全部原件及已有
+目标的 sha256，再复制、补生成最新 parsed 映射；可重复执行，不删除旧原件、不改数据库行。
+`data/objects` 保留一个版本，待饭团确认后另行清理。
+
+映射缺失时读取仍即时渲染；解析成功、路由元数据更新及 correction 后均可重建。
+共享 md 只存 manifest 原始映射，公司级 `source_edits` 仍在读取时按原语义叠加，
+避免同一哈希的跨公司修订泄露。本阶段不改变知识库 L0/L1/L2 API 或前端。

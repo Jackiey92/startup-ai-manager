@@ -460,6 +460,7 @@ def test_upload_worker_automatically_runs_bridge_worker_verify_and_commit(tmp_pa
             return None
 
     monkeypatch.setattr(webapp, "MAIN_DB", db)
+    monkeypatch.setattr(webapp, "OBJECTS_DIR", tmp_path / "objects")
     monkeypatch.setattr(webapp, "_PARSE_ADAPTER", _Adapter())
     monkeypatch.setattr(webapp, "FactExtractionService", _InProcessFactService)
     monkeypatch.setattr(webapp, "classification_service", lambda: _Classification())
@@ -473,6 +474,7 @@ def test_upload_worker_automatically_runs_bridge_worker_verify_and_commit(tmp_pa
          "harness_format": "xlsx", "company_id": "acme"},
         lambda **item: progress.append(item), Event(),
     )
+    assert (tmp_path / "map" / stored.file_hash[:2] / f"{stored.file_hash}.md").is_file()
     facts = real_service(db).list_facts(company_id="acme")
     assert {(item["attribute"], item["value"], item["period"]) for item in facts} == {
         ("营业收入", "3.26", "2024"), ("净利润", "0.58", "2024"),

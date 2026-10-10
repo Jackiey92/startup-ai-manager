@@ -21,7 +21,7 @@ skills:
   ingest_engine_env: SAM_INGEST_ENGINE
 paths:
   data_root: data
-  objects_dir: data/objects
+  two_a_root: data/2a
   main_db: data/app.db
   app_db: data/sales_app/app.db
   memory_root: .sam-memory

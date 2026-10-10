@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import os
-import shutil
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,7 +11,7 @@ from typing import Optional
 
 from ..db.database import connect
 
-DEFAULT_OBJECTS_PATH = Path("data/objects")
+from .evidence_paths import DEFAULT_OBJECTS_PATH, evidence_root, hash_relpath
 
 
 def _now() -> str:
@@ -32,8 +32,8 @@ class StoredFile:
 
 
 class SourceFileStore:
-    def __init__(self, objects_path: Path = DEFAULT_OBJECTS_PATH, db_path=None):
-        self.objects_path = Path(objects_path)
+    def __init__(self, objects_path: Path | str | None = None, db_path=None):
+        self.objects_path = Path(objects_path) if objects_path is not None else evidence_root() / "bin"
         self.objects_path.mkdir(parents=True, exist_ok=True)
         self._db_path = db_path
 
@@ -45,7 +45,7 @@ class SourceFileStore:
         return hashlib.sha256(data).hexdigest()
 
     def _object_relpath(self, file_hash: str) -> Path:
-        return Path(file_hash[:2]) / file_hash[2:]
+        return hash_relpath(file_hash)
 
     def exists(self, file_hash: str) -> bool:
         with self._conn() as conn:
@@ -88,9 +88,24 @@ class SourceFileStore:
         full_path = self.objects_path / relpath
         full_path.parent.mkdir(parents=True, exist_ok=True)
 
-        tmp_path = full_path.with_suffix(".tmp")
-        tmp_path.write_bytes(data)
-        os.replace(tmp_path, full_path)
+        # A unique temporary and create-only link keep concurrent uploads from
+        # replacing an immutable original (including pre-existing orphan blobs).
+        tmp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(dir=full_path.parent, prefix=".original-",
+                                             suffix=".tmp", delete=False) as stream:
+                tmp_path = Path(stream.name)
+                stream.write(data)
+                stream.flush()
+                os.fsync(stream.fileno())
+            try:
+                os.link(tmp_path, full_path)
+            except FileExistsError:
+                if self.hash_bytes(full_path.read_bytes()) != file_hash:
+                    raise ValueError(f"original sha256 mismatch: {full_path}")
+        finally:
+            if tmp_path is not None:
+                tmp_path.unlink(missing_ok=True)
 
         stored = StoredFile(
             file_hash=file_hash,
@@ -107,7 +122,7 @@ class SourceFileStore:
             conn.execute(
                 "INSERT INTO source_files(file_hash,original_name,mime_type,"
                 "size_bytes,storage_path,origin_zone,uploaded_by,uploaded_at)"
-                " VALUES (?,?,?,?,?,?,?,?)",
+                " VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(file_hash) DO NOTHING",
                 (
                     stored.file_hash,
                     stored.original_name,
@@ -120,7 +135,7 @@ class SourceFileStore:
                 ),
             )
             conn.commit()
-        return stored
+        return self.get(file_hash)
 
     def get(self, file_hash: str) -> StoredFile:
         with self._conn() as conn:
@@ -132,8 +147,7 @@ class SourceFileStore:
         return StoredFile(**dict(row))
 
     def get_bytes(self, file_hash: str) -> bytes:
-        stored = self.get(file_hash)
-        return (self.objects_path / stored.storage_path).read_bytes()
+        return self.path_for(file_hash).read_bytes()
 
     def list_files(self, *, origin_zone: Optional[str] = None) -> list[StoredFile]:
         sql = "SELECT * FROM source_files"
@@ -146,5 +160,8 @@ class SourceFileStore:
             rows = conn.execute(sql, params).fetchall()
         return [StoredFile(**dict(r)) for r in rows]
 
-
-
+    def path_for(self, file_hash: str) -> Path:
+        """Prefer the new full-hash name; retain reads of legacy shard names."""
+        stored = self.get(file_hash)
+        path = self.objects_path / hash_relpath(file_hash)
+        return path if path.is_file() else self.objects_path / stored.storage_path

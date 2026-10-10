@@ -90,7 +90,7 @@ async function documentIngestCall(input) {
   const outbox = path.join(root, "outbox");
   const task = JSON.parse(fs.readFileSync(taskPath, "utf8"));
   if (task.file_hash !== input.file_hash || task.format !== input.format) throw new Error("injected task mismatch");
-  const objects = path.resolve(process.env.SAM_OBJECTS_DIR || path.join(process.env.SAM_PROJECT_ROOT || process.cwd(), "data", "objects"));
+  const objects = path.resolve(process.env.SAM_OBJECTS_DIR || path.join(process.env.SAM_2A_ROOT || path.join(process.env.SAM_PROJECT_ROOT || process.cwd(), "data", "2a"), "bin"));
   const source = path.resolve(String(task.source_path || ""));
   if (!source.startsWith(`${objects}${path.sep}`) || !fs.statSync(source).isFile()) throw new Error("source is outside the object store");
   const skillRoot = path.resolve(process.env.SAM_SKILL_ROOT || path.join(process.env.SAM_PROJECT_ROOT || process.cwd(), "skills"));

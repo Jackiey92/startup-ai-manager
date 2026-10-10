@@ -1,0 +1,2 @@
+import{n as e}from"./rolldown-runtime-8BhlS34s.js";import{gn as t,pn as n}from"./control-ui-core-C5mtYcym.js";function r(e,n,r={}){let i=t.get(e);i||(i=new Map,t.set(e,i));let a=JSON.stringify([n,r.keys?.toSorted()]),o=i.get(a);if(o)return o;let s=e.request(`users.prefs.get`,r);i.set(a,s);let c=()=>{i.get(a)===s&&i.delete(a)};return s.then(e=>{e.status!==`ok`&&c()},c),s}function i(){return(i=e((()=>{n()})))()}i();export{r as loadUserPreferences};
+//# sourceMappingURL=user-prefs-request-5DYeJyN7.js.map
