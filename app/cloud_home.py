@@ -179,7 +179,7 @@ def install_cloud_window(app, config, context_reader) -> None:
             return None
         # Auth still applies, but the shared home renderer needs no snapshot
         # or local services. Both modes use exactly the same visual source.
-        if request.endpoint in ('home_page', 'prototype_page'):
+        if request.endpoint in ('home_page', 'prototype_page', 'knowledge_page', 'knowledge_source_page'):
             return None
 
         snapshot = current_snapshot(app)
@@ -234,19 +234,11 @@ def install_cloud_window(app, config, context_reader) -> None:
         elif request.endpoint == 'facts_page':
             title = '事实库'
             sections = [('facts', context['facts'])]
-        elif request.endpoint == 'knowledge_page':
-            # Wire the snapshot's 2A/2B/2C knowledge object to the designed
-            # three-tab frontend instead of the generic field renderer.
-            return render_template('knowledge.html', company_id=company_id,
-                                   knowledge=normalize_knowledge(data))
-        elif request.endpoint in ('knowledge_source_page', 'detail'):
+        elif request.endpoint == 'detail':
             try:
                 source = knowledge.source(company_id=company_id, file_hash=request.view_args['file_hash'])
             except KeyError:
                 source = None
-            if request.endpoint == 'knowledge_source_page':
-                return render_template('knowledge_source.html', company_id=company_id,
-                                       source=normalize_source(source))
             title = '文件详情'
             sections = [('source', source)]
         elif request.endpoint == 'files_page':

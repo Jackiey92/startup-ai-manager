@@ -10,16 +10,16 @@
   `company_id` 取宿主 `SAM_COMPANY_ID`（未设置为 `default`），不接受 URL 覆盖。
   JSON 转义 `<` / `>` / `&` 和 Unicode 行分隔符，响应 `Cache-Control: no-store`。
 - chat 改为同源 `/api/chat`；上传、引导继续用原接口。
-- 旧 `/bizov`、`/overview`、`/files`、`/knowledge` 等页面保留。
+- 旧 `/bizov`、`/overview`、`/files` 等页面保留；知识库旧地址已接管为同一主页壳（见下文）。
   云端认证、快照读 API、集中写操作 403 均沿用原机制；没有新增密码功能。
-- 没有改造云盘、日程或其他演示板块，也没有接文件柜或首用登记。
+- 云盘、日程及其他演示板块保持原状；文件柜/公司登记和知识库接线见下文。
 
 模式切换后需重启 Flask；正常 full 启动仍需显式注入已验收的
 `SAM_MEMORY_ROOT_URI`，readonly 不装配本地 OV/解析/模型。
 
 ## 后续板块怎样接真数据
 
-原型脚本提供 `window.SAM`，但不自动加载或改写任何业务板块。
+原型脚本提供 `window.SAM`；知识库已按下文接 GET 真数据，其他板块按需接线。
 先注册该板块演示数据，再用现有或后续开发的 GET API：
 
 ```javascript
@@ -94,3 +94,48 @@ readonly 下其他 method 在 fetch 前被拦截，提示「这一步请在本�
 ## 文件柜前端修复（2026-10-10）
 
 仅修改唯一视觉源 `prototype/startup-ai-manager.html`：桌面文件柜改为单栏，保留移动端间距并清理无 HTML/JS 引用的旧步骤栏 CSS；已登记时常驻显示当前公司主体和「修改」文字按钮，就地复用首次登记输入框及 `/api/entity-roster` 保存逻辑，成功后恢复主体展示并更新上传登记状态，未改后端规则。主页契约 33 passed（其中 JS 契约 19 passed），补充改名回归脚本和真实 Flask 登记/改名/旧主体替代/上传身份守卫检查通过；全量在显式注入测试根 `SAM_MEMORY_ROOT_URI=viking://sam-test/product-root` 和独立网关端口 `SAM_OPENCLAW_GATEWAY_PORT=19236` 后为 405 passed / 3 skipped，compileall 与 diff --check 通过。浏览器验收未完成、无截图：Windows Chromium 两次报 GPU 子进程不可用退出，替代 Edge 的调试连接报 socket Operation not permitted，未继续重试；宽屏/窄屏视觉及真实浏览器点击流程仍待饭团真机验收。测试使用隔离临时数据库且已清理，未上传文件，真实名册复核仍只有“谷斗科技（上海）有限公司”。 当前沙箱 `.git` 只读，`git add` 报 `index.lock: Read-only file system`，因此未生成 commit、未 push。
+
+## 永久前端规范与知识库接管（2026-10-10）
+
+- **侧滑栏模块一律壳内切页（`.screen` / `go`），页面内独立操作按钮一律弹窗（mask 模式）。切页与弹窗必须沿用主页字体、主题变量和组件；禁止再出现独立风格页面。** 文件柜保持现有导入操作弹窗，不能成为另一个页面壳。
+- `prototype/startup-ai-manager.html` 是唯一视觉源。知识库使用既有
+  `board-scroll`、`sec-head`、`card`、`grid`、`table-wrap`；原文弹窗复用
+  `import-mask` / `import-wizard`，长文本内部滚动、换行，桌面/窄屏沿用壳响应式规则。
+- 侧栏知识库为 `button[data-go="knowledge"]`，切入 `#knowledge.screen`，
+  更新面包屑和导航激活态，不打开独立页面或新窗口。
+- 通过 `SAM.data.load('knowledge', {url: '/api/knowledge'})` GET 读取三分区：
+  2A 文件 L0/L1、可展开 L2 与已有坐标；2B 已有分组事实和股权事件链回放；
+  2C 目标、临时性/到期、未闭环/闭环事件、待固化工作笔记和时间线。
+  空态沿用旧知识库措辞；读取失败回退空对象并标注「演示数据」，不造演示事实。
+  缺失值明确标注或显示空态，`0` / `false` 不当作缺失；已存警告照常展示。
+  不新增分类、确认、过期判断、持股推算或写入逻辑；文本/坐标安全转义，晚到响应不覆盖新读取。
+- 文件柜「查看结果」关闭导入弹窗、切知识库，并滚动/高亮对应文件卡片；
+  「溯源」关闭导入弹窗、GET 读取知识库后展示该文件原文弹窗。事实来源链接
+  同样在壳内打开弹窗，保留 page/locator；Esc、遮罩、关闭按钮均可关闭。
+- full / readonly 的 `/knowledge` 和 `/knowledge/sources/<hash>` 与 `/` 返回
+  同一壳、`no-store`，不在 HTML 路由读取业务服务；旧 `#source-<hash>`
+  定位文件卡片，旧原文路径由前端打开弹窗并高亮已有页码。
+  不存在/无权限的文件不会获得额外读取路径，只能显示当前宿主 API 返回的内容或空态。
+  `/api/knowledge`、宿主公司作用域、原有认证和云端集中写请求 403 不变。
+- `webapp/templates/knowledge.html`、`knowledge_source.html` 保留作历史模板，
+  已无路由渲染引用；本轮不删除它们或清理其他旧页面/后端辅助函数，避免扩大改动。
+
+### 验收边界
+
+隔离 `acc-*` full Flask 路由/API 检查通过（测试存储为 LocalMemoryProvider，
+不是 OV/模型验收），测试数据及临时服务已清理。JS 契约执行真实内联脚本，
+覆盖三分区/空态、缺字段、0/false、转义、警告、晚到响应、文件柜动作、旧链接
+和只读读取；另将实际 Python 服务返回的数据送入同一 JS 渲染器验证。
+
+真实浏览器点击和截图**未完成**：Windows Chromium 147 启动报
+`GPU process isn't usable. Goodbye.`（GPU 子进程退出 `-2147483645`），
+loopback 调试检查报 `curl: (7) failed to open socket: Operation not permitted`。
+已停止重试，空态/有数据态截图均未生成，视觉及长文弹窗体验仍待饭团真机验收。
+日志存 `/tmp/sam-knowledge-shell-check/`，不入库；不声称范范已验收。
+
+最终全量：显式注入 `SAM_MEMORY_ROOT_URI=viking://sam-test/product-root` 和独立
+`SAM_OPENCLAW_GATEWAY_PORT=19236`，**417 passed / 3 skipped**（原基线 405 / 3）；
+全部 JS 契约 **29 passed / 0 failed**。`compileall -q app scripts webapp`、
+`git diff --check` 通过；full/readonly 的壳接管、认证/宿主范围和写请求 403
+回归通过。中途按钮 helper 重构导致一个静态字面量断言失败，已修正并重跑全量。
+本轮可本地提交，未 push；已有未跟踪运行时文件不入库。

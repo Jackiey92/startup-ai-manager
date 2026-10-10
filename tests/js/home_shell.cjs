@@ -15,12 +15,13 @@ const window = {
   SAM_CONFIG: {mode: readonly ? 'readonly' : 'full', company_id: 'acc-shell'},
   alert: message => alerts.push(message),
   fetch: async (...args) => {calls.push(args); return fetchImpl(...args);},
-  addEventListener() {},
+  events: {},
+  addEventListener(name, handler) {(this.events[name] ||= []).push(handler);},
 };
 
 class Element {
   constructor(id = '') {
-    this.id = id; this.dataset = {}; this.style = {setProperty() {}};
+    this.id = id; this.isConnected = true; this.dataset = {}; this.style = {setProperty() {}};
     this.value = ''; this.textContent = ''; this.innerHTML = '';
     this.children = []; this.events = {}; this.parts = new Map(); this.attributes = {};
     const classes = new Set();
@@ -38,9 +39,11 @@ class Element {
     for (const handler of this.events[name] || []) handler({target: this, preventDefault() {}, stopPropagation() {}, ...extras});
   }
   click() {this.dispatch('click');}
-  focus() {}
+  focus() {document.activeElement = this;}
+  scrollIntoView(options) {this.scrolled = options;}
+  querySelectorAll() {return [this.querySelector('button')];}
   closest() {return this;}
-  contains(element) {return element === this || element.dataset.importAction != null;}
+  contains(element) {return element === this || element.dataset.importAction != null || element.dataset.knowledgeSource != null;}
   setAttribute(name, value) {this.attributes[name] = value;}
   appendChild(child) {this.children.push(child);}
   insertBefore(child) {this.children.unshift(child);}
@@ -58,12 +61,14 @@ const screens = [...html.matchAll(/class="screen( active)?" id="([^"]+)"/g)].map
 });
 const suggestion = new Element(); suggestion.dataset.q = '测试建议';
 const skill = new Element(); skill.dataset.q = '测试技能';
+const knowledgeNav = new Element(); knowledgeNav.dataset.go = 'knowledge';
 const document = {
   body: new Element(), hidden: false, events: {},
   addEventListener(name, handler) {(this.events[name] ||= []).push(handler);},
   createElement: () => new Element(),
-  getElementById(id) {assert.ok(elements.has(id), 'missing element: ' + id); return elements.get(id);},
+  getElementById(id) {if (id.startsWith('source-') && !elements.has(id)) return null; assert.ok(elements.has(id), 'missing element: ' + id); return elements.get(id);},
   querySelectorAll(selector) {
+    if (selector === '[data-go]') return [knowledgeNav];
     if (selector === '.screen') return screens;
     if (selector === '.sugg-card') return [suggestion];
     if (selector === '.skill') return [skill];
@@ -73,10 +78,10 @@ const document = {
 const context = vm.createContext({window, document, console, setInterval() {},
   setTimeout(fn, delay) {assert.equal(delay, 1800); const id = ++timerId; timers.set(id, fn); return id;},
   clearTimeout(id) {timers.delete(id);},
-  FormData: class {append() {}}, getComputedStyle: () => ({background: ''})});
-vm.runInContext(caseName.startsWith('ui-') ? script : foundation, context);
+  URLSearchParams, FormData: class {append() {}}, getComputedStyle: () => ({background: ''})});
+if (!caseName.startsWith('ui-knowledge-')) vm.runInContext(caseName.startsWith('ui-') ? script : foundation, context);
 const SAM = window.SAM;
-SAM.demo.probe = [{id: 'demo'}];
+if (SAM) SAM.demo.probe = [{id: 'demo'}];
 const load = options => SAM.data.load('probe', {url: '/api/probe', ...options});
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
@@ -226,13 +231,141 @@ async function cabinetCase(name) {
   job = {...job, progress_total: null}; await tick(); assert.doesNotMatch(el('importFiles').innerHTML, /NaN|Infinity|%/);
   job = {...job, status: 'done'}; await tick(); assert.equal(timers.size, 0);
   assert.match(el('importFiles').innerHTML, /完成/);
-  assert.match(el('importFiles').innerHTML, /href="\/knowledge#source-acc-hash"/);
-  assert.match(el('importFiles').innerHTML, /href="\/knowledge\/sources\/acc-hash"/);
+  assert.match(el('importFiles').innerHTML, /data-import-action="result"/);
+  assert.match(el('importFiles').innerHTML, /data-import-action="source"/);
+  assert.doesNotMatch(el('importFiles').innerHTML, /target=|href=/);
   assert.match(el('importFiles').innerHTML, /查看结果/); assert.match(el('importFiles').innerHTML, /溯源/);
   const count = calls.length; await tick(); assert.equal(calls.length, count);
 }
 
+
+const knowledgeFixture = {
+  evidence: {files: [{file_hash: 'acc-hash', original_name: '<script>alert(1)</script>.pdf', status: 'done',
+    l0: {content: 'acc L0 摘要'}, l1: {content: 'acc L1 概览'},
+    source_ref: {file_hash: 'acc-hash'}, l2: {mapping: 'acc 原文 Sheet1!B3', manifest_uri: 'viking://acc/l2',
+      pages: [{page: 0, mapping: '第零页'}, {page: 2, mapping: '<img onerror=alert(1)> Sheet1!B3'}]}}]},
+  facts: {groups: [{label: 'acc 自定义分类', facts: [{entity: 'acc 实体', attribute: 'acc 属性', value: 0,
+    period: false, source_ref: {file_hash: 'acc-hash', page: 2, locator: 'Sheet1!B3'}}]}],
+    cap_table: {snapshot: {total_issued: 0, total_fully_diluted: 0, option_pool: 0,
+      holders: {'acc 持有人': {issued: 0, fully_diluted: 0, ownership_issued_pct: 0, ownership_fully_diluted_pct: 0}}, event_ids: ['acc-event']},
+      events: [{event_id: 'acc-event', shares_delta: 0, provenance: [{source_ref: {file_hash: 'acc-hash', page: 0}, anchor: {page_no: 0}}]}]}},
+  working_memory: {items: [{runtime: {goal: 'acc 目标', state: 'active', expires_at: '2026-10-11',
+    open_loops: [{id: 'acc-open', text: 'acc 未闭环'}], working_notes: [{text: 'acc 待固化', confidence: 0, inferred: false}]},
+    events: [{type: 'open_loop_add', payload: {id: 'acc-closed', text: 'acc 已闭环'}},
+      {type: 'open_loop_remove', payload: {id: 'acc-closed'}}]}]}
+};
+async function knowledgeCase(name) {
+  assert.match(html, /<div class="screen" id="knowledge">/);
+  assert.match(html, /<button class="sys-item" type="button" data-go="knowledge">/);
+  assert.doesNotMatch(html, /<a class="sys-item" href="\/knowledge">/);
+  assert.match(html, /knowledge:"知识库"/);
+  assert.match(script, /routeKnowledgeLocation\(\);\s*}\)\(\);\s*$/);
+  let body = name.includes('empty') ? {} : knowledgeFixture;
+  if (name.endsWith('payload')) body = JSON.parse(fs.readFileSync(process.argv[3], 'utf8'));
+  fetchImpl = async url => {
+    if (url === '/api/knowledge') {
+      if (name.includes('failure')) throw new Error('unavailable');
+      return ok(body);
+    }
+    if (url === '/api/entity-roster') return ok({entities: [self]});
+    if (url === '/api/parse-jobs') return ok({jobs: [{job_id: 'acc-job', file_hash: 'acc-hash', status: 'done'}]});
+    if (url === '/api/import-guide') return ok({guide: {completeness: {}}});
+    throw new Error('Unexpected URL ' + url);
+  };
+  elements.set('source-acc-hash', new Element('source-acc-hash'));
+  if (name.includes('legacy')) {
+    window.location = {pathname: name.includes('source') ? '/knowledge/sources/acc-hash' : '/knowledge',
+      hash: name.includes('source') ? '' : '#source-acc-hash', search: '?page=2&locator=Sheet1%21B3'};
+  }
+  vm.runInContext(script, context); await flush();
+  if (!name.includes('legacy')) {knowledgeNav.click(); await flush();}
+  assert.equal(el('knowledge').classList.contains('active'), true);
+  assert.equal(el('overview').classList.contains('active'), false);
+  assert.equal(el('crumb').textContent, '知识库');
+  assert.ok(calls.some(call => call[0] === '/api/knowledge' && (call[1].method || 'GET') === 'GET'));
+  if (name.endsWith('payload')) {
+    console.log(JSON.stringify({evidence: el('knowledgeEvidence').innerHTML, facts: el('knowledgeFacts').innerHTML,
+      equity: el('knowledgeEquity').innerHTML, runtime: el('knowledgeRuntime').innerHTML})); return;
+  }
+  if (name.includes('empty') || name.includes('failure')) {
+    assert.match(el('knowledgeEvidence').innerHTML, /暂无原始证据/);
+    assert.match(el('knowledgeFacts').innerHTML, /暂无确认事实/);
+    assert.match(el('knowledgeEquity').innerHTML, /暂无已存股权事件链/);
+    assert.match(el('knowledgeRuntime').innerHTML, /暂无当前公司/);
+    assert.equal(el('knowledgeDataSource').textContent, '演示数据'); return;
+  }
+  assert.match(el('knowledgeEvidence').innerHTML, /acc L0 摘要/);
+  assert.match(el('knowledgeEvidence').innerHTML, /acc L1 概览/);
+  assert.match(el('knowledgeEvidence').innerHTML, /&lt;script&gt;/);
+  assert.doesNotMatch(el('knowledgeEvidence').innerHTML, /<script>|<img/);
+  assert.match(el('knowledgeFacts').innerHTML, /acc 自定义分类/);
+  assert.match(el('knowledgeFacts').innerHTML, /<td>0<\/td><td>false<\/td>/);
+  assert.match(el('knowledgeEquity').innerHTML, /已发行总股数：0/);
+  assert.match(el('knowledgeEquity').innerHTML, /0%/);
+  assert.match(el('knowledgeEquity').innerHTML, /acc-event/);
+  for (const text of ['acc 目标', 'acc 未闭环', 'acc 已闭环', 'acc 待固化', '置信度：0', '2026-10-11', '事件时间线'])
+    assert.ok(el('knowledgeRuntime').innerHTML.includes(text), text);
+  assert.equal(el('knowledgeDataSource').textContent, '');
+  if (name.includes('partial')) {
+    body = {evidence: {files: [{file_hash: 'acc-hash'}]}, facts: {groups: [{facts: [{value: false}]}]},
+      working_memory: {items: [{runtime: {working_notes: [{}]}}]}};
+    knowledgeNav.click(); await flush();
+    assert.match(el('knowledgeEvidence').innerHTML, /解析中\/暂无摘要/);
+    assert.match(el('knowledgeEvidence').innerHTML, /尚无可读取的 L2 原文/);
+    assert.match(el('knowledgeFacts').innerHTML, /未存分类/);
+    assert.match(el('knowledgeFacts').innerHTML, /<td>false<\/td>/);
+    assert.match(el('knowledgeFacts').innerHTML, /原文定位字段未提供/);
+    assert.match(el('knowledgeRuntime').innerHTML, /置信度：未提供/); return;
+  }
+  if (name.includes('warnings')) {
+    body = {evidence: {files: [{warnings: ['证据暂不可读']}]}, facts: {cap_table: {warnings: ['回放校验失败']}},
+      working_memory: {warnings: ['工作记忆暂不可读']}};
+    knowledgeNav.click(); await flush();
+    assert.match(el('knowledgeEvidence').innerHTML, /证据暂不可读/);
+    assert.match(el('knowledgeEquity').innerHTML, /回放校验失败/);
+    assert.doesNotMatch(el('knowledgeEquity').innerHTML, /暂无已存股权事件链/);
+    assert.match(el('knowledgeRuntime').innerHTML, /工作记忆暂不可读/);
+    assert.doesNotMatch(el('knowledgeRuntime').innerHTML, /暂无当前公司/); return;
+  }
+  if (name.includes('race')) {
+    const pending = deferred(); fetchImpl = () => pending.promise;
+    knowledgeNav.click(); await flush();
+    fetchImpl = () => ok({}); knowledgeNav.click(); await flush();
+    pending.resolve(ok(knowledgeFixture)); await flush();
+    assert.match(el('knowledgeEvidence').innerHTML, /暂无原始证据/); return;
+  }
+  if (name.includes('cabinet')) {
+    el('importNavBtn').click(); await flush();
+    await action('result');
+    assert.equal(el('importMask').classList.contains('open'), false);
+    assert.equal(el('knowledge').classList.contains('active'), true);
+    assert.equal(el('source-acc-hash').classList.contains('knowledge-selected'), true);
+    assert.ok(el('source-acc-hash').scrolled);
+    el('importNavBtn').click(); await flush();await action('source');
+    assert.equal(el('importMask').classList.contains('open'), false);
+  } else if (!name.includes('legacy-source')) {
+    const link = new Element();link.dataset.knowledgeSource = 'acc-hash';link.dataset.page = '2';link.dataset.locator = 'Sheet1!B3';
+    el('knowledge').dispatch('click', {target: link});
+  }
+  assert.equal(el('knowledgeSourceMask').classList.contains('open'), true);
+  assert.match(el('knowledgeSourceBody').innerHTML, /Sheet1!B3/);
+  assert.match(el('knowledgeSourceBody').innerHTML, /&lt;img/);
+  assert.doesNotMatch(el('knowledgeSourceBody').innerHTML, /<img/);
+  if (name.includes('legacy-source')) assert.match(el('knowledgeSourceBody').innerHTML, /knowledge-selected/);
+  el('knowledgeSourceMask').dispatch('keydown', {key: 'Escape'});
+  assert.equal(el('knowledgeSourceMask').classList.contains('open'), false);
+  assert.equal(el('knowledgeSourceMask').attributes['aria-hidden'], 'true');
+  const missing = new Element();missing.dataset.knowledgeSource = 'foreign-or-missing';
+  el('knowledge').dispatch('click', {target: missing});
+  assert.match(el('knowledgeSourceBody').innerHTML, /尚无可读取的 L2 原文/);
+  assert.doesNotMatch(el('knowledgeSourceBody').innerHTML, /Sheet1!B3/);
+  el('knowledgeSourceMask').dispatch('click');
+  assert.equal(el('knowledgeSourceMask').classList.contains('open'), false);
+  assert.equal(calls.some(call => (call[1].method || 'GET') !== 'GET' && call[0] !== '/api/import-guide'), false);
+}
+
 async function main() {
+  if (caseName.startsWith('ui-knowledge-')) {await knowledgeCase(caseName); return;}
   switch (caseName) {
     case 'api': {
       const result = await load({select: payload => payload.rows});

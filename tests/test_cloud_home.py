@@ -160,8 +160,8 @@ def test_all_cloud_pages_and_read_apis(cloud_web, with_snapshot, monkeypatch):
     for label in ('企业健康度', '营业收入（1–9月）', '净利润', '现金跑道',
                   '在手订单', '员工激励待办', '研发项目进展', '订单进展'):
         assert label in landing_html
-    assert '<a class="sys-item" href="/knowledge">' in landing_html
-    assert landing_html.index('href="/knowledge"') < landing_html.index('id="importNavBtn"')
+    assert '<button class="sys-item" type="button" data-go="knowledge">' in landing_html
+    assert landing_html.index('data-go="knowledge"') < landing_html.index('id="importNavBtn"')
     prototype = client.get('/prototype')
     assert prototype.status_code == 200
     assert prototype.get_data(as_text=True) == landing_html
@@ -170,24 +170,16 @@ def test_all_cloud_pages_and_read_apis(cloud_web, with_snapshot, monkeypatch):
         result = client.get(path)
         assert result.status_code == 200, (path, result.data)
         html = result.get_data(as_text=True)
+        if path in ('/knowledge', '/knowledge/sources/abc'):
+            assert html == landing_html
+            assert 'id="knowledgeSourceMask"' in html
+            continue
         assert 'data-upload-open' not in html
         assert 'id="upload-modal"' not in html
         assert '只读' in html
         assert 'type="file"' not in html
-        if path == '/knowledge':
-            assert 'href="/">返回主页</a>' in html
-            for section in ('evidence', 'confirmed-facts', 'working-memory'):
-                assert f'href="#{section}"' in html
         if not with_snapshot:
-            # The wired knowledge page has its own three-tab empty states rather
-            # than the generic cloud_page "暂无同步数据" marker.
-            if path == '/knowledge':
-                assert '暂无原始证据' in html
-                assert '暂无确认事实' in html
-            elif path == '/knowledge/sources/abc':
-                assert '尚无可读取的 L2 原文' in html
-            else:
-                assert '暂无同步数据' in html
+            assert '暂无同步数据' in html
     for path in ['/api/bizov', '/api/business-overview', '/api/dashboard',
                  '/api/dashboard/preferences', '/api/knowledge', '/api/facts', '/api/todos',
                  '/api/files/classifications', '/api/entity-roster', '/api/parse-jobs', '/api/chat/history']:
@@ -198,7 +190,7 @@ def test_all_cloud_pages_and_read_apis(cloud_web, with_snapshot, monkeypatch):
             snapshot()['payload']['knowledge'] if with_snapshot else {})
     if with_snapshot:
         assert '历史对话' in client.get('/chat').get_data(as_text=True)
-        assert 'L2原文' in client.get('/knowledge/sources/abc').get_data(as_text=True)
+        assert 'L2原文' in client.get('/api/knowledge').get_json()['evidence']['files'][0]['l2']['mapping']
         assert 'new-field' in client.get('/bizov').get_data(as_text=True)
         assert 'new-module' in client.get('/overview').get_data(as_text=True)
         assert client.get('/api/facts?company_id=other').get_json()['company_id'] == 'acc-cloud'

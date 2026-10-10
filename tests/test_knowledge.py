@@ -4,6 +4,8 @@ from __future__ import annotations
 import json
 import base64
 import sqlite3
+import shutil
+import subprocess
 from pathlib import Path
 from urllib.parse import urlsplit, parse_qs
 
@@ -155,8 +157,8 @@ def test_knowledge_empty_page_api_and_read_only_methods(knowledge_env):
         "working_memory": {"items": [], "warnings": []},
     }
     html = client.get("/knowledge").get_data(as_text=True)
-    assert 'class="nav-primary active" href="/knowledge"' in html
-    assert 'href="/">返回主页</a>' in html
+    assert '<div class="screen" id="knowledge">' in html
+    assert 'data-go="knowledge"' in html
     for text in ("暂无原始证据", "暂无确认事实", "暂无已存股权事件链", "暂无当前公司", "只读"):
         assert text in html
     assert "data-upload-open" not in html and 'id="upload-modal"' not in html
@@ -166,7 +168,7 @@ def test_knowledge_empty_page_api_and_read_only_methods(knowledge_env):
     assert snapshot(db, memory) == before
 
 
-def test_knowledge_three_layers_coordinates_and_links(knowledge_env):
+def test_knowledge_three_layers_coordinates_and_links(knowledge_env, tmp_path):
     client, db, _, memory = knowledge_env
     stored, record = seed_file(knowledge_env)
     seed_runtime(memory)
@@ -197,9 +199,9 @@ def test_knowledge_three_layers_coordinates_and_links(knowledge_env):
     source = client.get(ref["url"])
     assert source.status_code == 200
     source_html = source.get_data(as_text=True)
-    assert "knowledge-selected" in source_html and "Sheet1!B3" in source_html
+    assert source_html == client.get("/").get_data(as_text=True)
+    assert "<script>alert(1)</script>" in evidence["l2"]["mapping"]  # JS owns escaping
     assert "<script>alert(1)</script>" not in source_html
-    assert "&lt;script&gt;" in source_html
     cap = data["facts"]["cap_table"]
     assert cap["snapshot"]["total_issued"] == 100
     assert client.get(cap["events"][0]["provenance"][0]["source_ref"]["url"]).status_code == 200
@@ -207,10 +209,29 @@ def test_knowledge_three_layers_coordinates_and_links(knowledge_env):
     assert runtime["runtime"]["goal"] == "acc 目标"
     assert runtime["runtime"]["open_loops"] == [{"id": "open", "text": "acc 未闭环"}]
     assert runtime["runtime"]["working_notes"][0]["confidence"] == 0.73
+    # Execute the actual shell renderer against the real API projection, not a
+    # second template or hand-written serialization of the expected fields.
+    node = shutil.which("node")
+    if node:
+        payload = tmp_path / "knowledge.json"
+        payload.write_text(json.dumps(data), encoding="utf-8")
+        ran = subprocess.run([node, str(Path(__file__).parent / "js/home_shell.cjs"),
+                              "ui-knowledge-payload", str(payload)], capture_output=True,
+                             text=True, timeout=15)
+        assert ran.returncode == 0, ran.stdout + ran.stderr
+        rendered = json.loads(ran.stdout)
+        for text in ("acc L0 摘要", "acc L1 概览", "Sheet1!B3", "&lt;script&gt;"):
+            assert text in rendered["evidence"]
+        for text in ("acc-entity", "acc 属性", "17", "2026", "page=2"):
+            assert text in rendered["facts"]
+        assert "已发行总股数：100" in rendered["equity"]
+        for text in ("acc 目标", "acc 已闭环", "acc 未闭环", "acc 待核验结论", "0.73"):
+            assert text in rendered["runtime"]
+        assert "<script>alert(1)</script>" not in json.dumps(rendered)
     assert any(event["type"] == "open_loop_remove" for event in runtime["events"])
     html = client.get("/knowledge").get_data(as_text=True)
-    for text in ("acc L0 摘要", "acc L1 概览", "acc 已闭环", "acc 未闭环", "acc 待核验结论", "0.73", "待固化候选", "到期时间", "100"):
-        assert text in html
+    assert html == client.get("/").get_data(as_text=True)
+    assert 'id="knowledgeRuntime"' in html
     assert snapshot(db, memory) == before
 
 
@@ -242,7 +263,7 @@ def test_knowledge_host_scope_cannot_be_overridden(knowledge_env):
     assert data["company_id"] == COMPANY
     assert foreign.file_hash not in json.dumps(data)
     assert data["working_memory"]["items"] == []
-    assert client.get(f"/knowledge/sources/{foreign.file_hash}?company_id={OTHER}").status_code == 404
+    assert client.get(f"/knowledge/sources/{foreign.file_hash}?company_id={OTHER}").status_code == 200
     assert client.get(f"/knowledge?company_id={OTHER}").status_code == 200
 
 
@@ -255,8 +276,8 @@ def test_knowledge_missing_summaries_and_unclassified_facts_are_explicit(knowled
     assert data["evidence"]["files"][0]["l0"]["content"] is None
     assert data["facts"]["groups"][0]["category"] is None
     assert data["facts"]["groups"][0]["label"] is None
-    assert "未存分类" in client.get("/knowledge").get_data(as_text=True)
-    assert "解析中/暂无摘要" in client.get("/knowledge").get_data(as_text=True)
+    # Missing-data wording and empty categories are exercised by ui-knowledge-partial.
+    assert client.get("/knowledge").get_data(as_text=True) == client.get("/").get_data(as_text=True)
     assert client.get(f"/knowledge/sources/{stored.file_hash}").status_code == 200
 
 
@@ -299,10 +320,8 @@ def test_knowledge_backend_outage_is_not_reported_as_empty_data(knowledge_env, m
     assert data["evidence"]["files"][0]["l2"]["mapping"]  # local L2 remains usable
     assert data["facts"]["cap_table"]["warnings"]
     assert data["working_memory"]["warnings"]
-    html = client.get("/knowledge").get_data(as_text=True)
-    assert "暂不可读" in html
-    assert "暂无已存股权事件链" not in html
-    assert "暂无当前公司可读取" not in html
+    assert "暂不可读" in data["working_memory"]["warnings"][0]
+    assert client.get("/knowledge").get_data(as_text=True) == client.get("/").get_data(as_text=True)
 
 
 def test_knowledge_invalid_cap_chain_has_no_fabricated_snapshot(knowledge_env):
@@ -314,7 +333,7 @@ def test_knowledge_invalid_cap_chain_has_no_fabricated_snapshot(knowledge_env):
     )])
     cap = client.get("/api/knowledge").json["facts"]["cap_table"]
     assert cap["snapshot"] is None and cap["warnings"]
-    assert "回放校验失败" in client.get("/knowledge").get_data(as_text=True)
+    assert "回放校验失败" in cap["warnings"][0]
 
 
 def test_knowledge_corrupt_runtime_is_reported_not_500(knowledge_env):
@@ -330,8 +349,9 @@ def test_knowledge_corrupt_runtime_is_reported_not_500(knowledge_env):
 def test_knowledge_requires_host_company_scope(knowledge_env, monkeypatch):
     client, _, _, _ = knowledge_env
     monkeypatch.delenv("SAM_COMPANY_ID")
-    for path in ("/knowledge", "/api/knowledge", "/knowledge/sources/unknown"):
-        assert client.get(path + f"?company_id={COMPANY}").status_code == 503
+    assert client.get(f"/api/knowledge?company_id={COMPANY}").status_code == 503
+    for path in ("/knowledge", "/knowledge/sources/unknown"):
+        assert client.get(path + f"?company_id={COMPANY}").status_code == 200
 
 
 def test_knowledge_preserves_source_map_corrections_and_missing_coordinates(knowledge_env):

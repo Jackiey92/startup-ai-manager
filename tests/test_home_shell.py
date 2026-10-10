@@ -142,7 +142,10 @@ def test_full_routes_still_work_and_readonly_blocks_before_services(shell_web, m
 @pytest.mark.parametrize("case", ["api", "empty", "failure", "label", "readonly", "full", "ui-readonly", "ui-full",
     "ui-cabinet-registration", "ui-cabinet-409", "ui-cabinet-lifecycle", "ui-cabinet-actions",
     "ui-cabinet-errors", "ui-cabinet-readonly", "ui-cabinet-pause", "ui-cabinet-registration-error",
-    "ui-cabinet-upload-error", "ui-cabinet-races", "ui-cabinet-upload-race"])
+    "ui-cabinet-upload-error", "ui-cabinet-races", "ui-cabinet-upload-race",
+    "ui-knowledge-data", "ui-knowledge-empty", "ui-knowledge-failure", "ui-knowledge-partial",
+    "ui-knowledge-warnings", "ui-knowledge-race", "ui-knowledge-cabinet", "ui-knowledge-cabinet-readonly",
+    "ui-knowledge-legacy", "ui-knowledge-legacy-source"])
 def test_javascript_foundation_contracts(case):
     node = shutil.which("node")
     if not node:
@@ -159,8 +162,9 @@ def test_file_cabinet_stays_inside_the_owned_wizard():
     assert 'id="importRegistration" hidden' in source
     assert 'for="importCompanyName"' in source
     assert 'id="importFiles" aria-live="polite"' in source
-    assert 'target="_blank" rel="noopener">查看结果' in source
-    assert 'href="/knowledge/sources/' in source
+    assert "button('result','查看结果')" in source
+    assert "button('source','溯源')" in source
+    assert 'target="_blank" rel="noopener">查看结果' not in source
 
 
 def test_cabinet_registration_read_and_write_boundary(shell_web):
@@ -238,3 +242,17 @@ def test_cabinet_job_transport_and_existing_result_routes(shell_web, monkeypatch
     finally:
         release.set()
         manager.executor.shutdown(wait=True, cancel_futures=True)
+
+
+def test_knowledge_old_routes_share_shell_without_reading_services(shell_web, monkeypatch):
+    web = shell_web
+    monkeypatch.setattr(web, "knowledge_service", lambda: pytest.fail("HTML must only serve the shell"))
+    client = web.app.test_client()
+    home = client.get('/')
+    for path in ('/knowledge', '/knowledge/sources/unknown?page=0&locator=Sheet1!B3'):
+        result = client.get(path + ('&' if '?' in path else '?') + 'company_id=foreign')
+        assert result.status_code == 200
+        assert result.data == home.data
+        assert result.headers['Cache-Control'] == 'no-store'
+    if web.RUNTIME_CONFIG.cloud_readonly:
+        assert not web.MAIN_DB.exists()

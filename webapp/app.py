@@ -630,9 +630,7 @@ def knowledge_service() -> KnowledgeService:
 
 @app.route("/knowledge", methods=["GET"])
 def knowledge_page():
-    company_id = _knowledge_company_id()
-    return render_template("knowledge.html", company_id=company_id, read_only=True,
-                           knowledge=knowledge_service().read(company_id=company_id))
+    return home_page()
 
 
 @app.route("/api/knowledge", methods=["GET"])
@@ -642,14 +640,7 @@ def api_knowledge():
 
 @app.route("/knowledge/sources/<file_hash>", methods=["GET"])
 def knowledge_source_page(file_hash: str):
-    company_id = _knowledge_company_id()
-    try:
-        source = knowledge_service().source(company_id=company_id, file_hash=file_hash)
-    except KeyError:
-        abort(404)
-    return render_template("knowledge_source.html", company_id=company_id, read_only=True,
-                           source=source, source_page=request.args.get("page"),
-                           source_locator=request.args.get("locator"))
+    return home_page()
 
 
 @app.route("/files")

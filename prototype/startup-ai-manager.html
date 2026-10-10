@@ -297,6 +297,20 @@ td.b,th.b{text-align:right;} td b{color:var(--t1);font-weight:600;}
 .import-resume{font-size:11px;color:var(--t3);margin-top:10px;}
 .import-chat-float{position:absolute;right:22px;bottom:22px;z-index:2;display:flex;align-items:center;gap:7px;border:1px solid #dbe2ff;background:#fff;color:var(--primary);border-radius:99px;padding:8px 12px;box-shadow:0 8px 24px rgba(77,107,254,.18);font:600 12px var(--fs);cursor:pointer;}.import-chat-float:hover{background:#eef1ff;}
 
+/* Knowledge uses the permanent shell's cards, grids, tables and mask. */
+.knowledge-section{margin-top:24px;min-width:0;}
+.knowledge-stack{display:grid;gap:16px;}
+.knowledge-empty{color:var(--t3);font-size:13px;line-height:1.7;}
+.knowledge-prose{white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.7 var(--fs);color:var(--t2);margin:10px 0;}
+.knowledge-meta{font-size:12px;line-height:1.7;color:var(--t3);overflow-wrap:anywhere;}
+.knowledge-detail{margin-top:14px;}.knowledge-detail summary{cursor:pointer;color:var(--primary);font-size:13px;}
+.knowledge-source{display:inline-block;color:var(--primary);font-size:12px;line-height:1.7;margin-top:8px;text-decoration:none;}
+.knowledge-selected{outline:2px solid var(--primary);outline-offset:2px;}
+#knowledge .card-h{gap:10px;flex-wrap:wrap;}#knowledge .card-h h3{overflow-wrap:anywhere;min-width:0;}
+#knowledge .grid>*{min-width:0;}#knowledge .table-wrap{overflow-x:auto;}
+#knowledge td{overflow-wrap:anywhere;white-space:normal;}#knowledge table{min-width:640px;}
+#knowledgeSourceBody{overflow-y:auto;min-height:0;}
+
 /* ============ 企业成长信息 ============ */
 .growth-card{margin-top:16px;}
 .growth-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:13px;}
@@ -841,10 +855,10 @@ a.sys-item{text-decoration:none;}
 
       <!-- 系统入口：知识库与文件柜始终保留，其他系统工具暂隐 -->
       <div class="nav-label">系统入口</div>
-      <a class="sys-item" href="/knowledge">
+      <button class="sys-item" type="button" data-go="knowledge">
         <span class="ah-ic" style="background:#f0ecff;color:var(--purple)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5C9 3 5 3 2 4v15c3-1 7-1 10 1 3-2 7-2 10-1V4c-3-1-7-1-10 1zM12 5v15"/></svg></span>
         知识库
-      </a>
+      </button>
       <button class="sys-item import-entry" id="importNavBtn" type="button">
         <span class="ah-ic" style="background:#f0ecff;color:var(--purple)"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span>
         文件柜<span class="g-dot" style="background:var(--primary)"></span>
@@ -1063,6 +1077,34 @@ a.sys-item{text-decoration:none;}
         </div>
 
       </div>
+    </div>
+
+    <!-- ================= KNOWLEDGE ================= -->
+    <!-- 知识库：只读投影，永久主页壳内切页 -->
+    <div class="screen" id="knowledge">
+      <div class="board-scroll" id="knowledgeScroll">
+        <div class="sec-head"><h2>知识库</h2><span class="sub">只读查看已存知识和来源；不在此编辑、裁决或固化。</span><span class="sub" id="knowledgeDataSource" aria-live="polite"></span></div>
+        <section class="knowledge-section" id="evidence">
+          <div class="sec-head"><h2>📄 原始证据 · 2A</h2><span class="sub">摘要与概览是整文件级导航，并非事实确认；页码与单元格坐标以 L2 为准。缺失坐标不会补造。</span></div>
+          <div class="knowledge-stack" id="knowledgeEvidence"><div class="card knowledge-empty">暂无原始证据。当前公司尚未存入来源文件。</div></div>
+        </section>
+        <section class="knowledge-section" id="confirmed-facts">
+          <div class="sec-head"><h2>✅ 确认事实 · 2B</h2><span class="sub">仅展示当前有效 verified 事实；分组沿用来源文件的已存分类。</span></div>
+          <div class="knowledge-stack" id="knowledgeFacts"><div class="card knowledge-empty">暂无确认事实。未确认候选不会显示为 2B 事实。</div></div>
+          <div class="card mt16" id="knowledgeEquity"></div>
+        </section>
+        <section class="knowledge-section" id="working-memory">
+          <div class="sec-head"><h2>⏱️ 工作记忆 · 2C</h2><span class="sub">临时工作上下文，不是已确认事实；会过期，以 expires_at 为准。页面只读，不清理或续期。</span></div>
+          <div class="knowledge-stack" id="knowledgeRuntime"><div class="card knowledge-empty">暂无当前公司可读取的 runtime 工作记忆。</div></div>
+        </section>
+      </div>
+    </div>
+
+    <div class="import-mask" id="knowledgeSourceMask" aria-hidden="true">
+      <section class="import-wizard" role="dialog" aria-modal="true" aria-labelledby="knowledgeSourceTitle">
+        <header class="import-head"><div><div class="import-eyebrow">知识库 · L2 溯源</div><h2 id="knowledgeSourceTitle">L2 原文</h2><p>已存原文与原始坐标；只读，不补造缺失值。</p></div><button class="import-close" id="knowledgeSourceClose" type="button" aria-label="关闭原文弹窗">×</button></header>
+        <div class="import-main" id="knowledgeSourceBody"></div>
+      </section>
     </div>
 
     <!-- ================= CHAT ================= -->
@@ -1697,17 +1739,21 @@ a.sys-item{text-decoration:none;}
   var TITLES={
     overview:"企业综合",chat:"Startup AI Manager",info:"企业基本信息",bizov:"业务概览",hr:"人员管理",
     prod:"生产",purch:"采购",sales:"销售",mkt:"市场",fin:"财务",fund:"融资",
-    ext:"扩展中心",cal:"日程",drive:"云盘"
+    ext:"扩展中心",cal:"日程",drive:"云盘",knowledge:"知识库"
   };
   var topbar=document.getElementById('topbar'),crumb=document.getElementById('crumb');
 
+  var knowledgeNavigation=0;
   /* ---------- screen routing ---------- */
   function go(id){
+    ++knowledgeNavigation;
+    if(sourceMask&&sourceMask.classList.contains('open'))closeKnowledgeSource();
     document.querySelectorAll('.screen').forEach(function(s){s.classList.toggle('active',s.id===id);});
     document.querySelectorAll('.sub-item').forEach(function(n){n.classList.toggle('active',n.dataset.go===id);});
     document.querySelectorAll('.ov-item,.sys-item').forEach(function(n){n.classList.toggle('active',n.dataset.go===id);});
     crumb.textContent=TITLES[id]||'';
     topbar.style.display=(id==='chat')?'none':'flex';
+    if(id==='knowledge')return loadKnowledge();
   }
   document.querySelectorAll('[data-go]').forEach(function(b){
     b.addEventListener('click',function(){go(b.dataset.go);});
@@ -2101,8 +2147,7 @@ a.sys-item{text-decoration:none;}
       else label=status==='uploading'?'上传中…':(status||'');
       function button(action,text){return '<button class="import-nav" type="button" data-import-action="'+action+'" data-import-index="'+index+'"'+(entry.busy?' disabled':'')+'>'+text+'</button>';}
       if(job&&status==='done'){
-        var hash=encodeURIComponent(job.file_hash);
-        actions='<a class="import-nav" href="/knowledge#source-'+hash+'" target="_blank" rel="noopener">查看结果</a><a class="import-nav" href="/knowledge/sources/'+hash+'" target="_blank" rel="noopener">溯源</a>';
+        actions=button('result','查看结果')+button('source','溯源');
       }
       if(job&&status==='queued')actions+=button('cancel','取消');
       if(status==='failed'||status==='canceled')actions+=button('retry','重试');
@@ -2194,6 +2239,14 @@ a.sys-item{text-decoration:none;}
     if(!button||!importFiles.contains(button))return;
     var entry=uploadedFiles[Number(button.dataset.importIndex)],action=button.dataset.importAction;
     if(!entry||entry.busy)return;
+    if(action==='result'){
+      closeImportWizard();var pending=go('knowledge'),navigation=knowledgeNavigation,loaded=await pending;
+      if(loaded&&navigation===knowledgeNavigation)focusKnowledgeFile(entry.job.file_hash);return;
+    }
+    if(action==='source'){
+      closeImportWizard();var navigation=knowledgeNavigation,loaded=await loadKnowledge();
+      if(loaded&&navigation===knowledgeNavigation&&!importMask.classList.contains('open'))openKnowledgeSource({file_hash:entry.job.file_hash},document.getElementById('importNavBtn'));return;
+    }
     if(action==='poll'){entry.error='';await pollJob(entry);return;}
     if(!window.SAM.ui.allowWrite())return;
     if(!entry.job){await uploadImportFile(entry);return;}
@@ -2220,6 +2273,127 @@ a.sys-item{text-decoration:none;}
   ['dragleave','drop'].forEach(function(evt){importDrop.addEventListener(evt,function(e){e.preventDefault();importDrop.classList.remove('drag');if(evt==='drop')handleImportFiles(e.dataTransfer.files);});});
   document.getElementById('importRefresh').addEventListener('click',refreshGuide);
   importMask.addEventListener('click',function(e){if(e.target===importMask)closeImportWizard();});
+
+  /* ---------- knowledge: opaque read projection, no classification/inference ---------- */
+  var knowledgeData={},knowledgeVersion=0,sourceReturnFocus=null;
+  var sourceMask=document.getElementById('knowledgeSourceMask');
+  var sourceClose=document.getElementById('knowledgeSourceClose');
+  window.SAM.demo.knowledge={}; // failed/empty reads show clean empty states, never fake facts
+  function kObject(value){return value&&typeof value==='object'&&!Array.isArray(value)?value:{};}
+  function kList(value){return Array.isArray(value)?value:[];}
+  function kMissing(value){return value===null||value===undefined||value==='';}
+  function kText(value,fallback){
+    if(kMissing(value))value=fallback===undefined?'未提供':fallback;
+    return escapeImport(typeof value==='object'?JSON.stringify(value,null,2):String(value));
+  }
+  function kEmpty(text){return '<div class="card knowledge-empty">'+text+'</div>';}
+  function kProse(value){return '<pre class="knowledge-prose">'+kText(value)+'</pre>';}
+  function kWarnings(value){return kList(value).map(function(w){return '<p class="knowledge-meta" role="status">'+kText(w)+'</p>';}).join('');}
+  function kRef(value){
+    var ref=kObject(value);
+    if(kMissing(ref.file_hash))return '<p class="knowledge-meta">暂无可用 L2 原文链接</p>';
+    var url='/knowledge/sources/'+encodeURIComponent(ref.file_hash),params=[];
+    if(!kMissing(ref.page))params.push('page='+encodeURIComponent(ref.page));
+    if(!kMissing(ref.locator))params.push('locator='+encodeURIComponent(ref.locator));
+    if(params.length)url+='?'+params.join('&');
+    return '<a class="knowledge-source" href="'+kText(url)+'" data-knowledge-source="'+kText(ref.file_hash)+'" data-page="'+kText(ref.page,'')+'" data-locator="'+kText(ref.locator,'')+'">查看 L2 原文 · 页码 '+kText(ref.page,'未提供（整文件）')+(kMissing(ref.locator)?'':' · '+kText(ref.locator))+'</a>';
+  }
+  function kL2(file,ref){
+    var l2=kObject(file.l2),pages=kList(l2.pages);
+    var body=kWarnings(file.warnings)+'<p class="knowledge-meta">file_hash：'+kText(file.file_hash)+'</p>';
+    if(!kMissing(l2.manifest_uri))body+='<p class="knowledge-meta">L2 manifest：'+kText(l2.manifest_uri)+'</p>';
+    if(ref&&(!kMissing(ref.page)||!kMissing(ref.locator)))body+='<p class="knowledge-meta">请求查看的坐标：页码 '+kText(ref.page)+' · '+kText(ref.locator,'定位字段未提供')+'。以下保留已存原文坐标，不补造缺失值。</p>';
+    if(pages.length){
+      body+=pages.map(function(page){
+        page=kObject(page);
+        var selected=ref&&!kMissing(ref.page)&&String(ref.page)===String(page.page);
+        return '<details class="card knowledge-detail'+(selected?' knowledge-selected':'')+'" '+(!ref||kMissing(ref.page)||selected?'open':'')+'><summary>原文页码：'+kText(page.page)+'</summary>'+(!kMissing(page.mapping)?kProse(page.mapping):'<p class="knowledge-empty">尚无可读取的 L2 原文。</p>')+'</details>';
+      }).join('');
+    }else body+=!kMissing(l2.mapping)?kProse(l2.mapping):kEmpty('尚无可读取的 L2 原文，文件可能仍在解析或解析未成功。');
+    return body;
+  }
+  function renderKnowledge(data){
+    data=kObject(data);var evidence=kObject(data.evidence),facts=kObject(data.facts),working=kObject(data.working_memory);
+    document.getElementById('knowledgeEvidence').innerHTML=kList(evidence.files).map(function(file){
+      file=kObject(file);
+      return '<article class="card" id="source-'+kText(encodeURIComponent(file.file_hash||''))+'"><div class="card-h"><h3>'+kText(file.original_name)+'</h3><span class="sub">'+kText(file.status)+'</span></div>'+kWarnings(file.warnings)+
+        '<div class="grid g2">'+['l0','l1'].map(function(level){var item=kObject(file[level]);return '<div><h4>'+ (level==='l0'?'L0 摘要':'L1 概览')+'</h4>'+(!kMissing(item.content)?kProse(item.content)+kRef(item.source_ref):'<p class="knowledge-meta">解析中/暂无'+(level==='l0'?'摘要':'概览')+'</p>')+'</div>';}).join('')+'</div>'+
+        '<details class="knowledge-detail"><summary>展开 L2 原文片段与坐标</summary>'+kL2(file)+'</details>'+kRef(file.source_ref)+'</article>';
+    }).join('')||kEmpty('暂无原始证据。当前公司尚未存入来源文件。');
+    document.getElementById('knowledgeFacts').innerHTML=kList(facts.groups).map(function(group){
+      group=kObject(group);
+      return '<article class="card"><div class="card-h"><h3>'+kText(kMissing(group.label)?group.category:group.label,'未存分类')+'</h3></div><div class="table-wrap"><table><thead><tr><th>实体</th><th>属性</th><th>数值 / 内容</th><th>期间</th><th>L2 溯源</th></tr></thead><tbody>'+kList(group.facts).map(function(fact){fact=kObject(fact);return '<tr><td>'+kText(fact.entity)+'</td><td>'+kText(fact.attribute)+'</td><td>'+kText(fact.value)+(kMissing(fact.unit)?'':' '+kText(fact.unit))+'</td><td>'+kText(fact.period)+'</td><td>'+kRef(fact.source_ref)+(kMissing(kObject(fact.source_ref).locator)?'<p class="knowledge-meta">原文定位字段未提供</p>':'')+'</td></tr>';}).join('')+'</tbody></table></div></article>';
+    }).join('')||kEmpty('暂无确认事实。未确认候选不会显示为 2B 事实。');
+    var equity=kObject(facts.cap_table),balance=kObject(equity.snapshot);
+    var equityHtml='<div class="card-h"><h3>股权事件链回放</h3></div>'+kWarnings(equity.warnings);
+    if(Object.keys(balance).length){
+      equityHtml+='<p class="knowledge-meta">已发行总股数：'+kText(balance.total_issued)+' · 完全稀释总股数：'+kText(balance.total_fully_diluted)+' · 期权池：'+kText(balance.option_pool)+'</p><div class="table-wrap"><table><thead><tr><th>持有人</th><th>已发行</th><th>完全稀释</th><th>已发行持股比例</th><th>完全稀释持股比例</th></tr></thead><tbody>'+Object.entries(kObject(balance.holders)).map(function(pair){var h=kObject(pair[1]);return '<tr><td>'+kText(pair[0])+'</td>'+['issued','fully_diluted','ownership_issued_pct','ownership_fully_diluted_pct'].map(function(key){return '<td>'+kText(h[key])+(key.endsWith('_pct')&&!kMissing(h[key])?'%':'')+'</td>';}).join('')+'</tr>';}).join('')+'</tbody></table></div><p class="knowledge-meta">由现有回放函数计算，不写入或更新股权快照。</p>';
+      if(balance.event_ids)equityHtml+='<p class="knowledge-meta">有效事件 event_ids：'+kText(balance.event_ids)+'</p>';
+    }else if(!kList(equity.warnings).length)equityHtml+='<p class="knowledge-empty">暂无已存股权事件链，不展示占位持股数值。</p>';
+    if(kList(equity.events).length)equityHtml+='<details class="knowledge-detail"><summary>查看事件与来源（含历史修正；有效事件以回放 event_ids 为准）</summary>'+equity.events.map(function(event){event=kObject(event);return '<div class="mt16"><b>'+kText(event.effective_at)+' · '+kText(event.event_type)+'</b><p class="knowledge-meta">'+kText(event.holder_id)+' · '+kText(event.instrument)+' · '+kText(event.shares_delta)+' · '+kText(event.ownership_basis)+' · '+kText(event.event_id)+'</p>'+kList(event.provenance).map(function(ref){ref=kObject(ref);return kRef(ref.source_ref)+kProse(ref.anchor);}).join('')+'</div>';}).join('')+'</details>';
+    document.getElementById('knowledgeEquity').innerHTML=equityHtml;
+    document.getElementById('knowledgeRuntime').innerHTML=kWarnings(working.warnings)+(kList(working.items).map(function(item){
+      item=kObject(item);var runtime=kObject(item.runtime),events=kList(item.events).map(kObject);
+      var closed=events.filter(function(e){return e.type==='open_loop_remove';});
+      return '<article class="card"><div class="card-h"><h3>'+kText(runtime.goal)+'</h3><span class="sub">存储状态：'+kText(runtime.state)+'</span></div><p class="knowledge-meta">session：'+kText(runtime.session_id)+' · task：'+kText(runtime.task_id)+'</p><p class="knowledge-meta">临时性 · 到期时间：'+kText(runtime.expires_at)+'</p><div class="grid g2 mt16"><div><h4>未闭环 loop</h4>'+ (kList(runtime.open_loops).map(function(loop){loop=kObject(loop);return '<p class="knowledge-prose">'+kText(loop.id)+' · '+kText(loop.text)+'</p>';}).join('')||'<p class="knowledge-meta">暂无未闭环 loop。</p>')+'</div><div><h4>闭环记录</h4>'+ (closed.map(function(event){var payload=kObject(event.payload);return '<p class="knowledge-prose">'+kText(event.at)+' · '+kText(payload.id)+events.filter(function(e){return e.type==='open_loop_add'&&kObject(e.payload).id===payload.id;}).map(function(e){return ' · '+kText(kObject(e.payload).text);}).join('')+'</p>';}).join('')||'<p class="knowledge-meta">暂无已存闭环事件。</p>')+'</div></div><div class="mt16"><h4>待固化候选 / 临时 note</h4><p class="knowledge-meta">以下为 runtime 的工作笔记，尚未进入 2B，仅供后续核验。</p>'+ (kList(runtime.working_notes).map(function(note){note=kObject(note);return kProse(note.text)+'<p class="knowledge-meta">置信度：'+kText(note.confidence)+' · '+kText(note.status)+(note.inferred?' · 推断':'')+' · 到期 '+kText(runtime.expires_at)+'</p>';}).join('')||'<p class="knowledge-meta">暂无待固化候选或临时 note。</p>')+'</div><details class="knowledge-detail"><summary>事件时间线</summary>'+ (events.map(function(event){return '<div class="mt16"><b>'+kText(event.at)+' · '+kText(event.type)+'</b>'+kProse(event.payload)+'</div>';}).join('')||'<p class="knowledge-meta">暂无已存事件。</p>')+'</details></article>';
+    }).join('')||(!kList(working.warnings).length?kEmpty('暂无当前公司可读取的 runtime 工作记忆。'):''));
+  }
+  async function loadKnowledge(){
+    var version=++knowledgeVersion;
+    var result=await window.SAM.data.load('knowledge',{url:'/api/knowledge'});
+    if(version!==knowledgeVersion)return false;
+    knowledgeData=kObject(result.data);renderKnowledge(knowledgeData);
+    window.SAM.data.mark(document.getElementById('knowledgeDataSource'),result);
+    return true;
+  }
+  function focusKnowledgeFile(hash){
+    document.querySelectorAll('#knowledge .knowledge-selected').forEach(function(card){card.classList.remove('knowledge-selected');});
+    var card=document.getElementById('source-'+encodeURIComponent(hash));
+    if(card&&document.getElementById('knowledge').classList.contains('active')){card.classList.add('knowledge-selected');card.scrollIntoView({block:'start',behavior:'smooth'});}
+  }
+  function openKnowledgeSource(ref,returnFocus){
+    var file=kList(kObject(knowledgeData.evidence).files).find(function(item){return kObject(item).file_hash===ref.file_hash;});
+    sourceReturnFocus=returnFocus||document.activeElement;
+    document.getElementById('knowledgeSourceTitle').textContent=file&&!kMissing(file.original_name)?String(file.original_name):'L2 原文';
+    document.getElementById('knowledgeSourceBody').innerHTML=file?kL2(file,ref):kEmpty('尚无可读取的 L2 原文，文件可能仍在解析或解析未成功。');
+    sourceMask.classList.add('open');sourceMask.setAttribute('aria-hidden','false');sourceClose.focus();
+    document.getElementById('knowledgeSourceBody').scrollTop=0;
+    var selected=sourceMask.querySelector('.knowledge-selected');
+    if(selected)selected.scrollIntoView({block:'nearest'});
+  }
+  function closeKnowledgeSource(){
+    sourceMask.classList.remove('open');sourceMask.setAttribute('aria-hidden','true');
+    if(sourceReturnFocus&&sourceReturnFocus.isConnected)sourceReturnFocus.focus();
+  }
+  document.getElementById('knowledge').addEventListener('click',function(event){
+    var link=event.target.closest('[data-knowledge-source]');
+    if(!link||!document.getElementById('knowledge').contains(link))return;
+    event.preventDefault();openKnowledgeSource({file_hash:link.dataset.knowledgeSource,page:link.dataset.page,locator:link.dataset.locator});
+  });
+  sourceClose.addEventListener('click',closeKnowledgeSource);
+  sourceMask.addEventListener('click',function(event){if(event.target===sourceMask)closeKnowledgeSource();});
+  sourceMask.addEventListener('keydown',function(event){
+    if(event.key==='Escape'){event.preventDefault();closeKnowledgeSource();}
+    if(event.key==='Tab'){
+      var focusable=sourceMask.querySelectorAll('button,summary,a[href]'),first=focusable[0],last=focusable[focusable.length-1];
+      if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
+      else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+    }
+  });
+  // Old links and refreshes resolve client-side; the backend only serves the shell.
+  async function routeKnowledgeLocation(){
+    var location=window.location;if(!location)return;
+    var prefix='/knowledge/sources/',isSource=location.pathname.startsWith(prefix);
+    if(location.pathname!=='/knowledge'&&!isSource&&!location.hash.startsWith('#source-'))return;
+    var pending=go('knowledge'),navigation=knowledgeNavigation,loaded=await pending;
+    if(!loaded||navigation!==knowledgeNavigation)return;
+    var hash='';try{hash=decodeURIComponent(isSource?location.pathname.slice(prefix.length):location.hash.startsWith('#source-')?location.hash.slice(8):'');}catch(_){return;}
+    if(hash)focusKnowledgeFile(hash);
+    if(isSource){var params=new URLSearchParams(location.search);openKnowledgeSource({file_hash:hash,page:params.get('page'),locator:params.get('locator')});}
+  }
+  renderKnowledge({});
+  window.addEventListener('hashchange',routeKnowledgeLocation);
+  window.addEventListener('popstate',routeKnowledgeLocation);
 
   /* ========== 消息关注 ========== */
   var NEWS=[
@@ -2350,6 +2524,7 @@ a.sys-item{text-decoration:none;}
     });
     renderFilters();renderNews();closeNewsSet();
   });
+  routeKnowledgeLocation();
 })();
 </script>
 </body>
