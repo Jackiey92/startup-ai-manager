@@ -209,12 +209,10 @@ def main() -> int:
 
     paths = {
         "2b cap_table": f"{scratch}/2b_facts/{company}/cap_table.json",
-        "2a L2 coordinate": f"{scratch}/2a_extraction/{company}/source-connectivity/L2/manifest.json",
         "conversation thread index": f"{scratch}/conversations/thread_index.json",
     }
     payloads = {
         "2b cap_table": b'{"status":"verified","fact_key":"cap_table","shares":42}\n',
-        "2a L2 coordinate": b'{"source_id":"source-connectivity","coordinate":"page=1"}\n',
         "conversation thread index": b'[{"company_id":"acc-connectivity","thread_id":"thread-connectivity"}]\n',
     }
     succeeded: list[str] = []
@@ -242,7 +240,6 @@ def main() -> int:
         # Files were created directly under several shapes, so remove only
         # specifically-created directories and tolerate already-removed files.
         for uri in (f"{scratch}/2b_facts/{company}",
-                    f"{scratch}/2a_extraction/{company}",
                     f"{scratch}/conversations"):
             try:
                 _delete_with_retry(provider, uri, recursive=True)

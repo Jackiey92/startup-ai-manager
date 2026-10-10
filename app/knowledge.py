@@ -11,7 +11,6 @@ from .classifier import ClassificationService
 from .db.database import connect
 from .memory.company_facts import ConsolidationService
 from .memory.company_facts.l2_cap_table import CapTableStore, replay_cap_table
-from .memory.archive.archive_service import ExtractionMemoryService
 from .ports import MemoryUnavailable
 from .memory.user_memory.l1_memory_brief import RuntimeWorkingMemory
 from .storage.mapping_store import SourceMapService, render_mapping
@@ -22,7 +21,6 @@ class KnowledgeService:
         self.db_path = db_path
         self.memory = memory
         self.maps = SourceMapService(db_path, objects_path)
-        self.extraction = ExtractionMemoryService(memory)
 
     def _catalog(self, company_id: str) -> list[dict]:
         # source_files has no company column: never enumerate it unscoped.
@@ -67,22 +65,10 @@ class KnowledgeService:
             manifest = None
             warnings.append("已存本地 L2 格式损坏，无法展示原文。")
         abstract = overview = l2_uri = None
-        if manifest:
-            source_id = manifest.get("source_id")
-            if source_id:
-                try:
-                    extracted = self.extraction.read_source(company_id, source_id)
-                    l2_uri = extracted["l2_manifest_uri"]
-                    abstract, overview = extracted["abstract"], extracted["overview"]
-                    remote = extracted["manifest"]
-                    if isinstance(remote, dict) and remote.get("file_hash") == file_hash:
-                        manifest = remote
-                except (MemoryUnavailable, ValueError, TypeError):
-                    warnings.append("记忆后端暂不可读或摘要格式损坏；以下为已存本地 L2。")
         edits = self.maps.list_edits(file_hash=file_hash, company_id=company_id)
         mapping = self.maps.read_map(file_hash=file_hash, company_id=company_id, manifest=manifest) if manifest else None
         ref = self.source_ref(file_hash, l2_manifest_uri=l2_uri)
-        # Summaries are whole-document navigation, not invented per-sentence evidence.
+        # Page mappings preserve original coordinates without remote summaries.
         pages = []
         for page in (manifest or {}).get("pages", []) or []:
             if not isinstance(page, dict):

@@ -27,7 +27,6 @@ from app.memory.company_facts import ConsolidationService, L2CompleteFactService
 from app.entities import EntityBridgeService, EntityRosterService
 from app.guidance import GuideJobCoordinator, ImportGuideService, ModelUnavailable
 from app.harness.staging import StagingStore
-from app.memory.archive.archive_service import ExtractionMemoryService, add_parsed_resource
 from app.memory_map import MapBuilder, MemoryMapTools
 from app.memory.user_memory.l2_conversation import ConversationStore, deterministic_summary
 from app.context_assembler import ContextAssembler
@@ -287,91 +286,21 @@ def _parse_job_worker(job: dict, progress, cancel_event) -> None:
         progress(stage="parsing", current=total or 0, total=total, message=f"解析完成，已读取 {total or 0} 页")
         check_cancel()
 
-        # Content-derived classification and 2A memory are independent of the
-        # 2B transaction.  Keep them outside the short critical section so a
-        # slow provider write does not make the stop button appear hung.
+        # Content classification is a local label, independent of the 2B
+        # transaction. No source content or mapping is sent to OV.
         employee = semantic_employee()
         classification = classification_service().classify_parsed(
             file_hash=job["file_hash"], company_id=job["company_id"], manifest=payload,
         )
         if classification.get("_created_for_parse"):
             classification_id = int(classification["id"])
-        extraction = ExtractionMemoryService(app.extensions["sam_memory_provider"])
-        classify_folder = getattr(extraction, "classify_folder", None)
-        resource_folder = (
-            classify_folder(payload, skills_root=RUNTIME_CONFIG.skill_root,
-                            employee=employee, company_id=job["company_id"],
-                            thread_id=f"parse-job:{job['job_id']}")
-            if callable(classify_folder)
-            else classify_resource_folder(
-                text=json.dumps(payload, ensure_ascii=False),
-                skills_root=RUNTIME_CONFIG.skill_root,
-            )
+        resource_folder = classification.get("resource_folder") or classify_resource_folder(
+            text=json.dumps(payload, ensure_ascii=False),
+            skills_root=RUNTIME_CONFIG.skill_root,
+            employee=employee, company_id=job["company_id"],
+            thread_id=f"parse-job:{job['job_id']}",
         )
-        extraction_record = extraction.ingest(job["company_id"], payload, resource_folder=resource_folder)
-        resource_uri = f"viking://resources/{resource_folder}/{job['file_hash']}.md"
-        staging.update_payload(staging_id, {
-            "resource_folder": resource_folder,
-            "ov_resource_uri": resource_uri,
-            "ov_sidecar_uris": ({
-                "abstract_uri": extraction_record.abstract_uri,
-                "overview_uri": extraction_record.overview_uri,
-            } if extraction_record is not None else {}),
-            "ov_import_status": "pending",
-        })
-        # Source bytes are imported into OV's semantic namespace exactly once;
-        # the employee/skill chooses the folder from parsed content.
-        if not hasattr(extraction, "memory"):
-            # Test doubles and compatibility adapters may only implement the
-            # 2A ingest method; they do not own an OV transport.
-            resource_folder = str(resource_folder)
-        else:
-            try:
-                # OV's local runtime does not parse PDF bytes.  Preserve the
-                # immutable PDF in SAM's object store, but ingest MinerU's
-                # parsed page markdown so OV can build its navigation.
-                _resource_result, imported_uri = add_parsed_resource(
-                    extraction.memory, payload,
-                    parent=f"viking://resources/{resource_folder}",
-                    resource_name=f"{job['file_hash']}.md",
-                    timeout=budget(600),
-                )
-                if imported_uri != resource_uri:
-                    raise RuntimeError(
-                        f"OV resource target mismatch: expected {resource_uri}, got {imported_uri}"
-                    )
-                from app.ports import OpenVikingMemoryProvider
-                if isinstance(extraction.memory, OpenVikingMemoryProvider):
-                    from app.model_provider import OpenAICompatibleProvider
-                    from app.memory.visual_extraction import generate_sidecars
-                    stored = ArchiveFileStore(objects_path=OBJECTS_DIR, db_path=MAIN_DB).get(job["file_hash"])
-                    generate_sidecars(
-                        extraction.memory,
-                        OpenAICompatibleProvider(config=RUNTIME_CONFIG.for_extraction()),
-                        payload, abstract_uri=extraction_record.abstract_uri,
-                        overview_uri=extraction_record.overview_uri,
-                        l2_manifest_uri=extraction_record.l2_manifest_uri,
-                        source_path=ArchiveFileStore(objects_path=OBJECTS_DIR, db_path=MAIN_DB).path_for(job["file_hash"]),
-                    )
-                # Persist exact routes only; SAM L0/L1 bodies remain in 2a.
-                staging.update_payload(staging_id, {
-                    "ov_resource_uri": resource_uri,
-                    "ov_import_status": "submitted",
-                })
-                wait_for_resource = getattr(extraction.memory, "wait_for_resource", None)
-                if wait_for_resource is not None:
-                    # --to --wait is the primary completion point.  Keep only
-                    # a short exact-URI confirmation fallback; never poll a
-                    # folder or wait another 600 seconds for a URI OV did not choose.
-                    wait_for_resource(
-                        resource_uri,
-                        timeout=min(15, budget(15)),
-                        interval=1.0,
-                    )
-            except Exception as exc:
-                app.logger.exception("OV resource import deferred after extraction")
-                staging.update_payload(staging_id, {"ov_import_status": "deferred"})
-                progress(stage="parsing", message=f"OV 语义导入延迟：{exc}")
+        staging.update_payload(staging_id, {"resource_folder": resource_folder})
         check_cancel()
         budget(600)
 
@@ -402,12 +331,6 @@ def _parse_job_worker(job: dict, progress, cancel_event) -> None:
                      f"事实写入完成；{fact_result['unresolved_handoff']['count']} 个事实待经理处理"
                      if fact_result.get("unresolved_handoff") else "事实写入完成"
                  ), critical_end=True)
-        try:
-            MapBuilder(app.extensions["sam_memory_provider"]).rebuild_map(
-                job["company_id"], source_ids=(str(payload["source_id"]),)
-            )
-        except Exception:
-            app.logger.info("memory map update deferred after upload job")
         try:
             queue_import_guide(job["file_hash"], company_id=job["company_id"])
         except Exception:

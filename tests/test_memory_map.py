@@ -3,7 +3,9 @@ from pathlib import Path
 
 import pytest
 
-from app.memory.archive.archive_service import ExtractionMemoryService
+import json
+
+from app.storage.mapping_store import render_mapping
 from app.memory_map import MapBuilder, MemoryMapTools, ROOT
 from app.ports import LocalMemoryProvider
 
@@ -28,9 +30,16 @@ class FakeFiles:
         return self.rows[file_hash]
 
 
+def _legacy_source(memory, company, manifest):
+    """Historical OV fixture for the unchanged stage-4 navigation reader."""
+    root = f"{ROOT}/2a_extraction/{company}/{manifest['source_id']}"
+    memory.put(f"{root}/L2/manifest.json", json.dumps(manifest))
+    memory.put(f"{root}/L2/mapping.md", render_mapping(manifest))
+
+
 def _memory(tmp_path: Path):
     memory = LocalMemoryProvider(tmp_path)
-    ExtractionMemoryService(memory).ingest("acme", {
+    _legacy_source(memory, "acme", {
         "source_id": "source-1", "filename": "report.pdf", "format": "pdf",
         "file_hash": "a" * 64, "pages": [],
         "parse_summary": {"raw_bytes_external": False, "full_text_external": False},
@@ -71,7 +80,7 @@ def test_cached_map_refreshes_when_parallel_import_adds_a_source(tmp_path):
     memory = _memory(tmp_path)
     builder = MapBuilder(memory)
     builder.rebuild_map("acme")
-    ExtractionMemoryService(memory).ingest("acme", {
+    _legacy_source(memory, "acme", {
         "source_id": "source-2", "filename": "brief.pdf", "format": "pdf",
         "file_hash": "b" * 64, "pages": [],
         "parse_summary": {"raw_bytes_external": False, "full_text_external": False},
@@ -98,7 +107,7 @@ def test_tools_enforce_company_scope_and_record_navigation(tmp_path):
 
 def test_manager_global_read_scope_reads_other_company_without_writing_map(tmp_path):
     memory = _memory(tmp_path)
-    ExtractionMemoryService(memory).ingest("other", {
+    _legacy_source(memory, "other", {
         "source_id": "source-2", "filename": "brief.pdf", "format": "pdf",
         "file_hash": "b" * 64, "pages": [],
         "parse_summary": {"raw_bytes_external": False, "full_text_external": False},

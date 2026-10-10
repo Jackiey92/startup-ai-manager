@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from app.memory.archive.archive_service import ExtractionMemoryService
+from tests.test_memory_map import _legacy_source
 from app.memory_map import MapBuilder
 from app.ports import LocalMemoryProvider
 
@@ -26,7 +26,7 @@ def _manifest():
 
 def test_known_source_is_found_by_exact_read_while_ls_lags(tmp_path):
     memory = LaggyListingMemory(tmp_path)
-    ExtractionMemoryService(memory).ingest("acme", _manifest())
+    _legacy_source(memory, "acme", _manifest())
     # Recursive listing is empty; explicit source IDs still point to the
     # parser-owned L2 body so the manager can read the正文 immediately.
     result = MapBuilder(memory).rebuild_map("acme", source_ids=("fresh-source",))

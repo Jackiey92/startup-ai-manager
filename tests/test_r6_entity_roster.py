@@ -4,10 +4,10 @@ from app.db import connect, init_db
 from app.entities import EntityBridgeService, EntityRosterService
 from app.memory.company_facts import L2CompleteFactService
 from app.harness.staging import StagingStore
-from app.memory.archive.archive_service import add_parsed_resource
 from app.classifier.semantic_folders import classify
 from app.ports import LocalMemoryProvider
 from app.storage import ArchiveFileStore
+from app.storage.mapping_store import SourceMapService
 from tests.entity_employee import FixtureEntityEmployee
 
 
@@ -84,6 +84,9 @@ def test_upload_rejects_unregistered_company_with_actionable_message(tmp_path: P
 
 def test_declared_upload_fixture_reaches_all_four_semantic_folders(tmp_path: Path):
     memory = LocalMemoryProvider(tmp_path / "ov")
+    db = tmp_path / "app.db"
+    init_db(db)
+    objects = tmp_path / "data" / "2a" / "bin"
     samples = {
         "财务": "年度营业收入3.26亿元净利润0.58亿元",
         "技术与产品": "技术研发产品路线图",
@@ -91,21 +94,18 @@ def test_declared_upload_fixture_reaches_all_four_semantic_folders(tmp_path: Pat
         "法务": "合同诉讼合规法务",
     }
     for index, (expected, text) in enumerate(samples.items()):
+        stored = ArchiveFileStore(objects, db).put_bytes(text.encode(), original_name=f"source-{index}.pdf")
         manifest = {
             "source_id": f"source-{index}", "filename": f"source-{index}.pdf",
-            "format": "pdf", "file_hash": f"{index + 1:064x}",
+            "format": "pdf", "file_hash": stored.file_hash,
             "parse_summary": {"status": "parsed", "raw_bytes_external": False, "full_text_external": False},
             "pages": [{"page_no": 1, "text_items": [{"text": text}], "tables": []}],
         }
         folder = classify(text=text, employee=_FolderEmployee(),
                           skills_root=Path(__file__).parents[1] / "skills")
         assert folder == expected
-        _result, target = add_parsed_resource(
-            memory, manifest, parent=f"viking://resources/{folder}",
-            resource_name=f"source-{index}.md",
-        )
-        memory.put(f"viking://resources/{folder}/overview.md", "概览已就绪")
-        memory.put(f"viking://resources/{folder}/abstract.md", "OV_READY")
-        assert memory.read(target).startswith("---")
-        assert "概览已就绪" in memory.read(f"viking://resources/{folder}/overview.md")
-        assert "OV_READY" in memory.read(f"viking://resources/{folder}/abstract.md")
+        StagingStore(db, maps_path=objects.parent / "map").save_manifest(manifest)
+        mapping = SourceMapService(db, objects).read_map(file_hash=stored.file_hash, company_id="acme")
+        assert text in mapping and mapping.startswith("---")
+        assert ArchiveFileStore(objects, db).get_bytes(stored.file_hash) == text.encode()
+    assert memory.query(prefix="viking://") == []

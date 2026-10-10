@@ -1,55 +1,16 @@
-import json
-import pytest
-
-from app.memory.archive.archive_service import ConflictScanner, ExtractionMemoryService
-from app.ports import LocalMemoryProvider
-
-
-def manifest(source_id="pdf-1", candidate_facts=None):
-    return {
-        "source_id": source_id,
-        "filename": "sample.pdf",
-        "format": "pdf",
-        "size_bytes": 12,
-        "uploaded_at": "2026-09-25T00:00:00+00:00",
-        "file_hash": "a" * 64,
-        "pages": [{"page_no": 1, "text_items": [], "tables": []}],
-        "images": [],
-        "parse_summary": {
-            "status": "parsed",
-            "engine": "mineru",
-            "text_item_count": 0,
-            "table_count": 0,
-            "table_row_count": 0,
-            "warnings": [],
-            "raw_bytes_external": False,
-            "full_text_external": False,
-        },
-        **({"candidate_facts": candidate_facts} if candidate_facts is not None else {}),
-    }
+"""The archive entry point exposes only external storage capabilities."""
+from app.memory.archive.archive_service import ArchiveFileStore, SourceMapService, render_mapping
+from app.storage.archive_store import ArchiveFileStore as StoredArchive
+from app.storage.mapping_store import SourceMapService as StoredMapping, render_mapping as render
 
 
-def test_2a_writes_l2_and_keeps_l1_l0_as_routes(tmp_path):
-    memory = LocalMemoryProvider(tmp_path)
-    record = ExtractionMemoryService(memory).ingest("acme", manifest())
-
-    assert json.loads(memory.read(record.l2_manifest_uri))["source_id"] == "pdf-1"
-    with pytest.raises(FileNotFoundError):
-        memory.read(record.l1_uri)
-    with pytest.raises(FileNotFoundError):
-        memory.read(record.l0_uri)
-    assert memory.get_2b("acme", "cash") is None
+def test_archive_exports_external_storage_without_wrappers():
+    assert ArchiveFileStore is StoredArchive
+    assert SourceMapService is StoredMapping
+    assert render_mapping is render
 
 
-def test_conflicts_become_pending_todos_not_facts(tmp_path):
-    memory = LocalMemoryProvider(tmp_path)
-    todos = ConflictScanner(memory).scan([
-        manifest("a", {"registered_capital": 100}),
-        manifest("b", {"registered_capital": 120}),
-    ])
-
-    assert len(todos) == 1
-    body = memory.read(todos[0])
-    assert "Status: pending" in body
-    assert "registered_capital" in body
-    assert memory.get_2b("acme", "registered_capital") is None
+def test_memory_package_imports_external_archive_exports():
+    import app.memory as memory
+    assert memory.ArchiveFileStore is StoredArchive
+    assert memory.SourceMapService is StoredMapping

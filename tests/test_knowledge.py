@@ -16,7 +16,6 @@ from app.memory.company_facts import ConsolidationService
 from app.memory.company_facts.l2_cap_table import CapTableEvent, CapTableStore
 from app.memory.company_facts.l2_fact_extractor import ExtractedFact
 from app.harness.staging import StagingStore
-from app.memory.archive.archive_service import ExtractionMemoryService
 from app.ports import LocalMemoryProvider, MemoryUnavailable
 from app.memory.user_memory.l1_memory_brief import RuntimeWorkingMemory
 from app.storage import ArchiveFileStore
@@ -100,7 +99,7 @@ def test_knowledge_auth_does_not_protect_overview(knowledge_env, monkeypatch):
 
 
 def seed_file(env, *, company=COMPANY, module="finance", content=b"acc-source"):
-    _, db, objects, memory = env
+    _, db, objects, _ = env
     stored = ArchiveFileStore(objects, db).put_bytes(content, original_name="acc-report.xlsx")
     loc = {"file_hash": stored.file_hash, "page_no": 2, "locator": "Sheet1!B3"}
     manifest = {"source_id": stored.file_hash, "file_hash": stored.file_hash,
@@ -117,15 +116,12 @@ def seed_file(env, *, company=COMPANY, module="finance", content=b"acc-source"):
                      (file_hash,company_id,module,status,created_at) VALUES (?,?,?,'confirmed','2026-10-09')""",
                      (stored.file_hash, company, module))
         conn.commit()
-    record = ExtractionMemoryService(memory).ingest(company, manifest, resource_folder="acc-test")
-    memory.put(record.abstract_uri, "acc L0 摘要")
-    memory.put(record.overview_uri, "acc L1 概览")
     ConsolidationService(db).consolidate_candidates([ExtractedFact(
         company_id=company, entity="acc-entity", metric="acc 属性", value="17",
         value_type="number", period="2026", unit=None, source_file=stored.file_hash,
         source_page=2, source_span="Sheet1!B3", confidence=1.0, critical=False,
     )])
-    return stored, record
+    return stored, manifest
 
 
 def seed_runtime(memory, *, company=COMPANY, session="acc-session", task="acc-task"):
@@ -170,7 +166,7 @@ def test_knowledge_empty_page_api_and_read_only_methods(knowledge_env):
 
 def test_knowledge_three_layers_coordinates_and_links(knowledge_env, tmp_path):
     client, db, _, memory = knowledge_env
-    stored, record = seed_file(knowledge_env)
+    stored, _ = seed_file(knowledge_env)
     seed_runtime(memory)
     CapTableStore(memory).append_events(COMPANY, [CapTableEvent(
         company_id=COMPANY, effective_at="2026-01-01", event_type="founding_issuance",
@@ -181,9 +177,9 @@ def test_knowledge_three_layers_coordinates_and_links(knowledge_env, tmp_path):
     before = snapshot(db, memory)
     data = client.get("/api/knowledge").json
     evidence = data["evidence"]["files"][0]
-    assert evidence["l0"]["content"] == "acc L0 摘要"
-    assert evidence["l1"]["content"] == "acc L1 概览"
-    assert evidence["l2"]["manifest_uri"] == record.l2_manifest_uri
+    assert evidence["l0"]["content"] is None
+    assert evidence["l1"]["content"] is None
+    assert evidence["l2"]["manifest_uri"] is None
     assert "page=2; locator=Sheet1!B3" in evidence["l2"]["mapping"]
     for level in ("l0", "l1"):
         assert client.get(evidence[level]["source_ref"]["url"]).status_code == 200
@@ -269,9 +265,7 @@ def test_knowledge_host_scope_cannot_be_overridden(knowledge_env):
 
 def test_knowledge_missing_summaries_and_unclassified_facts_are_explicit(knowledge_env):
     client, _, _, memory = knowledge_env
-    stored, record = seed_file(knowledge_env, module=None)
-    memory.delete(record.abstract_uri)
-    memory.delete(record.overview_uri)
+    stored, _ = seed_file(knowledge_env, module=None)
     data = client.get("/api/knowledge").json
     assert data["evidence"]["files"][0]["l0"]["content"] is None
     assert data["facts"]["groups"][0]["category"] is None
@@ -316,7 +310,7 @@ def test_knowledge_backend_outage_is_not_reported_as_empty_data(knowledge_env, m
     monkeypatch.setattr(memory, "read", unavailable)
     monkeypatch.setattr(memory, "query", unavailable)
     data = client.get("/api/knowledge").json
-    assert data["evidence"]["files"][0]["warnings"]
+    assert data["evidence"]["files"][0]["warnings"] == []
     assert data["evidence"]["files"][0]["l2"]["mapping"]  # local L2 remains usable
     assert data["facts"]["cap_table"]["warnings"]
     assert data["working_memory"]["warnings"]
@@ -434,3 +428,22 @@ def test_original_download_is_scoped_authenticated_and_read_only(knowledge_env, 
     ArchiveFileStore(objects, db).path_for(stored.file_hash).unlink()
     assert client.get(url).status_code == 404
     assert snapshot(db, memory) == before
+
+
+def test_knowledge_source_never_reads_remote_manifest_or_summaries(knowledge_env, monkeypatch):
+    from app.knowledge import KnowledgeService
+    _, db, objects, memory = knowledge_env
+    stored, manifest = seed_file(knowledge_env)
+
+    def forbidden(*_args, **_kwargs):
+        pytest.fail("2A source read touched OV")
+
+    monkeypatch.setattr(memory, "read", forbidden)
+    monkeypatch.setattr(memory, "query", forbidden)
+    source = KnowledgeService(db, memory, objects_path=objects).source(
+        company_id=COMPANY, file_hash=stored.file_hash,
+    )
+    assert source["l0"]["content"] is None
+    assert source["l1"]["content"] is None
+    assert source["l2"]["manifest_uri"] is None
+    assert manifest["pages"][0]["text_items"][0]["text"] in source["l2"]["mapping"]

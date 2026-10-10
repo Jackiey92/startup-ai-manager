@@ -413,7 +413,8 @@ def test_cli_worker_flag_cannot_bypass_resident_manager(monkeypatch, capsys):
     assert "authenticated Flask internal endpoint" in capsys.readouterr().err
 
 
-def test_upload_worker_automatically_runs_bridge_worker_verify_and_commit(tmp_path: Path, monkeypatch):
+@pytest.mark.parametrize("classified_folder", [None, "法务"])
+def test_upload_worker_automatically_runs_bridge_worker_verify_and_commit(tmp_path: Path, monkeypatch, classified_folder):
     import webapp.app as webapp
 
     db, stored, _old_bridge = _setup(tmp_path)
@@ -436,7 +437,7 @@ def test_upload_worker_automatically_runs_bridge_worker_verify_and_commit(tmp_pa
 
     class _Classification:
         def classify_parsed(self, **_kwargs):
-            return {"id": 1, "_created_for_parse": False}
+            return {"id": 1, "_created_for_parse": False, "resource_folder": classified_folder}
 
     class _EntityEmployee:
         def attribute_block(self, **_kwargs):
@@ -445,19 +446,8 @@ def test_upload_worker_automatically_runs_bridge_worker_verify_and_commit(tmp_pa
         def classify_document(self, **_kwargs):
             return {"folder": "财务"}
 
-    class _Memory:
-        def __init__(self, _provider):
-            pass
-
-        def ingest(self, *_args, **_kwargs):
-            return None
-
-    class _Map:
-        def __init__(self, _provider):
-            pass
-
-        def rebuild_map(self, *_args, **_kwargs):
-            return None
+    def forbidden(*_args, **_kwargs):
+        pytest.fail("parse worker attempted to write 2A to OV or rebuild navigation")
 
     monkeypatch.setattr(webapp, "MAIN_DB", db)
     monkeypatch.setattr(webapp, "OBJECTS_DIR", tmp_path / "objects")
@@ -465,8 +455,10 @@ def test_upload_worker_automatically_runs_bridge_worker_verify_and_commit(tmp_pa
     monkeypatch.setattr(webapp, "L2CompleteFactService", _InProcessFactService)
     monkeypatch.setattr(webapp, "classification_service", lambda: _Classification())
     monkeypatch.setattr(webapp, "semantic_employee", lambda: _EntityEmployee())
-    monkeypatch.setattr(webapp, "ExtractionMemoryService", _Memory)
-    monkeypatch.setattr(webapp, "MapBuilder", _Map)
+    monkeypatch.setattr(webapp, "MapBuilder", forbidden)
+    memory = webapp.app.extensions["sam_memory_provider"]
+    for method in ("put", "ensure_directory", "add_resource_to"):
+        monkeypatch.setattr(memory, method, forbidden)
     monkeypatch.setattr(webapp, "queue_import_guide", lambda *_args, **_kwargs: None)
     progress = []
     webapp._parse_job_worker(
@@ -475,6 +467,9 @@ def test_upload_worker_automatically_runs_bridge_worker_verify_and_commit(tmp_pa
         lambda **item: progress.append(item), Event(),
     )
     assert (tmp_path / "map" / stored.file_hash[:2] / f"{stored.file_hash}.md").is_file()
+    payload = StagingStore(db).get(staging_id)["payload"]
+    assert payload["resource_folder"] == (classified_folder or "财务")
+    assert not any(key.startswith("ov_") for key in payload)
     facts = real_service(db).list_facts(company_id="acme")
     assert {(item["attribute"], item["value"], item["period"]) for item in facts} == {
         ("营业收入", "3.26", "2024"), ("净利润", "0.58", "2024"),
