@@ -53,7 +53,7 @@ class KnowledgeService:
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name='parse_staging'"
             ).fetchone() is not None
             job = conn.execute(
-                "SELECT status FROM parse_jobs WHERE company_id=? AND file_hash=? ORDER BY id DESC LIMIT 1",
+                "SELECT status,file_format FROM parse_jobs WHERE company_id=? AND file_hash=? ORDER BY id DESC LIMIT 1",
                 (company_id, file_hash),
             ).fetchone()
         try:
@@ -93,6 +93,8 @@ class KnowledgeService:
             ), "source_ref": self.source_ref(file_hash, page=page_no, l2_manifest_uri=l2_uri)})
         return {"file_hash": file_hash, "original_name": stored["original_name"],
                 "status": job["status"] if job else stored["status"],
+                "format": job["file_format"] if job else None,
+                **{key: stored[key] for key in ("mime_type", "size_bytes", "origin_zone", "uploaded_at")},
                 "l0": {"content": abstract, "source_ref": ref},
                 "l1": {"content": overview, "source_ref": ref},
                 "l2": {"manifest_uri": l2_uri, "mapping": mapping, "pages": pages},
@@ -153,6 +155,9 @@ class KnowledgeService:
             classifications.setdefault(row["file_hash"], row)
         with connect(self.db_path) as conn:
             labels = {row["code"]: row["name"] for row in conn.execute("SELECT code,name FROM modules")}
+        for source in sources:
+            category = classifications.get(source["file_hash"], {}).get("module")
+            source.update(category=category, label=labels.get(category))
         groups = {}
         for fact in ConsolidationService(self.db_path).list_facts(company_id=company_id):
             if fact["status"] != "verified":

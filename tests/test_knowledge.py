@@ -220,8 +220,8 @@ def test_knowledge_three_layers_coordinates_and_links(knowledge_env, tmp_path):
                              text=True, timeout=15)
         assert ran.returncode == 0, ran.stdout + ran.stderr
         rendered = json.loads(ran.stdout)
-        for text in ("acc L0 摘要", "acc L1 概览", "Sheet1!B3", "&lt;script&gt;"):
-            assert text in rendered["evidence"]
+        for text in ("Sheet1!B3", "&lt;script&gt;"):
+            assert text in rendered["mapping"]
         for text in ("acc-entity", "acc 属性", "17", "2026", "page=2"):
             assert text in rendered["facts"]
         assert "已发行总股数：100" in rendered["equity"]
@@ -390,3 +390,47 @@ def test_knowledge_json_unchanged_with_persisted_mapping(knowledge_env):
     corrected = client.get("/api/knowledge").get_json()
     path.unlink()
     assert client.get("/api/knowledge").get_json() == corrected
+
+
+def test_drive_projects_only_persisted_file_metadata(knowledge_env):
+    client, db, _, memory = knowledge_env
+    with connect(db) as conn:
+        conn.execute("INSERT INTO modules(code,name) VALUES ('acc-category','acc 文件分类')")
+        conn.commit()
+    stored, _ = seed_file(knowledge_env, module="acc-category")
+    before = snapshot(db, memory)
+    file = client.get('/api/knowledge').json['evidence']['files'][0]
+    assert file['size_bytes'] == len(b'acc-source')
+    assert file['mime_type'] == stored.mime_type
+    assert file['origin_zone'] == stored.origin_zone
+    assert file['uploaded_at'] == stored.uploaded_at
+    assert file['category'] == 'acc-category'
+    assert file['label'] == 'acc 文件分类'
+    assert snapshot(db, memory) == before
+
+
+def test_original_download_is_scoped_authenticated_and_read_only(knowledge_env, monkeypatch):
+    client, db, objects, memory = knowledge_env
+    stored, _ = seed_file(knowledge_env)
+    other, _ = seed_file(knowledge_env, company=OTHER, content=b'acc-other-private')
+    before = snapshot(db, memory)
+    url = f'/api/knowledge/sources/{stored.file_hash}/original'
+    response = client.get(url)
+    assert response.status_code == 200
+    assert response.data == b'acc-source'
+    assert response.headers['Content-Disposition'].startswith('attachment;')
+    assert response.headers['X-Content-Type-Options'] == 'nosniff'
+    assert response.headers['Cache-Control'] == 'no-store'
+    assert client.get(f'/api/knowledge/sources/{other.file_hash}/original?company_id={OTHER}').status_code == 404
+    assert client.get('/api/knowledge/sources/unknown/original').status_code == 404
+    assert client.post(url).status_code == 405
+    monkeypatch.setenv('SAM_VIEW_USER', 'acc-viewer')
+    monkeypatch.setenv('SAM_VIEW_PASS', 'acc-password')
+    assert client.get(url).status_code == 401
+    assert client.get(url, headers=basic_auth('acc-viewer', 'wrong')).status_code == 401
+    assert client.get(url, headers=basic_auth('acc-viewer', 'acc-password')).status_code == 200
+    monkeypatch.delenv('SAM_VIEW_USER')
+    monkeypatch.delenv('SAM_VIEW_PASS')
+    SourceFileStore(objects, db).path_for(stored.file_hash).unlink()
+    assert client.get(url).status_code == 404
+    assert snapshot(db, memory) == before

@@ -109,6 +109,7 @@ def test_full_routes_still_work_and_readonly_blocks_before_services(shell_web, m
         assert client.get("/knowledge").status_code == 200
         assert client.get("/knowledge/sources/x").status_code == 200
         assert client.get("/api/knowledge").status_code == 200
+        assert client.get("/api/knowledge/sources/acc-hash/original").status_code == 404
         assert not web.MAIN_DB.exists()
         return
 
@@ -145,7 +146,8 @@ def test_full_routes_still_work_and_readonly_blocks_before_services(shell_web, m
     "ui-cabinet-upload-error", "ui-cabinet-races", "ui-cabinet-upload-race",
     "ui-knowledge-data", "ui-knowledge-empty", "ui-knowledge-failure", "ui-knowledge-partial",
     "ui-knowledge-warnings", "ui-knowledge-race", "ui-knowledge-cabinet", "ui-knowledge-cabinet-readonly",
-    "ui-knowledge-legacy", "ui-knowledge-legacy-source"])
+    "ui-knowledge-legacy", "ui-knowledge-legacy-source",
+    "ui-knowledge-explorer", "ui-knowledge-explorer-readonly"])
 def test_javascript_foundation_contracts(case):
     node = shutil.which("node")
     if not node:

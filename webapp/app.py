@@ -74,6 +74,7 @@ def require_knowledge_auth():
         return None  # cloud_boundary applies this same auth to the entire window
     if request.url_rule is None or request.url_rule.rule not in {
         "/knowledge", "/api/knowledge", "/knowledge/sources/<file_hash>",
+        "/api/knowledge/sources/<file_hash>/original",
     }:
         return None
     username = os.environ.get("SAM_VIEW_USER")
@@ -641,6 +642,28 @@ def api_knowledge():
 @app.route("/knowledge/sources/<file_hash>", methods=["GET"])
 def knowledge_source_page(file_hash: str):
     return home_page()
+
+
+@app.route("/api/knowledge/sources/<file_hash>/original", methods=["GET"])
+def knowledge_original(file_hash: str):
+    """Download an existing, company-scoped original; never parse or write."""
+    company_id = _knowledge_company_id()
+    if RUNTIME_CONFIG.cloud_readonly:
+        abort(404)  # snapshots contain metadata/mappings, not binary originals
+    service = knowledge_service()
+    stored = next((row for row in service._catalog(company_id)
+                   if row["file_hash"] == file_hash), None)
+    if stored is None:
+        abort(404)
+    store = SourceFileStore(OBJECTS_DIR, MAIN_DB)
+    path = store.path_for(file_hash)
+    if not path.is_file():
+        abort(404)
+    response = send_file(path, as_attachment=True, download_name=stored["original_name"],
+                         mimetype="application/octet-stream")
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 @app.route("/files")
