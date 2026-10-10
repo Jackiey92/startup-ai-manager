@@ -42,6 +42,8 @@ select_node24() {
 select_node24
 
 export HOST="${HOST:-0.0.0.0}"
+# Single-host local deployment: default scope. Override only for multi-host setups.
+export SAM_COMPANY_ID="${SAM_COMPANY_ID:-default}"
 # Keep the browser-facing Flask service separate from the resident Gateway.
 # This is the canonical startup entry point: Flask 18789, Gateway 18790.
 export PORT=18789
